@@ -1,0 +1,29 @@
+graphs:
+  - id: intrusion
+    sources:
+      - { id: attack, frequency: { pert: [0.25, {{attacks_peak}}, 60] }, to: detect }
+    nodes:
+      - id: detect
+        outcomes:
+          - { to: respond, p: {{detect_p}} }
+          - { to: undetected }
+      - id: respond
+        mode: sequential
+        outcomes:
+          - { to: contained, p: { beta: [{{contain_a}}, {{contain_b}}] } }
+          - { to: escalated, p: {{escalate_p}} }
+          - { to: lost }
+      - id: contained
+        functions:
+          - { name: response, category: labour, pert: [2e3, 5e3, 2e4] }
+      - id: escalated
+        functions:
+          - { name: response, category: labour, pert: [1e4, 3e4, 1e5] }
+          - { name: downtime, category: production, pert: [5e3, 2e4, 8e4] }
+      - id: lost
+        functions:
+          - { name: response, category: labour, pert: [1e4, 3e4, 1e5] }
+          - { name: breach, category: liability, logpert: [1e4, {{breach_peak}}, 2e7] }
+      - id: undetected
+        functions:
+          - { name: breach, category: liability, logpert: [3e4, {{undetected_peak}}, 6e7] }

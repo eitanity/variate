@@ -1,0 +1,13 @@
+graphs:
+  - id: phishing
+    sources:
+      - { id: email, frequency: {{emails}}, to: filter }
+    nodes:
+      - id: filter
+        outcomes:
+          - { to: blocked, p: { pert: [{{block_low}}, {{block_peak}}, {{block_high}}] } }
+          - { to: delivered }
+      - id: blocked
+      - id: delivered
+        functions:
+          - { name: handling, category: labour, constant: {{handling}} }

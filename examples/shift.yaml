@@ -1,0 +1,19 @@
+# A weekly operations model on an eight-hour shift. Demand for the shift
+# is a truncated normal; a labour rate is drawn once per shift and
+# shared by every job in it (scope: period), as a rate for the day is;
+# the PERT on the repair bill has a flatter shape (t: 2) than the
+# default four, as an elicitation with little confidence should.
+period: { hours: 8 }
+graphs:
+  - id: shift
+    sources:
+      - { id: job, frequency: { truncnormal: { mean: 30, sd: 8, lo: 0, hi: 60 } }, to: work }
+      - { id: breakdown, frequency: { pert: [0.02, 0.1, 0.4] }, to: fix }
+    nodes:
+      - id: work
+        functions:
+          - { name: labour, category: labour, scope: period, pert: [40, 55, 90] }
+      - id: fix
+        functions:
+          - { name: callout, category: labour, pert: [200, 400, 1500], t: 2 }
+          - { name: parts, category: parts, lognormal: { median: 300, p90: 2000 }, truncate: [50, 5000] }

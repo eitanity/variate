@@ -1,0 +1,44 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  GOFLAGS: -trimpath
+  GOTOOLCHAIN: local
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 480
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - name: Every-push set
+        run: make ci
+      - name: Nightly set
+        run: make nightly
+
+  build:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - name: Reproducible build
+        run: make release
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bin/variate
+            bin/variate.sha256

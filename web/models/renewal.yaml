@@ -1,0 +1,14 @@
+period: { days: 365 }
+graphs:
+  - id: line
+    sources:
+      - { id: pallets, frequency: {{pallets}}, every: {{every}}, to: filter_change }
+      - { id: press, frequency: {{press_rate}}, repair: { pert: [1, {{repair_peak}}, 10], unit: days }, to: press_repair }
+    nodes:
+      - id: filter_change
+        functions:
+          - { name: filter, category: parts, pert: [60, {{filter_peak}}, 120] }
+      - id: press_repair
+        functions:
+          - { name: callout, category: labour, pert: [300, 600, 2000] }
+          - { name: parts, category: parts, lognormal: { median: 1500, p90: 6000 } }

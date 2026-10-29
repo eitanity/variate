@@ -1,0 +1,5 @@
+# Receiver types that hold the interface they implement; interface dispatch
+# into their methods is not followed by the recursion check.
+code.eitanity.com/variate/dist.Truncated
+code.eitanity.com/variate/dist.Capped
+code.eitanity.com/variate.runError

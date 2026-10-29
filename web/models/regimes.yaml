@@ -1,0 +1,12 @@
+graphs:
+  - id: plant
+    sources:
+      - { id: minor,    frequency: { pert: [2, {{minor_peak}}, 60] },        to: minor_fault }
+      - { id: critical, frequency: { pert: [0.02, {{critical_peak}}, 1.5] }, to: failure }
+    nodes:
+      - id: minor_fault
+        functions:
+          - { name: repair, category: maintenance, pert: [5e3, {{repair_peak}}, 8e4] }
+      - id: failure
+        functions:
+          - { name: damage, category: property, lognormal: { median: {{damage_median}}, p90: {{damage_p90}} } }

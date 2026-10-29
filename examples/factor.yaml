@@ -1,0 +1,18 @@
+# A shared factor: three risks whose rates all rise and fall with one
+# threat climate, drawn once per period and shared, so a bad year is bad
+# for all of them at once. Independent sources would understate the
+# aggregate tail; the factor's spread puts the dependence in exactly,
+# and the exact distribution mixes over it.
+period: { days: 365 }
+factors:
+  - { id: climate, lognormal: { median: 1, p90: 1.8 } }
+graphs:
+  - id: register
+    sources:
+      - { id: phishing, frequency: { pert: [5, 12, 30] }, factor: climate, to: phishing_loss }
+      - { id: malware,  frequency: { pert: [1, 3, 8] },   factor: climate, to: malware_loss }
+      - { id: insider,  frequency: { pert: [0.2, 0.5, 2] },               to: insider_loss }
+    nodes:
+      - { id: phishing_loss, functions: [ { name: loss, category: cyber, lognormal: { median: 5e3, p90: 3e4 } } ] }
+      - { id: malware_loss,  functions: [ { name: loss, category: cyber, lognormal: { median: 4e4, p90: 3e5 } } ] }
+      - { id: insider_loss,  functions: [ { name: loss, category: people, lognormal: { median: 2e5, p90: 1e6 } } ] }

@@ -1,0 +1,21 @@
+templates:
+  - id: repair_path
+    entry: assess
+    exits: [replace, restored]
+    nodes:
+      - id: assess
+        outcomes:
+          - { to: replace, p: {{replace_a}} }
+          - { to: restored }
+graphs:
+  - id: site
+    sources:
+      - { id: pump_a, frequency: { pert: [0, {{pump_a_peak}}, 30] }, to: pump_a_repair.assess }
+      - { id: pump_b, frequency: { pert: [0, {{pump_b_peak}}, 30] }, to: pump_b_repair.assess }
+    instances:
+      - { template: repair_path, as: pump_a_repair, wire: { replace: new_pump, restored: recommission } }
+      - { template: repair_path, as: pump_b_repair, wire: { replace: new_pump, restored: recommission },
+          override: { "assess.outcomes[0].p": {{replace_b}} } }
+    nodes:
+      - { id: new_pump,     functions: [ { name: new_pump, category: capital, logpert: [1e4, {{pump_peak}}, 2e6] } ] }
+      - { id: recommission, functions: [ { name: recommission, category: labour, pert: [1e3, 2e3, 8e3] } ] }

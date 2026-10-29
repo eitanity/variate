@@ -1,0 +1,36 @@
+# Two sites in one model, their categories added across both, with the
+# run's criteria set in the file: more hits on every outcome than the
+# default, a looser error on the means, a deeper tail, a cap on the
+# periods, and the periods kept as a series for a plot. A model may
+# hold any number of graphs; the report is over all of them.
+period: { days: 365 }
+min_hits: 2000
+target_rse: 0.02
+contrib_rse: 0.02
+tail: 0.9995
+max_periods: 2000000
+series: true
+node_hist: true
+graphs:
+  - id: north
+    sources:
+      - { id: north_outage, frequency: { exponential: { mean: 3 } }, to: north_down }
+    nodes:
+      - id: north_down
+        functions:
+          - { name: production, category: production, basis: per_time, unit: hours, uniform: [800, 1200] }
+          - { name: callout, category: labour, triangular: [300, 500, 1200] }
+        outcomes:
+          - { to: north_up, holding: { weibull: { shape: 1.5, scale: 6 }, unit: hours } }
+      - { id: north_up }
+  - id: south
+    sources:
+      - { id: south_outage, frequency: { loguniform: [0.5, 8] }, to: south_down }
+    nodes:
+      - id: south_down
+        functions:
+          - { name: production, category: production, basis: per_time, unit: hours, uniform: [500, 900] }
+          - { name: callout, category: labour, triangular: [300, 500, 1200] }
+        outcomes:
+          - { to: south_up, holding: { exponential: { mean: 4 }, unit: hours } }
+      - { id: south_up }

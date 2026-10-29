@@ -1,0 +1,794 @@
+[
+ {
+  "id": "compound",
+  "title": "Compound frequency × severity",
+  "file": "compound.yaml",
+  "about": "The smallest model: an uncertain number of incidents per year, each costing a lognormal amount. Move the rate and the cost and watch the tail.",
+  "knobs": [
+   {
+    "key": "rate_low",
+    "label": "Incidents per year, low",
+    "min": 0,
+    "max": 20,
+    "step": 0.5,
+    "value": 2
+   },
+   {
+    "key": "rate_peak",
+    "label": "Incidents per year, most likely",
+    "min": 0,
+    "max": 40,
+    "step": 0.5,
+    "value": 5
+   },
+   {
+    "key": "rate_high",
+    "label": "Incidents per year, high",
+    "min": 1,
+    "max": 100,
+    "step": 1,
+    "value": 12
+   },
+   {
+    "key": "cost_median",
+    "label": "Cost per incident, median",
+    "min": 100,
+    "max": 20000,
+    "step": 100,
+    "value": 1000
+   },
+   {
+    "key": "cost_p90",
+    "label": "Cost per incident, 90th percentile",
+    "min": 200,
+    "max": 100000,
+    "step": 100,
+    "value": 5000
+   }
+  ]
+ },
+ {
+  "id": "filter",
+  "title": "Phishing filter (period-scoped probability)",
+  "file": "filter.yaml",
+  "about": "600 emails a period meet a filter whose block rate is uncertain and drawn once per period. The spread of the total comes from the bad periods, which a per-event draw would hide.",
+  "knobs": [
+   {
+    "key": "emails",
+    "label": "Emails per period",
+    "min": 10,
+    "max": 5000,
+    "step": 10,
+    "value": 600
+   },
+   {
+    "key": "block_low",
+    "label": "Block rate, low",
+    "min": 0.5,
+    "max": 0.95,
+    "step": 0.001,
+    "value": 0.9
+   },
+   {
+    "key": "block_peak",
+    "label": "Block rate, most likely",
+    "min": 0.6,
+    "max": 0.98,
+    "step": 0.001,
+    "value": 0.95
+   },
+   {
+    "key": "block_high",
+    "label": "Block rate, high",
+    "min": 0.9,
+    "max": 0.999,
+    "step": 0.001,
+    "value": 0.99
+   },
+   {
+    "key": "handling",
+    "label": "Handling cost per delivered email",
+    "min": 1,
+    "max": 500,
+    "step": 1,
+    "value": 25
+   }
+  ]
+ },
+ {
+  "id": "sequential",
+  "title": "Intrusion: detection, then a sequential response",
+  "file": "sequential.yaml",
+  "about": "An attack is detected with a probability; an undetected attack gets no response and runs to a breach that costs more for the dwell time. A detected one is tried in order: contained with an uncertain rate, else escalated, else lost despite the response. Lower the detection rate and watch the liability category take over the tail.",
+  "knobs": [
+   {
+    "key": "attacks_peak",
+    "label": "Attacks per year, most likely",
+    "min": 0.5,
+    "max": 50,
+    "step": 0.5,
+    "value": 4
+   },
+   {
+    "key": "detect_p",
+    "label": "Probability an attack is detected",
+    "min": 0.1,
+    "max": 1,
+    "step": 0.05,
+    "value": 0.8
+   },
+   {
+    "key": "contain_a",
+    "label": "Containment Beta α (higher = more often)",
+    "min": 1,
+    "max": 20,
+    "step": 0.5,
+    "value": 6
+   },
+   {
+    "key": "contain_b",
+    "label": "Containment Beta β (higher = less often)",
+    "min": 1,
+    "max": 20,
+    "step": 0.5,
+    "value": 2
+   },
+   {
+    "key": "escalate_p",
+    "label": "Escalation probability if not contained",
+    "min": 0,
+    "max": 1,
+    "step": 0.01,
+    "value": 0.7
+   },
+   {
+    "key": "breach_peak",
+    "label": "Breach cost, most likely",
+    "min": 10000,
+    "max": 5000000,
+    "step": 10000,
+    "value": 500000
+   },
+   {
+    "key": "undetected_peak",
+    "label": "Breach cost when undetected, most likely",
+    "min": 100000,
+    "max": 20000000,
+    "step": 100000,
+    "value": 1500000
+   }
+  ]
+ },
+ {
+  "id": "delays",
+  "title": "Machine repair (holding times and a cap)",
+  "file": "delays.yaml",
+  "about": "Failures take days to repair; downtime cost accrues per day and the parts bill is capped. Values can land in the period after the failure.",
+  "knobs": [
+   {
+    "key": "failures",
+    "label": "Failures per year (mean)",
+    "min": 0.5,
+    "max": 50,
+    "step": 0.5,
+    "value": 6
+   },
+   {
+    "key": "parts_median",
+    "label": "Parts bill, median",
+    "min": 100,
+    "max": 8000,
+    "step": 100,
+    "value": 2000
+   },
+   {
+    "key": "parts_cap",
+    "label": "Parts bill cap",
+    "min": 1000,
+    "max": 100000,
+    "step": 500,
+    "value": 15000
+   },
+   {
+    "key": "downtime_peak",
+    "label": "Downtime cost per day, most likely",
+    "min": 600,
+    "max": 39000,
+    "step": 100,
+    "value": 1500
+   },
+   {
+    "key": "repair_median",
+    "label": "Repair time, median days",
+    "min": 0.5,
+    "max": 6,
+    "step": 0.25,
+    "value": 2
+   }
+  ]
+ },
+ {
+  "id": "pump_station",
+  "title": "Pump station (the reference model)",
+  "file": "pump_station.yaml",
+  "about": "Wear trips and grid outages merge at a fault check; sequential outcomes, holding times in hours and days, a per-day production cost and a chained inspection.",
+  "knobs": [
+   {
+    "key": "wear_peak",
+    "label": "Wear trips per year, most likely",
+    "min": 5,
+    "max": 300,
+    "step": 5,
+    "value": 60
+   },
+   {
+    "key": "grid_peak",
+    "label": "Grid outages per year, most likely",
+    "min": 0,
+    "max": 10,
+    "step": 0.1,
+    "value": 0.3
+   },
+   {
+    "key": "fault_peak",
+    "label": "Share of trips needing a fault check",
+    "min": 0.001,
+    "max": 0.2,
+    "step": 0.001,
+    "value": 0.02
+   },
+   {
+    "key": "replace_p",
+    "label": "Replacement probability after a major repair",
+    "min": 0,
+    "max": 1,
+    "step": 0.01,
+    "value": 0.2
+   },
+   {
+    "key": "downtime_peak",
+    "label": "Downtime cost per day, most likely",
+    "min": 1000,
+    "max": 100000,
+    "step": 1000,
+    "value": 20000
+   }
+  ]
+ },
+ {
+  "id": "templates",
+  "title": "Two pumps from one template",
+  "file": "templates.yaml",
+  "about": "A repair path defined once and instanced for two pumps, both wired to shared replacement and recommissioning nodes; the second instance overrides the replacement probability.",
+  "knobs": [
+   {
+    "key": "pump_a_peak",
+    "label": "Pump A failures per year, most likely",
+    "min": 0,
+    "max": 20,
+    "step": 0.5,
+    "value": 3
+   },
+   {
+    "key": "pump_b_peak",
+    "label": "Pump B failures per year, most likely",
+    "min": 0,
+    "max": 20,
+    "step": 0.5,
+    "value": 1
+   },
+   {
+    "key": "replace_a",
+    "label": "Pump A replacement probability",
+    "min": 0,
+    "max": 1,
+    "step": 0.01,
+    "value": 0.2
+   },
+   {
+    "key": "replace_b",
+    "label": "Pump B replacement probability",
+    "min": 0,
+    "max": 1,
+    "step": 0.01,
+    "value": 0.35
+   },
+   {
+    "key": "pump_peak",
+    "label": "New pump cost, most likely",
+    "min": 10000,
+    "max": 500000,
+    "step": 5000,
+    "value": 100000
+   }
+  ]
+ },
+ {
+  "id": "regimes",
+  "title": "Frequent minor faults and rare critical failures",
+  "file": "regimes.yaml",
+  "about": "Two regimes in one plant: a stream of minor faults, each a repair bill, and a critical failure a few times a decade costing a hundred times more. The period total has two peaks, the years with only minor faults and the years with a failure; the log-scaled histogram shows both, the linear one shows how the rare regime dominates the range.",
+  "knobs": [
+   {
+    "key": "minor_peak",
+    "label": "Minor faults per year, most likely",
+    "min": 2,
+    "max": 60,
+    "step": 1,
+    "value": 15
+   },
+   {
+    "key": "repair_peak",
+    "label": "Repair per fault, most likely",
+    "min": 5000,
+    "max": 80000,
+    "step": 1000,
+    "value": 20000
+   },
+   {
+    "key": "critical_peak",
+    "label": "Critical failures per year, most likely",
+    "min": 0.02,
+    "max": 1.5,
+    "step": 0.02,
+    "value": 0.3
+   },
+   {
+    "key": "damage_median",
+    "label": "Damage per failure, median",
+    "min": 500000,
+    "max": 20000000,
+    "step": 100000,
+    "value": 2500000
+   },
+   {
+    "key": "damage_p90",
+    "label": "Damage per failure, 90th percentile",
+    "min": 1000000,
+    "max": 50000000,
+    "step": 100000,
+    "value": 5000000
+   }
+  ]
+ },
+ {
+  "id": "register",
+  "title": "A register of a hundred risks",
+  "file": "register.yaml",
+  "about": "A hundred risks, each an event rate and a loss per event, with a control that stops a share of events and a cap on any one loss. The exceedance curve of the period total is the cumulative risk profile; the breakdown by source ranks the risks. Every rate is a gamma, so the exact distribution is closed form in the rate and the curve comes with bounds, though a hundred lognormals take the transform about a minute here.",
+  "knobs": [
+   {
+    "key": "control",
+    "label": "Share of events the control stops",
+    "min": 0,
+    "max": 0.9,
+    "step": 0.05,
+    "value": 0.3
+   },
+   {
+    "key": "cap",
+    "label": "Cap on any one loss",
+    "min": 1000000,
+    "max": 100000000,
+    "step": 1000000,
+    "value": 10000000
+   }
+  ]
+ },
+ {
+  "id": "blocks",
+  "title": "Cooling plant as a reliability block diagram",
+  "file": "blocks.yaml",
+  "about": "Chillers two of three, pumps one of two and a control system in series, each with a mean time between failures and a mean repair time in hours. The engine simulates the units' failures and repairs as a Markov chain and fires the outage each time the plant goes down, so a redundant block's failures cluster as they do in life; the stationary rate, system MTBF and unavailability are shown beside the results. Each outage costs a callout and production per day for as long as the plant is down: the holding is the outage itself, the time the chain takes to bring the plant back.",
+  "knobs": [
+   {
+    "key": "chiller_mtbf",
+    "label": "Chiller MTBF, hours",
+    "min": 1000,
+    "max": 30000,
+    "step": 500,
+    "value": 6000
+   },
+   {
+    "key": "chiller_mttr",
+    "label": "Chiller repair time, hours",
+    "min": 4,
+    "max": 240,
+    "step": 4,
+    "value": 36
+   },
+   {
+    "key": "pump_mtbf",
+    "label": "Pump MTBF, hours",
+    "min": 2000,
+    "max": 50000,
+    "step": 500,
+    "value": 12000
+   },
+   {
+    "key": "control_mtbf",
+    "label": "Control system MTBF, hours",
+    "min": 5000,
+    "max": 200000,
+    "step": 1000,
+    "value": 30000
+   },
+   {
+    "key": "downtime_peak",
+    "label": "Lost production per day, most likely",
+    "min": 20000,
+    "max": 140000,
+    "step": 5000,
+    "value": 50000
+   }
+  ]
+ },
+ {
+  "id": "renewal",
+  "title": "Counts that are not Poisson: every n-th pallet, and a press under repair",
+  "file": "renewal.yaml",
+  "about": "Two sources with their own clocks. A filter is changed after every n-th pallet, so its count per year is the pallet count divided by n with far less spread than Poisson; try the log-scale histogram with a small n. A press that has failed cannot fail again until repaired: after each failure the source is silent for the repair, and its long-run rate is one over the mean time to failure plus the mean repair. The plan sizes both from their exact means; the press's spread is estimated from the run.",
+  "knobs": [
+   {
+    "key": "pallets",
+    "label": "Pallets per year",
+    "min": 1000,
+    "max": 100000,
+    "step": 1000,
+    "value": 20000
+   },
+   {
+    "key": "every",
+    "label": "Pallets per filter change",
+    "min": 1,
+    "max": 2000,
+    "step": 1,
+    "value": 500
+   },
+   {
+    "key": "filter_peak",
+    "label": "Filter cost, most likely",
+    "min": 60,
+    "max": 120,
+    "step": 5,
+    "value": 80
+   },
+   {
+    "key": "press_rate",
+    "label": "Press failures per year while running",
+    "min": 1,
+    "max": 100,
+    "step": 1,
+    "value": 12
+   },
+   {
+    "key": "repair_peak",
+    "label": "Press repair, most likely days",
+    "min": 1,
+    "max": 10,
+    "step": 0.5,
+    "value": 3
+   }
+  ]
+ },
+ {
+  "id": "factor",
+  "title": "A common shock: risks that rise and fall together",
+  "file": "factor.yaml",
+  "about": "Three cyber risks, two of them scaled by one threat climate drawn once per year and shared, so a bad year is bad for both at once. Widen the climate's spread and watch the exceedance tail thicken while every mean stays put; bring its 90th percentile down to 1.05 for near-independence. Pin that as the baseline and compare.",
+  "knobs": [
+   {
+    "key": "climate_p90",
+    "label": "Threat climate, 90th percentile (median 1)",
+    "min": 1.05,
+    "max": 4,
+    "step": 0.05,
+    "value": 1.8
+   },
+   {
+    "key": "phishing_peak",
+    "label": "Phishing incidents per year, most likely",
+    "min": 1,
+    "max": 50,
+    "step": 1,
+    "value": 12
+   },
+   {
+    "key": "malware_peak",
+    "label": "Malware incidents per year, most likely",
+    "min": 0.5,
+    "max": 20,
+    "step": 0.5,
+    "value": 3
+   },
+   {
+    "key": "malware_p90",
+    "label": "Malware loss, 90th percentile",
+    "min": 50000,
+    "max": 2000000,
+    "step": 50000,
+    "value": 300000
+   }
+  ]
+ },
+ {
+  "id": "seasonal",
+  "title": "Rates that vary by period: a storm season",
+  "file": "seasonal.yaml",
+  "about": "Monthly periods. Storm claims follow a twelve-value cycle peaking in late summer, burst pipes one peaking in winter, theft none: period p takes the multiplier at p modulo twelve. Tick the series to see the cycle in the totals; the exact mean, variance and distribution describe a month taken at random from the cycle, which is what a run over whole years sees.",
+  "knobs": [
+   {
+    "key": "storm_rate",
+    "label": "Storm claims per month, before the season",
+    "min": 0,
+    "max": 20,
+    "step": 0.5,
+    "value": 4
+   },
+   {
+    "key": "storm_peak",
+    "label": "Storm multiplier at the season's peak",
+    "min": 1,
+    "max": 6,
+    "step": 0.1,
+    "value": 2.2
+   },
+   {
+    "key": "pipe_rate",
+    "label": "Burst pipes per month, before the season",
+    "min": 0,
+    "max": 10,
+    "step": 0.1,
+    "value": 1.5
+   },
+   {
+    "key": "freeze_peak",
+    "label": "Pipe multiplier in midwinter",
+    "min": 1,
+    "max": 6,
+    "step": 0.1,
+    "value": 2.5
+   },
+   {
+    "key": "storm_median",
+    "label": "Storm claim, median",
+    "min": 1000,
+    "max": 40000,
+    "step": 500,
+    "value": 8000
+   }
+  ]
+ },
+ {
+  "id": "shift",
+  "title": "An eight-hour shift as the period",
+  "file": "shift.yaml",
+  "about": "Jobs arrive at a truncated-normal rate per shift; the labour rate is drawn once per shift and shared by every job in it (scope: period), so the shift's cost moves together; a breakdown brings a callout PERT with a flatter shape than the default and a truncated lognormal for parts. The histogram's width comes from the shared rate as much as from the count.",
+  "knobs": [
+   {
+    "key": "demand_mean",
+    "label": "Jobs per shift, mean",
+    "min": 5,
+    "max": 60,
+    "step": 1,
+    "value": 30
+   },
+   {
+    "key": "demand_sd",
+    "label": "Jobs per shift, spread",
+    "min": 1,
+    "max": 20,
+    "step": 1,
+    "value": 8
+   },
+   {
+    "key": "labour_peak",
+    "label": "Labour rate per job, most likely",
+    "min": 40,
+    "max": 90,
+    "step": 1,
+    "value": 55
+   },
+   {
+    "key": "breakdown_peak",
+    "label": "Breakdowns per shift, most likely",
+    "min": 0.02,
+    "max": 0.4,
+    "step": 0.01,
+    "value": 0.1
+   },
+   {
+    "key": "parts_median",
+    "label": "Parts per breakdown, median",
+    "min": 50,
+    "max": 1500,
+    "step": 50,
+    "value": 300
+   }
+  ]
+ },
+ {
+  "id": "observed",
+  "title": "Observed data as the model",
+  "file": "observed.yaml",
+  "about": "The claim severity is the empirical distribution of a hundred and twenty past claims, resampled as they were; the claim class is a categorical with the handling cost of each class. Resampling observed data says what has happened; a fitted family says what could, which is why the tail of this histogram stops where the data does.",
+  "knobs": [
+   {
+    "key": "claim_mean",
+    "label": "Claims per year, mean",
+    "min": 1,
+    "max": 100,
+    "step": 1,
+    "value": 25
+   },
+   {
+    "key": "claim_sd",
+    "label": "Claims per year, spread",
+    "min": 0.5,
+    "max": 30,
+    "step": 0.5,
+    "value": 6
+   },
+   {
+    "key": "handling_minor",
+    "label": "Handling, minor class",
+    "min": 50,
+    "max": 1000,
+    "step": 10,
+    "value": 150
+   },
+   {
+    "key": "handling_major",
+    "label": "Handling, major class",
+    "min": 500,
+    "max": 20000,
+    "step": 100,
+    "value": 2500
+   }
+  ]
+ },
+ {
+  "id": "heavy",
+  "title": "Heavy tails, a cap, and layers of the total",
+  "file": "heavy.yaml",
+  "about": "Three heavy-tailed severities: a Pareto with a finite variance, a fatter Pareto held by an insurance limit (cap), and a generalised Pareto. Two layers of the period total report what is retained under an aggregate deductible and what a reinsurance layer above it pays; with the exact distribution their means come with bounds. Lower the open Pareto's alpha below two and its variance is infinite: the exact method declines, and the cap is what makes the other tail computable.",
+  "knobs": [
+   {
+    "key": "open_alpha",
+    "label": "Open Pareto alpha",
+    "min": 1.1,
+    "max": 4,
+    "step": 0.1,
+    "value": 2.5
+   },
+   {
+    "key": "capped_alpha",
+    "label": "Capped Pareto alpha",
+    "min": 1.1,
+    "max": 4,
+    "step": 0.1,
+    "value": 1.6
+   },
+   {
+    "key": "cap",
+    "label": "Insurance limit per loss",
+    "min": 100000,
+    "max": 10000000,
+    "step": 100000,
+    "value": 2000000
+   },
+   {
+    "key": "deductible",
+    "label": "Aggregate deductible",
+    "min": 0,
+    "max": 2000000,
+    "step": 10000,
+    "value": 200000
+   },
+   {
+    "key": "share",
+    "label": "Reinsurance share",
+    "min": 0.1,
+    "max": 1,
+    "step": 0.05,
+    "value": 0.9
+   }
+  ]
+ },
+ {
+  "id": "sites",
+  "title": "Two sites in one model, with the run's criteria set in the file",
+  "file": "sites.yaml",
+  "about": "Two graphs, north and south, their categories added across both. Each site loses production per hour of outage and pays a callout; the north's repair is a Weibull, the south's exponential. The file sets the run's criteria: more hits on every outcome, a looser error on the means, a deeper tail, a cap on the periods, and the series kept for a plot. Exponential, uniform, log-uniform, triangular and Weibull families.",
+  "knobs": [
+   {
+    "key": "north_rate",
+    "label": "North outages per year, mean",
+    "min": 0.5,
+    "max": 20,
+    "step": 0.5,
+    "value": 3
+   },
+   {
+    "key": "north_production",
+    "label": "North production per hour, high",
+    "min": 850,
+    "max": 3000,
+    "step": 50,
+    "value": 1200
+   },
+   {
+    "key": "north_repair",
+    "label": "North repair, Weibull scale in hours",
+    "min": 1,
+    "max": 48,
+    "step": 0.5,
+    "value": 6
+   },
+   {
+    "key": "south_rate_high",
+    "label": "South outages per year, high",
+    "min": 1,
+    "max": 30,
+    "step": 0.5,
+    "value": 8
+   },
+   {
+    "key": "south_repair",
+    "label": "South repair, mean hours",
+    "min": 0.5,
+    "max": 48,
+    "step": 0.5,
+    "value": 4
+   }
+  ]
+ },
+ {
+  "id": "counts",
+  "title": "Discrete values: damaged items, resends, inspections, complaints",
+  "file": "counts.yaml",
+  "about": "A shipment of items arrives and each item is damaged with a probability, so the damaged count is binomial and booked as items; a damaged shipment needs a geometric number of resends before it is accepted; whether a shipment is inspected is a Bernoulli; the complaints it draws are negative binomial. Pick the items or complaints category to see a count distribution rather than a money one.",
+  "knobs": [
+   {
+    "key": "items",
+    "label": "Items per shipment",
+    "min": 1,
+    "max": 200,
+    "step": 1,
+    "value": 40
+   },
+   {
+    "key": "damage_p",
+    "label": "Probability an item is damaged",
+    "min": 0,
+    "max": 0.5,
+    "step": 0.005,
+    "value": 0.05
+   },
+   {
+    "key": "resend_p",
+    "label": "Probability a shipment needs a resend",
+    "min": 0,
+    "max": 1,
+    "step": 0.01,
+    "value": 0.2
+   },
+   {
+    "key": "accept_p",
+    "label": "Probability a resend is accepted",
+    "min": 0.05,
+    "max": 1,
+    "step": 0.01,
+    "value": 0.6
+   },
+   {
+    "key": "complaints",
+    "label": "Complaints per shipment, mean",
+    "min": 0.05,
+    "max": 5,
+    "step": 0.05,
+    "value": 0.3
+   }
+  ]
+ }
+]

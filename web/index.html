@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Variate — Monte Carlo in the browser</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  .toggle { font-size: 0.75em; font-weight: normal; margin-left: 12px; }
+  .legend { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+  .legend b { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: middle; }
+  .pick { font-size: 0.75em; font-weight: normal; margin-left: 12px; }
+  svg#flow { width: 100%; height: 360px; background: #fff; border: 1px solid #eee; }
+  svg#flow text { font: 11px system-ui, sans-serif; fill: #333; }
+  svg#flow .node { fill: #eef3fb; stroke: #1f6feb; }
+  svg#flow .leaf { fill: #f6f6f6; stroke: #999; }
+  svg#flow .src { fill: #fbeedd; stroke: #e08a1e; }
+  svg#flow .edge { fill: none; stroke: #1f6feb; opacity: 0.55; }
+  svg#flow .hold { stroke-dasharray: 5 3; }
+  :root { --ink: #1c1c1c; --muted: #666; --line: #d8d8d8; --accent: #1f6feb; --bg: #fafafa; }
+  body { margin: 0; font: 15px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+  header { padding: 14px 24px; border-bottom: 1px solid var(--line); background: white; display: flex; gap: 16px; align-items: baseline; }
+  header h1 { font-size: 20px; margin: 0; }
+  header span { color: var(--muted); }
+  main { display: grid; grid-template-columns: 380px 1fr; gap: 24px; padding: 20px 24px; }
+  section { background: white; border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-top: 10px; }
+  select, input[type=number], textarea, button { font: inherit; }
+  select, input[type=number] { width: 100%; box-sizing: border-box; padding: 5px 7px; border: 1px solid var(--line); border-radius: 4px; }
+  .knob { display: grid; grid-template-columns: 1fr 110px; gap: 8px; align-items: center; }
+  .knob input[type=range] { width: 100%; }
+  .about { color: var(--muted); font-size: 13px; margin: 8px 0 4px; }
+  .row { display: flex; gap: 10px; align-items: end; }
+  .row > div { flex: 1; }
+  button { padding: 8px 16px; border: 0; border-radius: 4px; background: var(--accent); color: white; cursor: pointer; margin-top: 14px; }
+  button:disabled { background: #9bb7e8; cursor: wait; }
+  textarea { width: 100%; box-sizing: border-box; height: 260px; font: 12px/1.4 ui-monospace, monospace; display: block; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-top: 12px; }
+  #status { color: var(--muted); font-size: 13px; margin-top: 8px; min-height: 1.2em; }
+  #error { color: #b00020; white-space: pre-wrap; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: right; padding: 3px 8px; border-bottom: 1px solid #eee; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; }
+  canvas { width: 100%; height: 260px; display: block; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .big { font-size: 26px; font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
+  .stat small { display: block; color: var(--muted); font-size: 12px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } .charts { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header><h1>Variate</h1><span>event-graph Monte Carlo, running in your browser as WebAssembly</span><span id="version"></span></header>
+<main>
+  <section>
+    <h2>Model</h2>
+    <select id="model"></select>
+    <p class="about" id="about"></p>
+    <div id="knobs"></div>
+    <details id="advanced"><summary>Advanced: edit the model as YAML</summary>
+      <textarea id="yaml" spellcheck="false"></textarea>
+      <p class="about">Edits here replace the knobs until the model is changed again. Every distribution family, unit, template and setting the file format offers is available; <code>docs/format.md</code> in the repository describes them.</p>
+    </details>
+    <h2 style="margin-top:16px">Run</h2>
+    <div class="row">
+      <div><label>Periods</label><input id="periods" type="number" min="100" max="2000000" step="100" value="20000"></div>
+      <div><label>Seed (0 = a fresh random seed each run)</label><input id="seed" type="number" min="0" step="1" value="0"></div>
+    </div>
+    <label><input id="keepseries" type="checkbox"> Keep every period's total for a chart over time (runs up to 400,000 periods)</label><br>
+    <label><input id="transform" type="checkbox"> Also compute the exact distribution by FFT (a minute at most; a model that needs more reports its work budget, which the YAML box can raise with transform_work)</label>
+    <button id="run">Run</button> <button id="cancel" hidden>Cancel</button> <button id="pin" hidden>Pin as baseline</button> <button id="unpin" hidden>Clear baseline</button>
+    <p class="about" id="compareNote"></p>
+    <div id="status"></div>
+    <div id="error"></div>
+  </section>
+  <section id="results" hidden>
+    <div class="stats">
+      <div class="stat"><span class="big" id="mean"></span><small>mean per period (simulated ± stderr)</small></div>
+      <div class="stat"><span class="big" id="exact"></span><small>exact mean (analytic)</small></div>
+      <div class="stat"><span class="big" id="p50"></span><small>median</small></div>
+      <div class="stat"><span class="big" id="p99"></span><small>99th percentile</small></div>
+      <div class="stat"><span class="big" id="pzero"></span><small>periods with nothing booked</small></div>
+    </div>
+    <p class="about" id="blockNote"></p>
+    <p class="about">Quantity drawn: <select id="quantity"></select> <span id="quantityNote"></span></p>
+    <div class="charts">
+      <div><h2><span id="histTitle">Period total</span>: histogram <label class="toggle"><input id="logx" type="checkbox" checked> log scale</label></h2><p class="legend" id="legend"></p><canvas id="hist"></canvas></div>
+      <div><h2>Exceedance: P(<span id="ecTitle">total</span> ≥ x) <label class="toggle"><input id="logp" type="checkbox"> log probability</label></h2><p class="legend" id="legend2"></p><canvas id="ec"></canvas></div>
+    </div>
+    <h2 style="margin-top:16px">Contributions</h2>
+    <div class="charts">
+      <div><h2>Mean per period by source</h2><canvas id="contrib"></canvas></div>
+      <div><h2>Who the tail belongs to <label class="pick">beyond the loss reached once in <select id="tailrp"><option value="10">10</option><option value="100" selected>100</option><option value="1000">1,000</option></select> periods</label></h2><p class="about" id="tailNote"></p><canvas id="tailcontrib"></canvas></div>
+    </div>
+    <h2 style="margin-top:16px">Events per period <label class="pick">from source <select id="countsource"></select></label></h2>
+    <p class="about" id="countNote"></p>
+    <canvas id="counts"></canvas>
+    <div id="seriesBlock" hidden><h2 style="margin-top:16px">Over the periods</h2><p class="about" id="seriesNote"></p><canvas id="series"></canvas></div>
+    <h2 style="margin-top:16px">Flow</h2>
+    <p class="about">The graph as compiled: each edge's width is the events per period taking it and its label the share of the node's entries; a dashed edge holds the event for a while. A node shows its entries per period and the mean value it books per period.</p>
+    <svg id="flow"></svg>
+    <h2 style="margin-top:16px">Figures</h2>
+    <table id="figures"></table>
+    <h2 style="margin-top:16px">Breakdown</h2>
+    <table id="breakdown"></table>
+    <h2 style="margin-top:16px">Reach</h2>
+    <table id="reach"></table>
+    <p class="about" id="reachNote"></p>
+    <h2 style="margin-top:16px">Convergence criteria</h2>
+    <p class="about">Each row is a precision the engine asks of a run: enough hits on every outcome, a small enough relative standard error on every mean, enough periods in the tail. "Planned periods" is how many the plan expected the criterion to need, "observed" the value this run reached, and "met" says whether the criterion's target was reached. A run here is the fixed number of periods above, so a "no" means the run was too short for that criterion; the engine's own adaptive runs continue until every row is met.</p>
+    <table id="plan"></table>
+    <p class="about" id="planNote"></p>
+    <p class="about" id="transformNote"></p>
+    <p class="about" id="warnings"></p>
+  </section>
+</main>
+<footer class="about">Copyright © 2026 Eitanity Systems VCC. Variate is free software under the GNU Affero General Public License, version 3; the source of this page and of the engine running in it is available on the same terms. Commercial licences are available.</footer>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# Discrete values where they mean something. A shipment of forty items
+# arrives, and each item is damaged with a probability: the damaged
+# count per shipment is binomial, booked as items. A damaged item
+# needs a number of resends before it is accepted, geometric. Whether
+# a shipment needs an inspection is a Bernoulli, booked as a count of
+# inspections; the complaints a shipment draws are negative binomial.
+period: { days: 365 }
+graphs:
+  - id: shipping
+    sources:
+      - { id: shipment, frequency: { pert: [200, 300, 450] }, to: receive }
+    nodes:
+      - id: receive
+        functions:
+          - { name: damaged, category: items, binomial: { n: 40, p: 0.05 } }
+          - { name: inspection, category: inspections, bernoulli: 0.1 }
+          - { name: complaints, category: complaints, negbin: { mean: 0.3, size: 2 } }
+        outcomes:
+          - { to: resend, p: 0.2 }
+          - { to: accepted }
+      - id: resend
+        functions:
+          - { name: resends, category: resends, geometric: 0.6 }
+          - { name: freight, category: money, pert: [80, 150, 400] }
+      - { id: accepted }

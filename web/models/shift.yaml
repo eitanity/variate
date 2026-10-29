@@ -1,0 +1,17 @@
+# An eight-hour shift as the period. Demand for the shift is a truncated
+# normal; the labour rate is drawn once per shift and shared by every
+# job in it; the callout PERT has a flatter shape than the default.
+period: { hours: 8 }
+graphs:
+  - id: shift
+    sources:
+      - { id: job, frequency: { truncnormal: { mean: {{demand_mean}}, sd: {{demand_sd}}, lo: 0, hi: 60 } }, to: work }
+      - { id: breakdown, frequency: { pert: [0.02, {{breakdown_peak}}, 0.4] }, to: fix }
+    nodes:
+      - id: work
+        functions:
+          - { name: labour, category: labour, scope: period, pert: [40, {{labour_peak}}, 90] }
+      - id: fix
+        functions:
+          - { name: callout, category: labour, pert: [200, 400, 1500], t: 2 }
+          - { name: parts, category: parts, lognormal: { median: {{parts_median}}, p90: 2000 }, truncate: [50, 5000] }

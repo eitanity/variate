@@ -1,0 +1,17 @@
+# Rates that vary by period: storm claims over a monthly period follow
+# a twelve-value cycle with its peak in late summer; burst pipes peak
+# in winter on their own cycle; theft does not vary.
+period: { days: 30 }
+schedules:
+  - { id: storms, values: [0.3, 0.3, 0.5, 0.8, 1.2, 1.6, 2.0, {{storm_peak}}, 1.6, 0.8, 0.4, 0.3] }
+  - { id: freeze, values: [{{freeze_peak}}, 2.0, 1.0, 0.3, 0.1, 0.1, 0.1, 0.1, 0.2, 0.6, 1.5, {{freeze_peak}}] }
+graphs:
+  - id: claims
+    sources:
+      - { id: storm,  frequency: {{storm_rate}}, schedule: storms, to: storm_claim }
+      - { id: pipe,   frequency: {{pipe_rate}},  schedule: freeze, to: pipe_claim }
+      - { id: theft,  frequency: 2,                 to: theft_claim }
+    nodes:
+      - { id: storm_claim, functions: [ { name: loss, category: property, lognormal: { median: {{storm_median}}, p90: 5e4 } } ] }
+      - { id: pipe_claim,  functions: [ { name: loss, category: property, lognormal: { median: 3e3, p90: 1.5e4 } } ] }
+      - { id: theft_claim, functions: [ { name: loss, category: contents, lognormal: { median: 1.5e3, p90: 6e3 } } ] }

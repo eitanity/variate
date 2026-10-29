@@ -1,0 +1,17 @@
+# Two regimes: frequent minor faults, each a repair bill, and rare
+# critical failures that cost a hundred times more. The period total has
+# two peaks, one for the years with only minor faults and one for the
+# years with a critical failure; a log-scaled histogram shows both.
+periods: 200000
+graphs:
+  - id: plant
+    sources:
+      - { id: minor,    frequency: { pert: [5, 15, 40] },     to: minor_fault }
+      - { id: critical, frequency: { pert: [0.1, 0.3, 0.6] }, to: failure }
+    nodes:
+      - id: minor_fault
+        functions:
+          - { name: repair, category: maintenance, pert: [5e3, 2e4, 8e4] }
+      - id: failure
+        functions:
+          - { name: damage, category: property, lognormal: { median: 2.5e6, p90: 5e6 } }

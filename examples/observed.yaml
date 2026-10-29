@@ -1,0 +1,15 @@
+# Observed data as the model. The claim severity is the empirical
+# distribution of a hundred and twenty past claims in data/claims.csv,
+# beside the model file; a claim's class is categorical, with the
+# handling cost of each class. Resampling observed data says what has
+# happened; a fitted family says what could.
+period: { days: 365 }
+graphs:
+  - id: claims
+    sources:
+      - { id: claim, frequency: { gamma: { mean: 25, sd: 6 } }, to: claim }
+    nodes:
+      - id: claim
+        functions:
+          - { name: payout, category: payout, empirical: { file: data/claims.csv } }
+          - { name: handling, category: handling, categorical: { values: [150, 400, 2500], p: [0.7, 0.25, 0.05] } }

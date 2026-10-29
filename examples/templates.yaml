@@ -1,0 +1,21 @@
+templates:
+  - id: repair_path
+    entry: assess
+    exits: [replace, restored]                # nodes the instance must wire to
+    nodes:
+      - id: assess
+        outcomes:
+          - { to: replace, p: 0.2 }
+          - { to: restored }
+graphs:
+  - id: site
+    sources:
+      - { id: pump_a, frequency: { pert: [1, 3, 10] }, to: pump_a_repair.assess }
+      - { id: pump_b, frequency: { pert: [0, 1, 4] },  to: pump_b_repair.assess }
+    instances:
+      - { template: repair_path, as: pump_a_repair, wire: { replace: new_pump, restored: recommission } }
+      - { template: repair_path, as: pump_b_repair, wire: { replace: new_pump, restored: recommission },
+          override: { "assess.outcomes[0].p": 0.35 } }
+    nodes:
+      - { id: new_pump,     functions: [ { name: new_pump, category: capital, basis: on_entry, logpert: [5e4, 1e5, 1e6] } ] }  # shared
+      - { id: recommission, functions: [ { name: recommission, category: labour, basis: on_entry, pert: [1e3, 2e3, 8e3] } ] }  # shared

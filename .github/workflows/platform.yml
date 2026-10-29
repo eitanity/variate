@@ -1,0 +1,74 @@
+name: platform
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GOFLAGS: -trimpath
+  GOTOOLCHAIN: local
+
+jobs:
+  wasm-wazero:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - name: Install the wazero runtime
+        run: go install github.com/tetratelabs/wazero/cmd/wazero@v1.12.0
+      - name: Engine tests as wasm, golden reports against the native files
+        run: make wasm-test
+
+  wasm-node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build the wasm engine
+        run: make wasm
+      - name: Native report
+        run: go run ./cmd/variate run -f examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format json --analytic > native.json
+      - name: Run the wasm engine under node and compare
+        run: node web/smoke.js native.json
+
+  arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - name: Fast suite on arm64
+        run: go test -count=1 ./...
+
+  other-os:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - name: Build everything
+        run: go build ./...
+      - name: Loader, report, commands and examples
+        run: go test -count=1 ./config ./report ./cmd/... ./examples/... ./stats

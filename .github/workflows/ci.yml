@@ -1,0 +1,48 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GOFLAGS: -trimpath
+  GOTOOLCHAIN: local
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: false
+          cache-dependency-path: |
+            go.sum
+            internal/lint/go.sum
+      - name: Verify modules
+        run: make verify
+      - name: Build
+        run: make build
+      - name: Format
+        run: make fmt
+      - name: Vet
+        run: make vet
+      - name: golangci-lint
+        run: make lint
+      - name: Custom checks (recursion, loop bounds, any, function fields, statements)
+        run: make custom-lint
+      - name: Escape-analysis gate
+        run: make escapes
+      - name: Tests under the race detector
+        run: make race
+      - name: Allocation and churn tests
+        run: make alloc
+      - name: Fuzz (60 s each)
+        run: make fuzz
+      - name: govulncheck
+        run: make vuln
+      - name: Coverage
+        run: go test -count=1 -coverprofile=cover.out ./... && go tool cover -func=cover.out | tail -1

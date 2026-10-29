@@ -1,0 +1,22 @@
+# Files in which no value may escape to the heap, one repository-relative
+# path per line. Checked by internal/lint/escapes.
+dist/gamma.go
+dist/pert.go
+dist/poisson.go
+dist/basic.go
+dist/normal.go
+dist/tail.go
+dist/binomial.go
+dist/negbin.go
+dist/finite.go
+dist/truncate.go
+dist/sampler.go
+stats/neumaier.go
+stats/welford.go
+stats/hist.go
+simulate.go
+finalise.go
+slot.go
+worker.go
+record.go
+stream.go

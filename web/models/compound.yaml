@@ -1,0 +1,8 @@
+graphs:
+  - id: compound
+    sources:
+      - { id: incident, frequency: { pert: [{{rate_low}}, {{rate_peak}}, {{rate_high}}] }, to: loss }
+    nodes:
+      - id: loss
+        functions:
+          - { name: cost, category: money, lognormal: { median: {{cost_median}}, p90: {{cost_p90}} } }

@@ -1,0 +1,13 @@
+period: { days: 365 }
+factors:
+  - { id: climate, lognormal: { median: 1, p90: {{climate_p90}} } }
+graphs:
+  - id: register
+    sources:
+      - { id: phishing, frequency: { pert: [1, {{phishing_peak}}, 60] }, factor: climate, to: phishing_loss }
+      - { id: malware,  frequency: { pert: [0.2, {{malware_peak}}, 30] }, factor: climate, to: malware_loss }
+      - { id: insider,  frequency: { pert: [0.2, 0.5, 2] },               to: insider_loss }
+    nodes:
+      - { id: phishing_loss, functions: [ { name: loss, category: cyber, lognormal: { median: 5e3, p90: 3e4 } } ] }
+      - { id: malware_loss,  functions: [ { name: loss, category: cyber, lognormal: { median: 4e4, p90: {{malware_p90}} } } ] }
+      - { id: insider_loss,  functions: [ { name: loss, category: people, lognormal: { median: 2e5, p90: 1e6 } } ] }

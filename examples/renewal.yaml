@@ -1,0 +1,21 @@
+# Two sources that are not Poisson. A filter is changed after every
+# five hundred pallets, so the change is every 500th arrival of the
+# pallet stream: its count per year has the Poisson mean divided by 500
+# and a much smaller spread. A press that has failed cannot fail again
+# until it is repaired: after each failure the source is silent for the
+# repair, and its long-run rate is 1/(1/λ + mean repair). Every block
+# of periods starts both in equilibrium.
+period: { days: 365 }
+graphs:
+  - id: line
+    sources:
+      - { id: pallets, frequency: 20000, every: 500, to: filter_change }
+      - { id: press, frequency: 12, repair: { pert: [1, 3, 10], unit: days }, to: press_repair }
+    nodes:
+      - id: filter_change
+        functions:
+          - { name: filter, category: parts, pert: [60, 80, 120] }
+      - id: press_repair
+        functions:
+          - { name: callout, category: labour, pert: [300, 600, 2000] }
+          - { name: parts, category: parts, lognormal: { median: 1500, p90: 6000 } }

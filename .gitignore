@@ -1,0 +1,23 @@
+# Build outputs: tools under bin/, the commands when built in place,
+# test binaries and anything compiled. make verify refuses any tracked
+# binary file.
+/bin/
+/variate
+/variate-demo
+/variate-wasm
+*.exe
+*.wasm
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+/dist/variate
+*.test
+*.out
+*.prof
+/testdata/fuzz/**/*.tmp
+bench.out
+web/variate.wasm
+web/wasm_exec.js
+web/native.json

@@ -1,0 +1,36 @@
+# Detection, then a sequential response. An attack is detected with a
+# probability; an undetected attack gets no response and runs to a
+# breach, which costs more for the dwell time. A detected one is tried
+# in order: contained with an uncertain rate, else escalated, else
+# lost despite the response, the remainder taking what is left.
+periods: 20000
+seed: 4
+graphs:
+  - id: intrusion
+    sources:
+      - { id: attack, frequency: { pert: [1, 4, 10] }, to: detect }
+    nodes:
+      - id: detect
+        outcomes:
+          - { to: respond, p: 0.8 }
+          - { to: undetected }
+      - id: respond
+        mode: sequential
+        outcomes:
+          - { to: contained, p: { beta: [6, 2] } }
+          - { to: escalated, p: 0.7 }
+          - { to: lost }
+      - id: contained
+        functions:
+          - { name: response, category: labour, pert: [2e3, 5e3, 2e4] }
+      - id: escalated
+        functions:
+          - { name: response, category: labour, pert: [1e4, 3e4, 1e5] }
+          - { name: downtime, category: production, pert: [5e3, 2e4, 8e4] }
+      - id: lost
+        functions:
+          - { name: response, category: labour, pert: [1e4, 3e4, 1e5] }
+          - { name: breach, category: liability, logpert: [1e5, 5e5, 5e6] }
+      - id: undetected
+        functions:
+          - { name: breach, category: liability, logpert: [3e5, 1.5e6, 1.5e7] }

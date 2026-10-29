@@ -1,0 +1,13 @@
+period: { days: 365 }
+graphs:
+  - id: machine
+    sources:
+      - { id: failure, frequency: { gamma: { mean: {{failures}}, sd: 2 } }, to: repair }
+    nodes:
+      - id: repair
+        functions:
+          - { name: parts, category: materials, lognormal: { median: {{parts_median}}, p90: 9000 }, cap: {{parts_cap}} }
+          - { name: downtime, category: production, basis: per_time, unit: days, pert: [500, {{downtime_peak}}, 40000] }
+        outcomes:
+          - { to: back_in_service, holding: { lognormal: { median: {{repair_median}}, p90: 7 }, unit: days } }
+      - id: back_in_service

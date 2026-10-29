@@ -1,0 +1,20 @@
+period: { days: 365 }
+graphs:
+  - id: cooling
+    sources:
+      - id: plant_down
+        block:
+          unit: hours
+          series:
+            - { kofn: { k: 2, n: 3, mtbf: {{chiller_mtbf}}, mttr: {{chiller_mttr}} } }
+            - { kofn: { k: 1, n: 2, mtbf: {{pump_mtbf}}, mttr: 24 } }
+            - { mtbf: {{control_mtbf}}, mttr: 8 }
+        to: outage
+    nodes:
+      - id: outage
+        functions:
+          - { name: callout, category: labour, basis: on_entry, pert: [500, 1500, 5000] }
+          - { name: lost_production, category: production, basis: per_time, unit: days, pert: [2e4, {{downtime_peak}}, 1.5e5] }
+        outcomes:
+          - { to: restored, holding: outage }
+      - id: restored

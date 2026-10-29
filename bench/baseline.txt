@@ -1,0 +1,375 @@
+BenchmarkWalk/seed1-32   	     109	  11029341 ns/op	        20.35 Msteps/s	   1813345 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed1-32   	     100	  11080443 ns/op	        20.26 Msteps/s	   1804982 periods/s	       1 B/op	       0 allocs/op
+BenchmarkWalk/seed1-32   	     100	  10958402 ns/op	        20.49 Msteps/s	   1825084 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed1-32   	     100	  10878711 ns/op	        20.64 Msteps/s	   1838453 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed1-32   	      98	  10883386 ns/op	        20.63 Msteps/s	   1837663 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed2-32   	      66	  17027845 ns/op	        12.52 Msteps/s	   1174547 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed2-32   	      69	  17064832 ns/op	        12.49 Msteps/s	   1172001 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed2-32   	      70	  16860769 ns/op	        12.64 Msteps/s	   1186186 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed2-32   	      70	  16843617 ns/op	        12.65 Msteps/s	   1187393 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed2-32   	      70	  17142870 ns/op	        12.43 Msteps/s	   1166666 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed3-32   	      48	  23610448 ns/op	        22.48 Msteps/s	    847083 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed3-32   	      50	  23631216 ns/op	        22.46 Msteps/s	    846338 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed3-32   	      50	  23939925 ns/op	        22.17 Msteps/s	    835425 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed3-32   	      49	  23747361 ns/op	        22.35 Msteps/s	    842199 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/seed3-32   	      49	  23781730 ns/op	        22.32 Msteps/s	    840982 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/big1000-32 	      13	  90459264 ns/op	        15.08 Msteps/s	     22109 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/big1000-32 	      12	  93116135 ns/op	        14.65 Msteps/s	     21479 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/big1000-32 	      13	  88347754 ns/op	        15.44 Msteps/s	     22638 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/big1000-32 	      13	  88031840 ns/op	        15.50 Msteps/s	     22719 periods/s	       0 B/op	       0 allocs/op
+BenchmarkWalk/big1000-32 	      13	  89242211 ns/op	        15.29 Msteps/s	     22411 periods/s	       0 B/op	       0 allocs/op
+BenchmarkChain/workers1-32         	       9	 117512121 ns/op	        67.04 Msteps/s	    425488 periods/s	       0 B/op	       0 allocs/op
+BenchmarkChain/workers1-32         	       9	 117858182 ns/op	        66.84 Msteps/s	    424239 periods/s	       0 B/op	       0 allocs/op
+BenchmarkChain/workers1-32         	       9	 117918345 ns/op	        66.81 Msteps/s	    424022 periods/s	       0 B/op	       0 allocs/op
+BenchmarkChain/workers1-32         	       9	 117701134 ns/op	        66.93 Msteps/s	    424805 periods/s	       0 B/op	       0 allocs/op
+BenchmarkChain/workers1-32         	       9	 117572615 ns/op	        67.01 Msteps/s	    425269 periods/s	       0 B/op	       0 allocs/op
+BenchmarkChain/workersAll-32       	      22	  47822462 ns/op	       658.6 Msteps/s	   4182135 periods/s	      15 B/op	       0 allocs/op
+BenchmarkChain/workersAll-32       	      25	  47327251 ns/op	       665.5 Msteps/s	   4225895 periods/s	      17 B/op	       0 allocs/op
+BenchmarkChain/workersAll-32       	      25	  46874889 ns/op	       672.0 Msteps/s	   4266677 periods/s	     239 B/op	       0 allocs/op
+BenchmarkChain/workersAll-32       	      24	  47036552 ns/op	       669.7 Msteps/s	   4252012 periods/s	      14 B/op	       0 allocs/op
+BenchmarkChain/workersAll-32       	      25	  46802268 ns/op	       673.0 Msteps/s	   4273297 periods/s	      13 B/op	       0 allocs/op
+BenchmarkStream/off-32             	       9	 117899488 ns/op	        66.82 Msteps/s	    424090 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/off-32             	       9	 117535300 ns/op	        67.03 Msteps/s	    425404 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/off-32             	       9	 117582373 ns/op	        67.00 Msteps/s	    425234 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/off-32             	       9	 116805048 ns/op	        67.45 Msteps/s	    428064 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/off-32             	       9	 117426205 ns/op	        67.09 Msteps/s	    425799 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/every-32           	       3	 349672780 ns/op	        22.55 Msteps/s	    142991 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/every-32           	       3	 358593969 ns/op	        21.98 Msteps/s	    139433 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/every-32           	       3	 352252520 ns/op	        22.38 Msteps/s	    141944 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/every-32           	       3	 354214721 ns/op	        22.26 Msteps/s	    141157 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/every-32           	       3	 356059201 ns/op	        22.14 Msteps/s	    140426 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/narrow-32          	       8	 127763903 ns/op	        61.67 Msteps/s	    391347 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/narrow-32          	       8	 127346331 ns/op	        61.88 Msteps/s	    392630 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/narrow-32          	       8	 126744392 ns/op	        62.17 Msteps/s	    394495 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/narrow-32          	       9	 126179565 ns/op	        62.44 Msteps/s	    396261 periods/s	       0 B/op	       0 allocs/op
+BenchmarkStream/narrow-32          	       8	 127673765 ns/op	        61.72 Msteps/s	    391623 periods/s	       0 B/op	       0 allocs/op
+BenchmarkSummarize-32              	    2272	    466214 ns/op	    4096 B/op	      32 allocs/op
+BenchmarkSummarize-32              	    2624	    461957 ns/op	    4096 B/op	      32 allocs/op
+BenchmarkSummarize-32              	    2636	    471944 ns/op	    4096 B/op	      32 allocs/op
+BenchmarkSummarize-32              	    2572	    465761 ns/op	    4096 B/op	      32 allocs/op
+BenchmarkSummarize-32              	    2576	    459800 ns/op	    4096 B/op	      32 allocs/op
+BenchmarkPERT/a1_b5_scale1-32 	   51998	     22184 ns/op	        21.66 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a1_b5_scale1-32 	   53748	     22114 ns/op	        21.60 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a1_b5_scale1-32 	   52560	     22253 ns/op	        21.73 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a1_b5_scale1-32 	   54286	     22110 ns/op	        21.59 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a1_b5_scale1-32 	   54000	     22198 ns/op	        21.68 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a1_b5_scale1e+09-32         	   54444	     22239 ns/op	        21.72 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a1_b5_scale1e+09-32         	   52851	     22357 ns/op	        21.83 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a1_b5_scale1e+09-32         	   52268	     22269 ns/op	        21.75 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a1_b5_scale1e+09-32         	   54154	     22154 ns/op	        21.64 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a1_b5_scale1e+09-32         	   54063	     22202 ns/op	        21.68 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1-32             	   54852	     21688 ns/op	        21.18 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1-32             	   54063	     22542 ns/op	        22.01 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1-32             	   55082	     21750 ns/op	        21.24 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1-32             	   54798	     21705 ns/op	        21.20 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1-32             	   48313	     21631 ns/op	        21.12 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1e+09-32         	   53679	     21601 ns/op	        21.09 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1e+09-32         	   55233	     22623 ns/op	        22.09 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1e+09-32         	   55004	     22675 ns/op	        22.14 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1e+09-32         	   54994	     21660 ns/op	        21.15 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a3_b3_scale1e+09-32         	   52972	     21560 ns/op	        21.05 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1-32             	   53535	     22172 ns/op	        21.65 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1-32             	   53772	     22334 ns/op	        21.81 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1-32             	   53191	     22610 ns/op	        22.08 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1-32             	   53461	     22313 ns/op	        21.79 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1-32             	   53670	     22299 ns/op	        21.78 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1e+09-32         	   53503	     22299 ns/op	        21.78 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1e+09-32         	   53847	     22474 ns/op	        21.95 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1e+09-32         	   45272	     23135 ns/op	        22.59 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1e+09-32         	   53373	     22355 ns/op	        21.83 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPERT/a5_b1_scale1e+09-32         	   53460	     22320 ns/op	        21.80 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a1_b5-32              	   54086	     22753 ns/op	        22.22 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a1_b5-32              	   55410	     23385 ns/op	        22.84 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a1_b5-32              	   54847	     22482 ns/op	        21.96 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a1_b5-32              	   54894	     22311 ns/op	        21.79 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a1_b5-32              	   55336	     21734 ns/op	        21.22 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a3_b3-32              	   42127	     28289 ns/op	        27.63 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a3_b3-32              	   41823	     28789 ns/op	        28.11 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a3_b3-32              	   41845	     28501 ns/op	        27.83 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a3_b3-32              	   41896	     28300 ns/op	        27.64 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a3_b3-32              	   42022	     28325 ns/op	        27.66 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a5_b1-32              	   55429	     21583 ns/op	        21.08 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a5_b1-32              	   56114	     21543 ns/op	        21.04 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a5_b1-32              	   55930	     22845 ns/op	        22.31 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a5_b1-32              	   55729	     21599 ns/op	        21.09 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkBetaDistuv/a5_b1-32              	   55653	     21583 ns/op	        21.08 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape0.5-32                	   39544	     30626 ns/op	        29.91 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape0.5-32                	   40116	     29905 ns/op	        29.20 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape0.5-32                	   40153	     29812 ns/op	        29.11 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape0.5-32                	   40468	     29515 ns/op	        28.82 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape0.5-32                	   40467	     29675 ns/op	        28.98 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape1-32                  	  114973	     10572 ns/op	        10.32 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape1-32                  	  112707	     10582 ns/op	        10.33 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape1-32                  	  112634	     10583 ns/op	        10.34 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape1-32                  	  113665	     10479 ns/op	        10.23 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape1-32                  	  113751	     10486 ns/op	        10.24 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape7.5-32                	  111426	     10076 ns/op	         9.840 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape7.5-32                	  123093	      9687 ns/op	         9.459 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape7.5-32                	  113582	      9766 ns/op	         9.537 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape7.5-32                	  119583	      9630 ns/op	         9.404 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkGamma/shape7.5-32                	  121170	      9727 ns/op	         9.499 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda0.5-32             	  133086	      8800 ns/op	         8.594 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda0.5-32             	  134378	      8848 ns/op	         8.641 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda0.5-32             	  136232	      8901 ns/op	         8.692 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda0.5-32             	  135132	      9071 ns/op	         8.859 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda0.5-32             	  133958	      8808 ns/op	         8.602 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda9.999-32           	   48487	     24829 ns/op	        24.25 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda9.999-32           	   48676	     24567 ns/op	        23.99 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda9.999-32           	   48472	     24824 ns/op	        24.24 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda9.999-32           	   45630	     24822 ns/op	        24.24 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda9.999-32           	   48097	     24827 ns/op	        24.25 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda21.999-32          	   35725	     33466 ns/op	        32.68 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda21.999-32          	   35748	     33443 ns/op	        32.66 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda21.999-32          	   35690	     33479 ns/op	        32.69 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda21.999-32          	   35656	     33551 ns/op	        32.76 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda21.999-32          	   35742	     33478 ns/op	        32.69 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda22-32              	   35659	     33538 ns/op	        32.75 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda22-32              	   36030	     33317 ns/op	        32.54 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda22-32              	   35752	     33569 ns/op	        32.78 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda22-32              	   35724	     33545 ns/op	        32.76 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda22-32              	   35708	     33551 ns/op	        32.76 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda10000-32           	   68002	     17863 ns/op	        17.44 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda10000-32           	   63705	     17431 ns/op	        17.02 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda10000-32           	   68655	     18085 ns/op	        17.66 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda10000-32           	   68510	     17358 ns/op	        16.95 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoisson/lambda10000-32           	   68546	     17519 ns/op	        17.11 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda0.5-32        	52313644	        21.38 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda0.5-32        	54328272	        21.42 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda0.5-32        	51219320	        21.54 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda0.5-32        	55858926	        21.56 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda0.5-32        	51722202	        21.54 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda37.5-32       	32141892	        37.00 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda37.5-32       	31878382	        37.23 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda37.5-32       	32036924	        37.08 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda37.5-32       	32361217	        37.32 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonCount/lambda37.5-32       	31686560	        37.38 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDist/uniform-32                  	  705109	      1589 ns/op	         1.551 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/uniform-32                  	  687099	      1592 ns/op	         1.555 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/uniform-32                  	  766773	      1592 ns/op	         1.554 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/uniform-32                  	  754885	      1577 ns/op	         1.540 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/uniform-32                  	  748305	      1600 ns/op	         1.563 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/loguniform-32               	  158505	      7482 ns/op	         7.307 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/loguniform-32               	  157784	      7535 ns/op	         7.359 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/loguniform-32               	  157874	      7483 ns/op	         7.308 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/loguniform-32               	  156780	      7479 ns/op	         7.304 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/loguniform-32               	  160568	      7480 ns/op	         7.304 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/triangular-32               	  180328	      6568 ns/op	         6.414 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/triangular-32               	  185006	      6577 ns/op	         6.423 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/triangular-32               	  182012	      6591 ns/op	         6.436 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/triangular-32               	  184664	      6563 ns/op	         6.409 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/triangular-32               	  181280	      6571 ns/op	         6.417 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/exponential-32              	  383356	      3092 ns/op	         3.019 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/exponential-32              	  386282	      3092 ns/op	         3.019 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/exponential-32              	  392308	      3097 ns/op	         3.025 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/exponential-32              	  378036	      3077 ns/op	         3.005 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/exponential-32              	  391227	      3091 ns/op	         3.018 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/lognormal-32                	  132207	      9023 ns/op	         8.811 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/lognormal-32                	  130836	      9070 ns/op	         8.857 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/lognormal-32                	  132561	      9007 ns/op	         8.796 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/lognormal-32                	  133095	      9254 ns/op	         9.037 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/lognormal-32                	  131548	      9006 ns/op	         8.795 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/weibull-32                  	   40575	     29518 ns/op	        28.83 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/weibull-32                  	   40524	     29554 ns/op	        28.86 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/weibull-32                  	   40502	     29546 ns/op	        28.85 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/weibull-32                  	   40021	     29629 ns/op	        28.93 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/weibull-32                  	   38150	     29565 ns/op	        28.87 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/normal-32                   	  321333	      3371 ns/op	         3.292 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/normal-32                   	  361038	      3374 ns/op	         3.295 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/normal-32                   	  346862	      3356 ns/op	         3.277 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/normal-32                   	  332788	      3358 ns/op	         3.279 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/normal-32                   	  349722	      3373 ns/op	         3.294 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_half-32         	   30920	     38694 ns/op	        37.79 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_half-32         	   30662	     38742 ns/op	        37.83 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_half-32         	   30805	     38851 ns/op	        37.94 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_half-32         	   30777	     38732 ns/op	        37.82 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_half-32         	   30932	     38681 ns/op	        37.77 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_robert-32       	   36423	     32896 ns/op	        32.13 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_robert-32       	   36294	     32933 ns/op	        32.16 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_robert-32       	   36345	     32995 ns/op	        32.22 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_robert-32       	   36230	     32906 ns/op	        32.14 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/truncnormal_robert-32       	   36298	     32912 ns/op	        32.14 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/pareto-32                   	   76612	     15594 ns/op	        15.23 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/pareto-32                   	   76345	     15578 ns/op	        15.21 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/pareto-32                   	   76453	     15599 ns/op	        15.23 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/pareto-32                   	   76867	     15586 ns/op	        15.22 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/pareto-32                   	   76196	     15853 ns/op	        15.48 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/gpd-32                      	   47712	     25250 ns/op	        24.66 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/gpd-32                      	   47644	     25138 ns/op	        24.55 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/gpd-32                      	   47526	     25112 ns/op	        24.52 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/gpd-32                      	   47468	     25172 ns/op	        24.58 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDist/gpd-32                      	   47670	     25126 ns/op	        24.54 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/uniform-32                	  319912	      3690 ns/op	         3.603 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/uniform-32                	  314688	      3705 ns/op	         3.618 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/uniform-32                	  313915	      3694 ns/op	         3.607 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/uniform-32                	  325729	      3880 ns/op	         3.789 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/uniform-32                	  313939	      3688 ns/op	         3.601 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/exponential-32            	  209530	      5727 ns/op	         5.593 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/exponential-32            	  208665	      5703 ns/op	         5.569 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/exponential-32            	  211773	      5637 ns/op	         5.505 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/exponential-32            	  205754	      5643 ns/op	         5.511 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/exponential-32            	  209679	      5626 ns/op	         5.494 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/lognormal-32              	   94699	     12499 ns/op	        12.21 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/lognormal-32              	   94066	     12546 ns/op	        12.25 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/lognormal-32              	   82558	     12558 ns/op	        12.26 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/lognormal-32              	   95244	     12594 ns/op	        12.30 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/lognormal-32              	   92710	     12512 ns/op	        12.22 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/weibull-32                	   24733	     48436 ns/op	        47.30 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/weibull-32                	   24253	     48609 ns/op	        47.47 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/weibull-32                	   24634	     48565 ns/op	        47.43 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/weibull-32                	   24444	     48583 ns/op	        47.44 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/weibull-32                	   24642	     48491 ns/op	        47.35 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/normal-32                 	  203121	      5849 ns/op	         5.712 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/normal-32                 	  201423	      5812 ns/op	         5.676 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/normal-32                 	  204892	      5822 ns/op	         5.686 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/normal-32                 	  205500	      5812 ns/op	         5.675 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/normal-32                 	  202755	      5803 ns/op	         5.667 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/pareto-32                 	   88486	     13183 ns/op	        12.87 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/pareto-32                 	   87420	     13247 ns/op	        12.94 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/pareto-32                 	   89722	     13235 ns/op	        12.93 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/pareto-32                 	   89161	     13186 ns/op	        12.88 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/pareto-32                 	   90757	     13213 ns/op	        12.90 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/triangular-32             	  146611	      8226 ns/op	         8.034 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/triangular-32             	  145396	      8215 ns/op	         8.022 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/triangular-32             	  145503	      8157 ns/op	         7.965 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/triangular-32             	  144802	      8243 ns/op	         8.050 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDistuv/triangular-32             	  147015	      8160 ns/op	         7.968 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_inversion-32   	   34634	     34304 ns/op	        33.50 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_inversion-32   	   34881	     34915 ns/op	        34.10 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_inversion-32   	   30883	     34378 ns/op	        33.57 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_inversion-32   	   33177	     34647 ns/op	        33.83 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_inversion-32   	   34850	     34433 ns/op	        33.63 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_btpe-32        	   55416	     21683 ns/op	        21.17 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_btpe-32        	   54994	     21676 ns/op	        21.17 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_btpe-32        	   55825	     21563 ns/op	        21.06 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_btpe-32        	   55144	     21540 ns/op	        21.03 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/binomial_btpe-32        	   55666	     21527 ns/op	        21.02 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/geometric-32            	  143356	      7846 ns/op	         7.662 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/geometric-32            	  153447	      7943 ns/op	         7.756 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/geometric-32            	  151838	      7818 ns/op	         7.634 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/geometric-32            	  151838	      7835 ns/op	         7.651 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/geometric-32            	  153544	      7819 ns/op	         7.636 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/negbin-32               	   22840	     52314 ns/op	        51.09 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/negbin-32               	   22794	     52750 ns/op	        51.51 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/negbin-32               	   22833	     52747 ns/op	        51.51 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/negbin-32               	   22838	     52427 ns/op	        51.20 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/negbin-32               	   22326	     52440 ns/op	        51.21 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/categorical-32          	  122583	      9587 ns/op	         9.362 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/categorical-32          	  125223	      9624 ns/op	         9.398 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/categorical-32          	  124116	      9628 ns/op	         9.402 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/categorical-32          	  124988	      9616 ns/op	         9.391 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkDiscrete/categorical-32          	  123789	      9609 ns/op	         9.384 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda10-32         	50400507	        24.02 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda10-32         	46395532	        24.06 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda10-32         	47928817	        24.70 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda10-32         	47647022	        24.03 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda10-32         	48697338	        24.03 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda10-32              	27887379	        43.34 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda10-32              	27031224	        43.07 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda10-32              	27347874	        42.91 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda10-32              	27385731	        42.89 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda10-32              	27825698	        43.01 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda12-32         	44651706	        25.38 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda12-32         	47236474	        25.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda12-32         	44396745	        25.50 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda12-32         	45507963	        25.47 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda12-32         	47206225	        25.73 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda12-32              	28726530	        40.33 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda12-32              	29599177	        40.13 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda12-32              	29571060	        40.34 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda12-32              	29415595	        40.24 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda12-32              	28412773	        40.35 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda15-32         	41511992	        27.79 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda15-32         	43320997	        29.59 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda15-32         	43295769	        27.80 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda15-32         	41659978	        27.77 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda15-32         	38818233	        27.81 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda15-32              	32079513	        37.02 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda15-32              	32596221	        37.42 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda15-32              	32509921	        36.98 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda15-32              	31472367	        36.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda15-32              	32404814	        37.09 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda18-32         	38583435	        29.74 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda18-32         	40320374	        29.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda18-32         	39119989	        29.71 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda18-32         	38692300	        29.83 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda18-32         	38277632	        29.85 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda18-32              	33235999	        34.88 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda18-32              	32714550	        34.88 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda18-32              	34520218	        34.88 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda18-32              	34547707	        34.83 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda18-32              	32462784	        34.64 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda20-32         	37356105	        31.10 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda20-32         	37019370	        31.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda20-32         	35959056	        31.17 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda20-32         	35192803	        31.07 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda20-32         	37537494	        31.14 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda20-32              	34324207	        33.81 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda20-32              	32804910	        33.73 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda20-32              	35331282	        33.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda20-32              	34459503	        33.70 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda20-32              	34292780	        33.54 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda25-32         	34461957	        34.85 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda25-32         	33690919	        34.82 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda25-32         	33533510	        34.97 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda25-32         	33435026	        34.93 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda25-32         	33563118	        34.89 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda25-32              	37661850	        31.52 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda25-32              	37143164	        33.15 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda25-32              	37126639	        31.38 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda25-32              	38168148	        31.35 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda25-32              	36911131	        31.60 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda30-32         	30768447	        38.71 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda30-32         	30123603	        38.93 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda30-32         	30608383	        38.86 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda30-32         	29763924	        38.76 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda30-32         	30326049	        39.03 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda30-32              	40217947	        31.49 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda30-32              	39736490	        29.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda30-32              	39490238	        29.80 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda30-32              	40426905	        29.73 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda30-32              	40254439	        29.74 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda40-32         	25042677	        46.58 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda40-32         	25442317	        46.63 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda40-32         	25580335	        46.60 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda40-32         	25003137	        46.59 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/inversion/lambda40-32         	25286301	        46.72 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda40-32              	42414800	        27.62 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda40-32              	43396977	        27.60 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda40-32              	42794324	        27.76 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda40-32              	41959831	        27.60 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPoissonMethods/ptrs/lambda40-32              	43285245	        27.86 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSamplerNext-32                               	54009330	        22.68 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSamplerNext-32                               	50644623	        22.84 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSamplerNext-32                               	52343172	        23.55 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSamplerNext-32                               	50256999	        22.36 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSamplerNext-32                               	53736913	        22.76 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_lognormal-32              	   33097	     36020 ns/op	        35.18 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_lognormal-32              	   30186	     36080 ns/op	        35.23 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_lognormal-32              	   33290	     36143 ns/op	        35.30 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_lognormal-32              	   33140	     36150 ns/op	        35.30 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_lognormal-32              	   32995	     36029 ns/op	        35.18 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_pert-32                   	    1215	    981729 ns/op	       958.7 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_pert-32                   	    1216	    981942 ns/op	       958.9 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_pert-32                   	    1218	    980386 ns/op	       957.4 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_pert-32                   	    1202	    982604 ns/op	       959.6 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/truncated_pert-32                   	    1219	    984478 ns/op	       961.4 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/capped_lognormal-32                 	  108040	     10953 ns/op	        10.70 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/capped_lognormal-32                 	  109668	     10907 ns/op	        10.65 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/capped_lognormal-32                 	  108657	     10958 ns/op	        10.70 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/capped_lognormal-32                 	  109063	     10917 ns/op	        10.66 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkWrappers/capped_lognormal-32                 	  107293	     10955 ns/op	        10.70 ns/draw	       0 B/op	       0 allocs/op
+BenchmarkHistAdd-32        	137477820	         8.732 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHistAdd-32        	136889228	         8.699 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHistAdd-32        	138351306	         8.668 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHistAdd-32        	139662662	         8.982 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHistAdd-32        	139378785	         8.678 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWelfordAdd-32     	217471713	         5.506 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWelfordAdd-32     	218284659	         5.485 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWelfordAdd-32     	218859456	         5.630 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWelfordAdd-32     	218051948	         5.486 ns/op	       0 B/op	       0 allocs/op
+BenchmarkWelfordAdd-32     	218439756	         5.487 ns/op	       0 B/op	       0 allocs/op
+BenchmarkNeumaierAdd-32    	496208208	         2.411 ns/op	       0 B/op	       0 allocs/op
+BenchmarkNeumaierAdd-32    	491884134	         2.411 ns/op	       0 B/op	       0 allocs/op
+BenchmarkNeumaierAdd-32    	495837114	         2.411 ns/op	       0 B/op	       0 allocs/op
+BenchmarkNeumaierAdd-32    	498070742	         2.411 ns/op	       0 B/op	       0 allocs/op
+BenchmarkNeumaierAdd-32    	495117362	         2.411 ns/op	       0 B/op	       0 allocs/op

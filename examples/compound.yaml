@@ -1,0 +1,12 @@
+# Compound frequency × severity: the smallest graph. An uncertain rate
+# of incidents per year, each costing a lognormal amount.
+periods: 50000
+seed: 1
+graphs:
+  - id: compound
+    sources:
+      - { id: incident, frequency: { pert: [2, 5, 12] }, to: loss }
+    nodes:
+      - id: loss
+        functions:
+          - { name: cost, category: money, lognormal: { median: 1000, p90: 5000 } }

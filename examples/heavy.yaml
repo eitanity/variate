@@ -1,0 +1,24 @@
+# Heavy tails. A Pareto severity with a finite but large variance, the
+# same family with a fatter tail held by an insurance limit (cap), and
+# a generalised Pareto for the excess layer. The exact distribution
+# applies to all three as written; lower the open Pareto's alpha below
+# two and its variance is infinite, the grid the exact method sizes
+# from it grows to the memory budget, and the method declines, which
+# is what the cap is for: the limit is what makes the tail computable.
+# Two layers of the period total report what is retained under an
+# aggregate deductible and what a reinsurance layer above it pays; with
+# the exact distribution their means come with bounds.
+period: { days: 365 }
+layers:
+  - { id: retained, limit: 2e5 }
+  - { id: reinsurance, attachment: 2e5, limit: 3e6, share: 0.9 }
+graphs:
+  - id: tails
+    sources:
+      - { id: open, frequency: 2, to: open_loss }
+      - { id: capped, frequency: 2, to: limited_loss }
+      - { id: excess, frequency: 0.5, to: excess_loss }
+    nodes:
+      - { id: open_loss, functions: [ { name: loss, category: open, pareto: { min: 1e4, alpha: 2.5 } } ] }
+      - { id: limited_loss, functions: [ { name: loss, category: limited, pareto: { min: 1e4, alpha: 1.6 }, cap: 2e6 } ] }
+      - { id: excess_loss, functions: [ { name: loss, category: excess, gpd: { loc: 5e4, scale: 4e4, shape: 0.3 } } ] }

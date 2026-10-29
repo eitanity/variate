@@ -1,0 +1,21 @@
+# A rate that varies by period: storm claims over a monthly period,
+# the rate following a twelve-value cycle with its peak in late summer.
+# Period p uses the value at p modulo twelve, so a run of 120 periods
+# sees ten full years; the series shows the cycle and the exact mean,
+# variance and distribution treat the cycle as a multiplier seen
+# equally often at each of its values. A second line, burst pipes,
+# peaks in winter on its own cycle; the third does not vary.
+period: { days: 30 }
+schedules:
+  - { id: storms, values: [0.3, 0.3, 0.5, 0.8, 1.2, 1.6, 2.0, 2.2, 1.6, 0.8, 0.4, 0.3] }
+  - { id: freeze, values: [2.5, 2.0, 1.0, 0.3, 0.1, 0.1, 0.1, 0.1, 0.2, 0.6, 1.5, 2.5] }
+graphs:
+  - id: claims
+    sources:
+      - { id: storm,  frequency: 4,   schedule: storms, to: storm_claim }
+      - { id: pipe,   frequency: 1.5, schedule: freeze, to: pipe_claim }
+      - { id: theft,  frequency: 2,                     to: theft_claim }
+    nodes:
+      - { id: storm_claim, functions: [ { name: loss, category: property, lognormal: { median: 8e3, p90: 5e4 } } ] }
+      - { id: pipe_claim,  functions: [ { name: loss, category: property, lognormal: { median: 3e3, p90: 1.5e4 } } ] }
+      - { id: theft_claim, functions: [ { name: loss, category: contents, lognormal: { median: 1.5e3, p90: 6e3 } } ] }

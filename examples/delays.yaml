@@ -1,0 +1,18 @@
+# Holding times and a cap: a failure takes days to repair, the downtime
+# cost accrues per day of repair, and the repair bill is capped. Values
+# can land in the period after the failure.
+periods: 20000
+seed: 3
+period: { days: 365 }
+graphs:
+  - id: machine
+    sources:
+      - { id: failure, frequency: { gamma: { shape: 3, scale: 2 } }, to: repair }
+    nodes:
+      - id: repair
+        functions:
+          - { name: parts, category: materials, lognormal: { median: 2000, p90: 9000 }, cap: 15000 }
+          - { name: downtime, category: production, basis: per_time, unit: days, pert: [500, 1500, 4000] }
+        outcomes:
+          - { to: back_in_service, holding: { lognormal: { median: 2, p90: 7 }, unit: days } }
+      - id: back_in_service

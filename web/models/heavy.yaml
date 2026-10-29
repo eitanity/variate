@@ -1,0 +1,18 @@
+# Heavy tails: a Pareto with a finite variance, a fatter Pareto held by
+# an insurance limit, and a generalised Pareto for the excess layer;
+# two layers of the period total, the retained part under an aggregate
+# deductible and what a reinsurance layer above it pays.
+period: { days: 365 }
+layers:
+  - { id: retained, limit: {{deductible}} }
+  - { id: reinsurance, attachment: {{deductible}}, limit: 3e6, share: {{share}} }
+graphs:
+  - id: tails
+    sources:
+      - { id: open, frequency: 2, to: open_loss }
+      - { id: capped, frequency: 2, to: limited_loss }
+      - { id: excess, frequency: 0.5, to: excess_loss }
+    nodes:
+      - { id: open_loss, functions: [ { name: loss, category: open, pareto: { min: 1e4, alpha: {{open_alpha}} } } ] }
+      - { id: limited_loss, functions: [ { name: loss, category: limited, pareto: { min: 1e4, alpha: {{capped_alpha}} }, cap: {{cap}} } ] }
+      - { id: excess_loss, functions: [ { name: loss, category: excess, gpd: { loc: 5e4, scale: 4e4, shape: 0.3 } } ] }

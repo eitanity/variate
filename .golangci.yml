@@ -1,0 +1,156 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  default: none
+  enable:
+    - staticcheck
+    - unused
+    - errcheck
+    - gosec
+    - depguard
+    - forbidigo
+    - gocritic
+    - forcetypeassert
+    - funlen
+    - gocognit
+    - gochecknoinits
+    - gochecknoglobals
+    - nilerr
+    - errorlint
+    - wrapcheck
+    - prealloc
+    - makezero
+    - exhaustive
+    - goconst
+    - misspell
+    - godot
+  settings:
+    errcheck:
+      # A bufio.Writer keeps its first error and reports it on Flush, which
+      # every writer here checks; fmt.Fprint* on one carries nothing more.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*bufio.Writer).Write
+        - (*bufio.Writer).WriteByte
+        - (*bufio.Writer).WriteRune
+        - (*bufio.Writer).WriteString
+    depguard:
+      rules:
+        engine:
+          list-mode: lax
+          files:
+            - "**/variate/*.go"
+            - "**/dist/**"
+            - "**/stats/**"
+            - "!**/cmd/**"
+            - "!$test"
+          deny:
+            - pkg: fmt
+              desc: "no fmt in the engine packages"
+            - pkg: reflect
+              desc: "no reflect"
+            - pkg: unsafe
+              desc: "no unsafe"
+        all:
+          list-mode: lax
+          files:
+            - "$all"
+            - "!$test"
+          deny:
+            - pkg: reflect
+              desc: "no reflect"
+            - pkg: unsafe
+              desc: "no unsafe"
+            - pkg: encoding/json
+              desc: "JSON is written by hand in cmd"
+            - pkg: encoding/gob
+              desc: "not allowed"
+            - pkg: text/template
+              desc: "not allowed"
+            - pkg: html/template
+              desc: "not allowed"
+            - pkg: plugin
+              desc: "not allowed"
+        tests:
+          list-mode: lax
+          files:
+            - "$test"
+          deny:
+            - pkg: reflect
+              desc: "no reflect"
+            - pkg: unsafe
+              desc: "no unsafe"
+            - pkg: encoding/gob
+              desc: "not allowed"
+            - pkg: text/template
+              desc: "not allowed"
+            - pkg: plugin
+              desc: "not allowed"
+        deps:
+          list-mode: strict
+          files:
+            - "$all"
+          allow:
+            - $gostd
+            - code.eitanity.com/variate
+            - gonum.org/v1/gonum
+            - go.yaml.in/yaml/v3
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^panic$
+          msg: "no panic"
+        - pattern: ^time\.Sleep$
+          msg: "use the injectable clock"
+        - pattern: ^time\.Now$
+          msg: "use the injectable clock"
+        - pattern: ^os\.Exit$
+          msg: "exit only from main"
+    funlen:
+      lines: 60
+      statements: -1
+      ignore-comments: true
+    gocognit:
+      min-complexity: 20
+    exhaustive:
+      default-signifies-exhaustive: false
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    wrapcheck:
+      ignore-package-globs:
+        - code.eitanity.com/variate/*
+      ignore-sigs:
+        - errors.New(
+        - errors.Join(
+        - .Errorf(
+        - errors.Unwrap(
+    gosec:
+      excludes:
+        - G104
+        - G404
+  exclusions:
+    rules:
+      - path: (cmd/variate|cmd/variate-demo|examples/gograph)/main\.go
+        linters: [forbidigo]
+        text: "os\\.Exit"
+      - path: ^clock\.go
+        linters: [forbidigo]
+        text: "time\\.(Now|Sleep)"
+      - path: _test\.go
+        linters: [funlen, gocognit, gochecknoglobals, goconst, wrapcheck]
+      - path: _test\.go
+        linters: [forbidigo]
+        text: "time\\.Sleep"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

@@ -1,0 +1,18 @@
+# A period-scoped probability: 600 phishing emails a period meet a filter
+# whose block rate is uncertain. The rate is drawn once per period and
+# shared by every email in it, so a bad period lets many through.
+periods: 20000
+seed: 2
+graphs:
+  - id: phishing
+    sources:
+      - { id: email, frequency: 600, to: filter }
+    nodes:
+      - id: filter
+        outcomes:
+          - { to: blocked, p: { pert: [0.90, 0.95, 0.99] } }
+          - { to: delivered }
+      - id: blocked
+      - id: delivered
+        functions:
+          - { name: handling, category: labour, constant: 25 }
