@@ -216,11 +216,11 @@ func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Exp
 	}
 }
 
-// TestInvariantInfiniteMomentsStayNumbers: the two zero-times-infinity
-// cases the fuzzer found. A per-time rate with infinite variance on a
-// node with no holding time books nothing, and a source whose rate is 0
-// contributes nothing, however heavy the values behind it; the variance
-// must be a number or +Inf, never NaN.
+// TestInvariantInfiniteMomentsStayNumbers: the zero-times-infinity cases
+// the fuzzer found. A per-time rate with infinite variance on a node with
+// no holding time books nothing, and a source whose rate is 0 or an
+// outcome whose probability is 0 contributes nothing, however heavy the
+// values behind it; the variance must be a number or +Inf, never NaN.
 func TestInvariantInfiniteMomentsStayNumbers(t *testing.T) {
 	par, _ := dist.NewPareto(1, 1.5) // infinite variance
 	rateOnLeafless := variate.Graph{
@@ -237,7 +237,16 @@ func TestInvariantInfiniteMomentsStayNumbers(t *testing.T) {
 			{ID: "b", Functions: []variate.Function{Fn("y", "k", C(3))}},
 		},
 	}
-	for name, g := range map[string]variate.Graph{"rate without holding": rateOnLeafless, "zero-rate source": zeroRate} {
+	exp1, _ := dist.NewExponential(1)
+	zeroOutcome := variate.Graph{
+		Sources: []variate.Source{{ID: "s", Frequency: C(2), To: "a"}},
+		Nodes: []variate.Node{
+			{ID: "a", Functions: []variate.Function{Fn("x", "k", exp1)}, Outcomes: []variate.Outcome{{To: "h", P: C(0)}, {To: "b"}}},
+			{ID: "h", Functions: []variate.Function{Fn("y", "k", par)}},
+			{ID: "b"},
+		},
+	}
+	for name, g := range map[string]variate.Graph{"rate without holding": rateOnLeafless, "zero-rate source": zeroRate, "zero-probability outcome": zeroOutcome} {
 		c, e := exactOf(t, g)
 		checkNumbers(t, name, c, e)
 		if name == "rate without holding" && (e.Var != 18 || e.Mean != 6) {
@@ -245,6 +254,9 @@ func TestInvariantInfiniteMomentsStayNumbers(t *testing.T) {
 		}
 		if name == "zero-rate source" && (e.Var != 9 || e.Mean != 3) {
 			t.Errorf("%s: mean %g var %g, want 3 and 9", name, e.Mean, e.Var)
+		}
+		if name == "zero-probability outcome" && (e.Var != 4 || e.Mean != 2) {
+			t.Errorf("%s: mean %g var %g, want 2 and 4", name, e.Mean, e.Var)
 		}
 	}
 }

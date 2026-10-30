@@ -128,8 +128,8 @@ func (m *Compiled) valueToGo(filt valueFilter) (m1, m2 []float64) {
 			tau, tau2, _ := m.holdMoments(o)
 			ey := nm.rho*tau + m1[o.to]
 			ey2 := rateSecond(nm.rho2, tau2) + m2[o.to] + 2*nm.rho*tau*m1[o.to]
-			sumPY += p * ey
-			sumPY2 += p * ey2
+			sumPY += weighted(p, ey)
+			sumPY2 += weighted(p, ey2)
 		}
 		m1[v] = nm.a + sumPY
 		m2[v] = nm.a2 + 2*nm.a*sumPY + sumPY2

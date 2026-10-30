@@ -54,7 +54,7 @@ func (m *Compiled) crossPair(u, w int32, filt valueFilter, m1 []float64, t *pair
 	for j := n.outStart; j < n.outEnd; j++ {
 		o := m.outs[j]
 		tau, _, _ := m.holdMoments(o)
-		q += m.outcomeMeanProb(u, j) * (nm.rho*tau*m1[w] + t.at(o.to, w))
+		q += weighted(m.outcomeMeanProb(u, j), nm.rho*tau*m1[w]+t.at(o.to, w))
 	}
 	return q
 }
@@ -76,7 +76,7 @@ func (m *Compiled) selfPair(u int32, filt valueFilter, m1 []float64, t *pairTabl
 	for i := n.outStart; i < n.outEnd; i++ {
 		// bound: outcomes of one node
 		for j := n.outStart; j < n.outEnd; j++ {
-			q += m.probPair(u, i, j) * m.bPair(nm, i, j, m1, t)
+			q += weighted(m.probPair(u, i, j), m.bPair(nm, i, j, m1, t))
 		}
 	}
 	return q
