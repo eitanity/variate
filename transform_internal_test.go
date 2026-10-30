@@ -140,10 +140,13 @@ func TestTransformBranchCut(t *testing.T) {
 
 // TestTransformLambdaQuadrature: a wide PERT frequency converges within
 // the cap, and ε_q bounds the difference from a 4·n reference at every
-// point.
+// point. The long suite widens the span to 2000.
 func TestTransformLambdaQuadrature(t *testing.T) {
 	span := 100.0
-	if !testing.Short() {
+	switch {
+	case os.Getenv("VARIATE_STAT") == "1":
+		span = 2000
+	case !testing.Short():
 		span = 400
 	}
 	pertF, err := dist.NewPERT(0, span/4, span, dist.DefaultPERTShape)
@@ -170,7 +173,9 @@ func TestTransformLambdaQuadrature(t *testing.T) {
 	pertF.Nodes(x, w)
 	ref := make([]complex128, n)
 	evalMixture(x, w, gc, ref, 1)
-	if d := maxAbsDiff(out, ref); d > eps+1e-15 {
+	// Summing the reference's 4·n terms of modulus at most 1 rounds by up
+	// to 4·n·u, which the round-off estimate carries rather than ε_q.
+	if d := maxAbsDiff(out, ref); d > eps+float64(len(x))*unitRoundoff {
 		t.Errorf("difference from the 4n reference %g exceeds ε_q %g", d, eps)
 	}
 }

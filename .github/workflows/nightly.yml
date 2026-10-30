@@ -36,6 +36,12 @@ jobs:
           check-latest: false
       - name: Fuzz (30 min each)
         run: make fuzz-long
+      - name: Keep the failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failures
+          path: "**/testdata/fuzz/**"
 
   bench:
     runs-on: ubuntu-latest

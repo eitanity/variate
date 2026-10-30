@@ -33,25 +33,6 @@ func TestTransformLognormalFrequencyLong(t *testing.T) {
 	}
 }
 
-// TestTransformWidePERTFrequencyLong: a PERT frequency with span 2000
-// converges within the doubling cap.
-func TestTransformWidePERTFrequencyLong(t *testing.T) {
-	skipUnlessLong(t)
-	p, err := dist.NewPERT(0, 500, 2000, dist.DefaultPERTShape)
-	if err != nil {
-		t.Fatal(err)
-	}
-	g := compoundExponential(1, 1)
-	g.Sources[0].Frequency = p
-	_, tr := transformOf(t, g, variate.TransformConfig{Tol: 1e-2})
-	if !tr.Applicable {
-		t.Fatalf("%s", tr.Reason)
-	}
-	if tr.QuadNodes < 1024 {
-		t.Errorf("quad nodes %d", tr.QuadNodes)
-	}
-}
-
 // TestInvariantNoSelfCheckRefusalLong: the self-check invariant over
 // eight random and eight heavy-tailed graphs.
 func TestInvariantNoSelfCheckRefusalLong(t *testing.T) {
