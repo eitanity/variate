@@ -504,6 +504,9 @@ func checkRandomDAGs(t *testing.T, seeds []uint64, maxScoped, maxGrid int) {
 		g, _ := transformGraph(t, seed, maxScoped)
 		m, tr := transformOf(t, g, variate.TransformConfig{Tol: 1e-2, MaxGrid: maxGrid})
 		if !tr.Applicable {
+			if strings.HasPrefix(tr.Reason, "self-check") {
+				t.Errorf("seed %d: %s", seed, tr.Reason)
+			}
 			t.Logf("seed %d: %s", seed, tr.Reason)
 			continue
 		}

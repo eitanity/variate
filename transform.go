@@ -61,6 +61,7 @@ const (
 	maxPasses        = 1 << 12
 	maxAtomScan      = 1 << 22 // lattice steps scanned for a period-scoped value's atoms
 	gcdSteps         = 64
+	minAtom          = 1e-9 // mass at an upper end that makes it an atom; a continuous end has density × ulp
 	maxPeriodScoped  = 3
 	maxSourceBounds  = 16 // sources beyond which no per-source bounds are kept
 )
@@ -157,8 +158,9 @@ func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
 // atomUnit returns the largest value every function atom is an integer
 // multiple of, found by Euclid's algorithm with a relative tolerance, or
 // 0 when there are no atoms or no such value above 1e-6 of the smallest.
-// The atoms are the positive constants and the caps a capped value has
-// positive mass at. A span that divides the unit puts every atom on the
+// The atoms are the positive constants and the upper ends that hold more
+// than minAtom of mass, as a cap does and a bounded continuous value's
+// end does not. A span that divides the unit puts every atom on the
 // lattice, so the two roundings agree there and the bracket can close.
 func (m *Compiled) atomUnit() float64 {
 	unit := 0.0
@@ -170,7 +172,7 @@ func (m *Compiled) atomUnit() float64 {
 		switch {
 		case lo == hi && lo > 0:
 			atom = lo
-		case hi > 0 && !math.IsInf(hi, 1) && d.CDF(hi)-d.CDF(math.Nextafter(hi, 0)) > 0:
+		case hi > 0 && !math.IsInf(hi, 1) && d.Survival(math.Nextafter(hi, 0)) > minAtom:
 			atom = hi
 		default:
 			continue

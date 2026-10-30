@@ -492,6 +492,24 @@ func TestUnitRootsSymmetric(t *testing.T) {
 	}
 }
 
+// TestAtomUnit: the atoms are the positive constants and the caps a
+// capped value has mass at, not the upper end of a bounded value.
+func TestAtomUnit(t *testing.T) {
+	pert, _ := dist.NewPERT(1, 2, 3, dist.DefaultPERTShape)
+	u, _ := dist.NewUniform(1, 3.5)
+	e, _ := dist.NewExponential(1)
+	capped, _ := dist.NewCapped(e, 6)
+	g := compoundOf(c(1), c(4))
+	g.Nodes[0].Functions = append(g.Nodes[0].Functions, fn("p", "k", pert), fn("u", "k", u))
+	if got := compiled(t, g).atomUnit(); got != 4 {
+		t.Errorf("constant 4 beside bounded values: unit %g", got)
+	}
+	g.Nodes[0].Functions = append(g.Nodes[0].Functions, fn("cap", "k", capped))
+	if got := compiled(t, g).atomUnit(); got != 2 {
+		t.Errorf("constant 4 and a cap at 6: unit %g", got)
+	}
+}
+
 // skipUnderRace skips a test of single-threaded code under the race
 // detector, where its instrumentation costs minutes and detects nothing;
 // make race says so with VARIATE_RACE=1.
