@@ -13,6 +13,10 @@ func modelError(kind, subject, msg string) error {
 
 func ftoa(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
 
+// figure formats a derived value for a message to six significant digits,
+// so that the last-unit differences between architectures do not show.
+func figure(v float64) string { return strconv.FormatFloat(v, 'g', 6, 64) }
+
 func itoa(v int) string { return strconv.Itoa(v) }
 
 // index narrows a count to the int32 the tables use; Compile refuses a

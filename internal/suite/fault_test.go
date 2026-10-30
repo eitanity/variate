@@ -60,6 +60,9 @@ type leakGuard struct {
 
 func guard(t *testing.T) leakGuard {
 	t.Helper()
+	// Record files go to a directory of the test's own, so that other
+	// processes writing theirs to the shared one cannot move the count.
+	t.Setenv("TMPDIR", t.TempDir())
 	return leakGuard{goroutines: runtime.NumGoroutine(), files: tempRecordFiles(t)}
 }
 

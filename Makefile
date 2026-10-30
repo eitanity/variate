@@ -50,7 +50,7 @@ build:
 # Rewrites the frozen reports of the example and demo models after an
 # intended behaviour change; review the diff before committing.
 golden:
-	go test -run TestGoldenReports -update ./internal/suite
+	go test -run TestGoldenReports ./internal/suite -update
 
 # ---- browser demo -----------------------------------------------------------
 
@@ -80,7 +80,7 @@ wasm-test:
 fmt: $(BIN)/goimports
 	@out="$$(gofmt -l . ; $(BIN)/goimports -l .)"; if [ -n "$$out" ]; then echo "$$out"; exit 1; fi
 
-vet:
+vet: $(BIN)/golangci-lint
 	go vet $(PKGS)
 	cd internal/lint && go vet ./...
 	GOOS=js GOARCH=wasm go vet ./cmd/variate-wasm

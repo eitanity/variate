@@ -2,8 +2,8 @@
 // through variateRun and compare the report with the native CLI's JSON
 // written to the path given as the first argument (variate run -f
 // examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format
-// json --analytic). The wasm report adds "histogram" and "warnings";
-// everything else must be identical.
+// json --analytic). The wasm report adds "histogram", "log_histogram"
+// and "warnings"; everything else must be identical.
 //
 //   node web/smoke.js native.json
 "use strict";
@@ -45,9 +45,10 @@ async function main() {
   const out = variateRun(yaml, { periods: "2000", seed: "5", "block-periods": "50", transform: "true" });
   if (out.error !== undefined) throw new Error(out.error);
   const report = JSON.parse(out.ok);
-  if (!report.histogram || !report.warnings) throw new Error("wasm report lacks histogram or warnings");
-  delete report.histogram;
-  delete report.warnings;
+  for (const k of ["histogram", "log_histogram", "warnings"]) {
+    if (!report[k]) throw new Error("wasm report lacks " + k);
+    delete report[k];
+  }
   deepEqual(native, report, "report");
   console.log(`wasm report matches the native CLI to ${TOLERANCE} relative; version ${variateVersion()}; ${report.periods} periods in ${Date.now() - t0} ms`);
   process.exit(0);

@@ -325,9 +325,9 @@ func (m *Compiled) workWarning() Warning {
 	for k := range m.srcs {
 		arrivals += m.arrivalsOf(k)
 	}
-	msg := "expected rounds per period " + ftoa(rounds) + ", steps per period " + ftoa(steps)
+	msg := "expected rounds per period " + figure(rounds) + ", steps per period " + figure(steps)
 	if arrivals > 0 {
-		msg += ", arrivals drawn per period " + ftoa(arrivals)
+		msg += ", arrivals drawn per period " + figure(arrivals)
 	}
 	return Warning{Code: "expected-work", Subject: "model", Message: msg}
 }
