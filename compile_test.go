@@ -214,11 +214,17 @@ func TestCompileSpillAndDelays(t *testing.T) {
 		t.Errorf("override spill %d", m.Spill())
 	}
 	// A heavy-tailed holding time drives S past the warning threshold.
-	pa, _ := dist.NewPareto(1, 1.5)
+	pa, _ := dist.NewPareto(1, 3)
 	g.Nodes[1].NextHolding = pa
 	m, ws = mustCompile(t, g, Config{})
 	if m.Spill() <= spillWarn || warningCodes(ws)["wide-window"] != 1 {
 		t.Errorf("pareto holding: spill %d warnings %v", m.Spill(), ws)
+	}
+	// A heavier tail puts S beyond any window: refused, not wrapped.
+	pa, _ = dist.NewPareto(1, 1.5)
+	g.Nodes[1].NextHolding = pa
+	if _, _, err := g.Compile(Config{}); err == nil || !strings.Contains(err.Error(), "add a cap") {
+		t.Errorf("pareto 1.5 holding: %v", err)
 	}
 }
 

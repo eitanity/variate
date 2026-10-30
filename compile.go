@@ -17,6 +17,8 @@ const (
 	pathLevel = 1e-15
 	// spillWarn is the window width above which Compile warns.
 	spillWarn = 1000
+	// maxSpill is the widest window, the largest Spill a config may set.
+	maxSpill = 1<<31 - 1
 	// aliasThreshold is the number of fixed outcomes above which a node
 	// selects with an alias table.
 	aliasThreshold = 8
@@ -363,6 +365,9 @@ func (m *Compiled) setSpill(override int, ws *[]Warning) error {
 	}
 	if math.IsInf(q, 0) || math.IsNaN(q) {
 		return modelError("outcome", m.outcomeNames[driver], "holding time has no finite quantile at the path-duration level; add a cap")
+	}
+	if q > maxSpill {
+		return modelError("outcome", m.outcomeNames[driver], "path-duration bound S = "+ftoa(math.Ceil(q))+" periods is above "+itoa(maxSpill)+"; add a cap")
 	}
 	m.spill = int(math.Ceil(q))
 	if m.spill > spillWarn {

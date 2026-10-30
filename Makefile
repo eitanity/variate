@@ -4,16 +4,17 @@
 GOLANGCI_LINT_VERSION := v2.14.0
 GOIMPORTS_VERSION     := v0.52.0
 GOVULNCHECK_VERSION   := latest
+TINYGO_VERSION        := 0.42.0
 BIN                   := $(abspath bin)
 PKGS                  := ./...
 HOTPATH               := internal/lint/hotpath.txt
 
-.PHONY: all ci nightly tools build test race alloc lint fmt vet custom-lint wasm demo golden wasm-smoke wasm-test \
+.PHONY: all ci nightly tools build test test32 race alloc lint fmt vet custom-lint tinygo tinygo-version wasm demo golden wasm-smoke wasm-test \
         norecursion escapes fuzz fuzz-long stat bench vuln release clean
 
 all: ci
 
-ci: verify fmt vet lint custom-lint escapes race alloc fuzz vuln
+ci: verify fmt vet lint custom-lint escapes race alloc test32 tinygo fuzz vuln
 
 nightly: stat fuzz-long bench
 
@@ -54,9 +55,18 @@ golden:
 
 # ---- browser demo -----------------------------------------------------------
 
-wasm:
-	GOOS=js GOARCH=wasm go build -trimpath -o web/variate.wasm ./cmd/variate-wasm
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" web/wasm_exec.js
+# The demo's engine is built with TinyGo; its wasm_exec.js is TinyGo's
+# own, not Go's.
+tinygo-version:
+	@tinygo version 2>/dev/null | grep -q "tinygo version $(TINYGO_VERSION) " || { echo "tinygo $(TINYGO_VERSION) is required: https://tinygo.org/getting-started/install/"; exit 1; }
+
+wasm: tinygo-version
+	tinygo build -o web/variate.wasm -target wasm -no-debug -opt 2 ./cmd/variate-wasm
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" web/wasm_exec.js
+
+# The wasm entry point builds under TinyGo.
+tinygo: tinygo-version
+	tinygo build -o $(BIN)/variate.tinygo.wasm -target wasm -no-debug -opt 2 ./cmd/variate-wasm
 
 demo: wasm
 	go run ./cmd/variate-demo
@@ -107,6 +117,11 @@ escapes: $(BIN)/escapes
 
 test:
 	go test -count=1 $(PKGS)
+
+# The suite with a 32-bit int, the width TinyGo's wasm target has, on
+# four workers so that the footprint fits a 32-bit address space.
+test32:
+	GOARCH=386 GOMAXPROCS=4 go test -count=1 -timeout 60m $(PKGS)
 
 race:
 	VARIATE_RACE=1 go test -race -count=1 -timeout 60m $(PKGS)

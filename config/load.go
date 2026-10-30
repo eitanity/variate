@@ -410,9 +410,7 @@ func setTransformSetting(c *variate.Config, key string, v node) error {
 	case "tol":
 		c.TransformTol, err = v.float()
 	case "work":
-		var n int64
-		n, err = v.integer(0, 1<<62)
-		c.TransformWork = int(n)
+		c.TransformWork, err = v.integer(0, 1<<62)
 	default:
 		c.TransformBytes, err = v.integer(0, 1<<62)
 	}
@@ -429,7 +427,7 @@ func uinteger(v node) (uint64, error) {
 }
 
 func smallInt(v node) (int, error) {
-	n, err := v.integer(0, 1<<31)
+	n, err := v.integer(0, 1<<31-1)
 	return int(n), err
 }
 

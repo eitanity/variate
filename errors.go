@@ -19,6 +19,8 @@ func figure(v float64) string { return strconv.FormatFloat(v, 'g', 6, 64) }
 
 func itoa(v int) string { return strconv.Itoa(v) }
 
+func i64toa(v int64) string { return strconv.FormatInt(v, 10) }
+
 // index narrows a count to the int32 the tables use; Compile refuses a
 // graph that would exceed it before any table is built.
 func index(n int) int32 {

@@ -56,17 +56,17 @@ same model, seed and block size repeat a run exactly.
 
 ## The browser demo
 
-`make demo` builds the engine to WebAssembly and serves a page at
-http://127.0.0.1:8000/ with every example as a model with knobs, or
-any model pasted as YAML. A run draws the histogram and exceedance
-curve of the total or of any category, source or node, with return
-periods and the exact bounds when asked for; the sources' contributions
-and who the tail belongs to beyond a return period; a source's events
-per period against a Poisson reference; the totals over the run; and
-the compiled graph as a flow diagram. A run can be pinned as a baseline
-and the next drawn beside it, for cheaper-and-slower against
-faster-and-dearer. The page lives under `web/`; `cmd/variate-wasm` is
-the engine's browser entry point.
+`make demo` builds the engine to WebAssembly with TinyGo and serves a
+page at http://127.0.0.1:8000/ with every example as a model with
+knobs, or any model pasted as YAML. A run draws the histogram and
+exceedance curve of the total or of any category, source or node, with
+return periods and the exact bounds when asked for; the sources'
+contributions and who the tail belongs to beyond a return period; a
+source's events per period against a Poisson reference; the totals
+over the run; and the compiled graph as a flow diagram. A run can be
+pinned as a baseline and the next drawn beside it, for
+cheaper-and-slower against faster-and-dearer. The page lives under
+`web/`; `cmd/variate-wasm` is the engine's browser entry point.
 
 ## From Python
 
@@ -83,16 +83,17 @@ exist for it.
 
 `make ci` runs what runs on every push: formatting, vet, the linters
 and the project's own analyzers, the escape and allocation checks on
-the hot path, the race detector, the fuzzers and the vulnerability
-scan. `make stat` is the long statistical suite, `make bench` the
-benchmarks against a baseline, `make wasm-test` the engine's tests as
-wasm under the wazero runtime, and `make race` the race detector run.
-The engine's test suites live in `internal/suite`, against the public
-API only; the root keeps the tests that reach inside. `internal/lint`
-is a separate module holding the project's checkers.
-The engine allocates nothing while a run is going, has no recursion
-and bounds every loop, and the build checks each of these with a tool
-wherever a tool can.
+the hot path, the race detector, the suite again with a 32-bit `int`
+(the width of TinyGo's wasm target), a TinyGo build of the browser
+engine, the fuzzers and the vulnerability scan. `make stat` is the
+long statistical suite, `make bench` the benchmarks against a
+baseline, `make wasm-test` the engine's tests as wasm under the wazero
+runtime, and `make race` the race detector run. The engine's test
+suites live in `internal/suite`, against the public API only; the root
+keeps the tests that reach inside. `internal/lint` is a separate
+module holding the project's checkers. The engine allocates nothing
+while a run is going, has no recursion and bounds every loop, and the
+build checks each of these with a tool wherever a tool can.
 
 ## Licence
 

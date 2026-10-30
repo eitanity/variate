@@ -288,7 +288,7 @@ func (c *counter) tensor() ([][]complex128, string) {
 			}
 		}
 		// Every pass repeats the rate quadrature per node and source.
-		if work := c.mix.passes() * max(1, c.t.quadN) * c.m * len(m.nodes) * len(m.srcs); work > quadWorkCap {
+		if work := int64(c.mix.passes()) * int64(max(1, c.t.quadN)) * int64(c.m) * int64(len(m.nodes)) * int64(len(m.srcs)); work > quadWorkCap {
 			return nil, "entries mixture of " + itoa(c.mix.passes()) + " passes with " + itoa(c.t.quadN) + " frequency quadrature nodes at " + itoa(c.m) + " grid points over " + itoa(len(m.nodes)) + " nodes is above the work cap"
 		}
 	}

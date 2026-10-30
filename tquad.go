@@ -13,23 +13,23 @@ import (
 func (t *transformer) compound(k int, gc, out []complex128, f float64) (eps float64, reason string) {
 	d := t.m.pools[t.m.srcs[k].pool]
 	if pmf := t.m.countPMF[k]; pmf != nil {
-		if t.work+len(pmf)*len(gc) > t.cfg.MaxWork {
+		if t.work+int64(len(pmf))*int64(len(gc)) > t.cfg.MaxWork {
 			return 0, t.budgetReason(t.grid)
 		}
 		for i, w := range gc {
 			out[i] = polyAt(pmf, w)
 		}
-		t.work += len(pmf) * len(gc)
+		t.work += int64(len(pmf)) * int64(len(gc))
 		return t.m.countTail[k], ""
 	}
 	if _, ok := d.Laplace(0); ok {
-		if t.work+len(gc) > t.cfg.MaxWork {
+		if t.work+int64(len(gc)) > t.cfg.MaxWork {
 			return 0, t.budgetReason(t.grid)
 		}
 		for i, w := range gc {
 			out[i], _ = d.Laplace(complex(f, 0) * (1 - w))
 		}
-		t.work += len(gc)
+		t.work += int64(len(gc))
 		return 0, ""
 	}
 	eps, reason = t.quadratureCompound(d, gc, out, f)
@@ -53,7 +53,7 @@ func (t *transformer) quadratureCompound(d distribution, gc, out []complex128, f
 	if reason != "" {
 		return 0, reason
 	}
-	if n*len(gc) > quadWorkCap {
+	if int64(n)*int64(len(gc)) > quadWorkCap {
 		return 0, "frequency quadrature needs " + itoa(n) + " nodes at " + itoa(len(gc)) + " grid points, above the work cap,"
 	}
 	// The first half from the count the sample found, allowing one more
@@ -86,7 +86,7 @@ func (t *transformer) converged(d distribution, gc, out []complex128, n, doublin
 	prev := make([]complex128, len(gc))
 	// bound: doublings, itself at most quadDoublings
 	for i := 0; i <= doublings && n <= quadMaxNodes; i++ {
-		if t.work+n*len(gc) > t.cfg.MaxWork {
+		if t.work+int64(n)*int64(len(gc)) > t.cfg.MaxWork {
 			return 0, t.budgetReason(t.grid)
 		}
 		x := make([]float64, n)
@@ -95,7 +95,7 @@ func (t *transformer) converged(d distribution, gc, out []complex128, n, doublin
 			quantileNodes(d, x, w)
 		}
 		evalMixture(x, w, gc, out, f)
-		t.work += n * len(gc)
+		t.work += int64(n) * int64(len(gc))
 		if i > 0 {
 			if diff := maxAbsDiff(out, prev); diff <= quadTol {
 				t.lastEps = diff

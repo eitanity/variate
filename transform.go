@@ -9,7 +9,7 @@ type TransformConfig struct {
 	MaxGrid  int     // default 1<<22 points
 	Tol      float64 // default 1e-3: max of (Upper − Lower)/Upper over x up to x*
 	TailP    float64 // default from the compile criteria
-	MaxWork  int     // default 1<<34 grid-point evaluations (a rate quadrature's nodes × points, a function's or closed-form rate's points) over the whole transform
+	MaxWork  int64   // default 1<<34 grid-point evaluations (a rate quadrature's nodes × points, a function's or closed-form rate's points) over the whole transform
 	MaxBytes int64   // default 2<<30: the grids a pass holds at once
 }
 
@@ -24,7 +24,7 @@ type Transformed struct {
 	PZero      float64
 	QuadNodes  int
 	Passes     int
-	Work       int // grid-point evaluations spent
+	Work       int64 // grid-point evaluations spent
 	Total      Bounds
 	ByCategory []Bounds
 	BySource   []Bounds // nil when the model has more than maxSourceBounds sources
@@ -118,9 +118,9 @@ type transformer struct {
 	lastEps  float64 // the last quadrature's difference between its final two node counts
 	order    []int32 // nodes in the order the recursion computes them
 	uses     []int32 // outcomes and sources leading to each node
-	work     int     // grid-point evaluations so far
+	work     int64   // grid-point evaluations so far
 	grid     int     // the grid being evaluated
-	passWork int     // evaluations of the last pass
+	passWork int64   // evaluations of the last pass
 	passM    int     // its grid
 }
 
@@ -325,7 +325,7 @@ func (t *transformer) bytesReason(m int, b int64) string {
 
 // budgetReason explains a refusal by the work budget.
 func (t *transformer) budgetReason(m int) string {
-	return "the work budget of " + itoa(t.cfg.MaxWork) + " grid-point evaluations would be exceeded at " + itoa(m) + " grid points"
+	return "the work budget of " + i64toa(t.cfg.MaxWork) + " grid-point evaluations would be exceeded at " + itoa(m) + " grid points"
 }
 
 // firstSpan solves M·h = 2·x*(h) with x* from Cantelli on the lattice
@@ -360,7 +360,7 @@ func (t *transformer) converge(start int, span func(m int) (float64, bool), xSta
 		if !ok {
 			continue
 		}
-		if t.passM > 0 && t.work+t.passWork*(m/t.passM) > t.cfg.MaxWork {
+		if t.passM > 0 && t.work+t.passWork*int64(m/t.passM) > t.cfg.MaxWork {
 			// The next pass costs the last one's work scaled by the grid.
 			return nil, t.budgetReason(m)
 		}

@@ -110,7 +110,7 @@ type Config struct {
 	Transform        bool    // compute the transform at compile; the tail criterion then counts periods beyond its quantile
 	TransformGrid    int     // largest grid of that transform; 0 = the transform's default
 	TransformTol     float64 // its tolerance; 0 = the default
-	TransformWork    int     // its work budget; 0 = the default
+	TransformWork    int64   // its work budget; 0 = the default
 	TransformBytes   int64   // the grids a transform pass may hold; 0 = the default
 	MinHits          uint64
 	ContribRSE       float64

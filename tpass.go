@@ -263,7 +263,7 @@ func (p *pipeline) tensor() (*graphResult, string) {
 		if reason != "" {
 			return nil, reason
 		}
-		if work := p.mix.passes() * max(1, p.t.quadN) * p.m * (1 + len(p.t.m.categories)); work > quadWorkCap {
+		if work := int64(p.mix.passes()) * int64(max(1, p.t.quadN)) * int64(p.m) * int64(1+len(p.t.m.categories)); work > quadWorkCap {
 			return nil, "period-scoped mixture of " + itoa(p.mix.passes()) + " passes with " + itoa(p.t.quadN) + " frequency quadrature nodes at " + itoa(p.m) + " grid points is above the work cap"
 		}
 		out.add(one, complex(w, 0))
@@ -502,11 +502,17 @@ func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, g [][]complex128, 
 
 // multiplyAtom multiplies gv by the tilted generating function of a
 // single atom at lattice index k: r^k·z_j^k, with z_j^k read from the
-// root table at (j·k) mod M.
+// root table at (j·k) mod M. The index advances by k mod M per point, so
+// j·k is never formed and cannot overflow an int.
 func (p *pipeline) multiplyAtom(gv []complex128, k int) {
 	rk := complex(math.Pow(p.r, float64(k)), 0)
+	step, at := k%p.m, 0
 	for j := range gv {
-		gv[j] *= rk * p.roots[(j*k)%p.m]
+		gv[j] *= rk * p.roots[at]
+		at += step
+		if at >= p.m {
+			at -= p.m
+		}
 	}
 }
 
@@ -567,7 +573,7 @@ func (p *pipeline) multiplyFunction(gv []complex128, f int32, account bool) {
 		p.mean += p.t.draws[f] * lmean
 	}
 	gf := p.fft.Coefficients(p.gf, tilted)
-	p.t.work += p.m
+	p.t.work += int64(p.m)
 	// The masses are real, so the coefficients are conjugate-symmetric up
 	// to round-off; made exactly so, every product of them is too.
 	mirror(gf)

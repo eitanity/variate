@@ -45,7 +45,7 @@ func (b *builder) flatten() (*Compiled, error) {
 		cn.outEnd = index(len(m.outs))
 		m.nodes = append(m.nodes, cn)
 	}
-	if len(m.pools) >= maxDistributions {
+	if int64(len(m.pools)) >= maxDistributions {
 		return nil, modelError("graph", b.g.ID, "too many distributions")
 	}
 	m.categories = make([]string, len(cats))
