@@ -216,6 +216,26 @@ func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Exp
 	}
 }
 
+// TestInvariantSequentialPZero: a sequential node whose outcome
+// probabilities sum to just above 1 in floating point, behind a frequency
+// heavy enough that e^(λ·ε) overflows at its far nodes, still has
+// P(T = 0) = 1 when nothing is booked.
+func TestInvariantSequentialPZero(t *testing.T) {
+	par, _ := dist.NewPareto(0.01, 1.2)
+	g := variate.Graph{
+		Sources: []variate.Source{{ID: "s", Frequency: par, To: "a"}},
+		Nodes: []variate.Node{
+			{ID: "a", Mode: variate.Sequential, Outcomes: []variate.Outcome{{To: "b", P: C(0.08)}, {To: "b", P: C(0.45)}, {To: "b"}}},
+			{ID: "b"},
+		},
+	}
+	c, e := exactOf(t, g)
+	checkNumbers(t, "sequential", c, e)
+	if e.PZero() != 1 {
+		t.Errorf("PZero %v, want 1", e.PZero())
+	}
+}
+
 // TestInvariantInfiniteMomentsStayNumbers: the zero-times-infinity cases
 // the fuzzer found. A per-time rate with infinite variance on a node with
 // no holding time books nothing, and a source whose rate is 0 or an

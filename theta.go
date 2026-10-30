@@ -373,7 +373,10 @@ func (m *Compiled) zeroGiven(drawn, z []float64, rules []quadRule, srcs []int) f
 			for j := n.outStart; j < n.outEnd; j++ {
 				mix += m.outcomeProbWith(v, j, drawn) * z[m.outs[j].to]
 			}
-			pz *= mix
+			// A sequential node's outcome probabilities can sum to just
+			// above 1, and then e^(f·(z−1)·λ) overflows over a heavy
+			// frequency's far nodes.
+			pz *= math.Min(mix, 1)
 		}
 		z[v] = pz
 	}
