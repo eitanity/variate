@@ -12,6 +12,7 @@ type Stat struct {
 	Mean, StdErr, StdDev     float64
 	Min, Max                 float64
 	P50, P90, P95, P99, P999 float64
+	Quantiles                bool // the percentiles exist: the quantity has a histogram
 	Clipped                  bool
 	Share                    float64
 }
@@ -96,6 +97,7 @@ func (w *Workspace) stat(a *Accum, total float64) Stat {
 		s.Share = a.Mean() / total
 	}
 	if a.Hist != nil {
+		s.Quantiles = true
 		var c bool
 		s.P50, c = a.Hist.Quantile(0.5)
 		s.Clipped = s.Clipped || c

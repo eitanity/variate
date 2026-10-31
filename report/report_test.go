@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"strings"
 	"testing"
@@ -245,5 +246,68 @@ func TestReachOrder(t *testing.T) {
 	_ = bw.Flush()
 	if !strings.Contains(buf.String(), "rounds from source reaching node") {
 		t.Error("table heading missing")
+	}
+}
+
+// TestPercentilesOnlyWithHistogram: a quantity without a histogram has
+// no percentiles in the JSON and empty percentile cells in the CSV; the
+// node entries have them once the node histograms are kept.
+func TestPercentilesOnlyWithHistogram(t *testing.T) {
+	for _, nodeHist := range []bool{false, true} {
+		m, err := config.Load("../examples/compound.yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.Config.Periods, m.Config.Workers, m.Config.NodeHist = 2000, 1, nodeHist
+		c, _, err := m.Graph.Compile(m.Config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := c.NewWorkspace(m.Config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := w.Run(context.Background(), 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sum variate.Summary
+		w.Summarize(&sum)
+		w.Close()
+		rep := &report.Report{C: c, R: r, Sum: &sum}
+		var js, csv bytes.Buffer
+		bw := bufio.NewWriter(&js)
+		rep.WriteJSON(bw)
+		cw := bufio.NewWriter(&csv)
+		rep.WriteCSV(cw)
+		if err := errors.Join(bw.Flush(), cw.Flush()); err != nil {
+			t.Fatal(err)
+		}
+		var got struct {
+			Total      map[string]any            `json:"total"`
+			EntriesPer map[string]map[string]any `json:"entries_per"`
+		}
+		if err := json.Unmarshal(js.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if _, ok := got.Total["p50"]; !ok {
+			t.Errorf("node_hist %v: total lacks p50", nodeHist)
+		}
+		p50, ok := got.EntriesPer["loss"]["p50"]
+		x, _ := p50.(float64)
+		_, clipped := got.EntriesPer["loss"]["clipped"]
+		if ok != nodeHist || clipped != nodeHist || (nodeHist && !(x > 0)) {
+			t.Errorf("node_hist %v: entries p50 %v present %v, clipped present %v", nodeHist, p50, ok, clipped)
+		}
+		row := ""
+		for line := range strings.Lines(csv.String()) {
+			if strings.HasPrefix(line, "entries,loss,") {
+				row = strings.TrimSpace(line)
+			}
+		}
+		cells := strings.Split(row, ",")
+		if len(cells) != 15 || (cells[8] == "") == nodeHist || (cells[13] == "") == nodeHist {
+			t.Errorf("node_hist %v: csv row %q", nodeHist, row)
+		}
 	}
 }

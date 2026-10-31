@@ -524,6 +524,3 @@ func (m *Compiled) Simulate(ctx context.Context, cfg Config) (*Result, error) {
 // Footprint is the planned size of the workspace's buffers in bytes, the
 // figure checked against MaxMemory.
 func (w *Workspace) Footprint() int64 { return w.footprint }
-
-// NodeHist reports whether the per-node histograms are kept.
-func (w *Workspace) NodeHist() bool { return w.cfg.NodeHist }

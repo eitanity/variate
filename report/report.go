@@ -23,7 +23,6 @@ type Report struct {
 	R        *variate.Result
 	Sum      *variate.Summary
 	Analytic bool // include the exact expectations and the transform
-	NodeHist bool // entries per node have histograms
 	E        *variate.Expectation
 	Tr       *variate.Transformed
 	Hist     *Histogram        // linear bands of the period total, for drawing; nil = none
@@ -37,7 +36,7 @@ type Report struct {
 func New(c *variate.Compiled, w *variate.Workspace, r *variate.Result, analytic bool) (*Report, error) {
 	sum := &variate.Summary{}
 	w.Summarize(sum)
-	rep := &Report{C: c, R: r, Sum: sum, Analytic: analytic, NodeHist: w.NodeHist()}
+	rep := &Report{C: c, R: r, Sum: sum, Analytic: analytic}
 	if analytic {
 		e, err := c.Analytic()
 		if err != nil {
@@ -246,18 +245,18 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 	}
 	fmt.Fprintf(w, "\nsteps %d  beyond horizon %.6g  tail periods %d\n\n", r.Steps, r.BeyondHorizon, r.TailPeriods)
 	fmt.Fprintf(w, "%-28s %12s %12s %12s %12s %12s %12s %12s %12s %8s\n", "quantity", "mean", "stderr", "sd", "p50", "p90", "p95", "p99", "p999", "share")
-	statRow(w, "total", rep.Sum.Total, false, true)
+	statRow(w, "total", rep.Sum.Total, false)
 	for _, name := range sortedKeys(rep.Sum.ByCategory) {
-		statRow(w, "category "+name, rep.Sum.ByCategory[name], true, true)
+		statRow(w, "category "+name, rep.Sum.ByCategory[name], true)
 	}
 	for _, name := range sortedKeys(rep.Sum.BySource) {
-		statRow(w, "source "+name, rep.Sum.BySource[name], true, true)
+		statRow(w, "source "+name, rep.Sum.BySource[name], true)
 	}
 	for _, name := range sortedKeys(rep.Sum.EntriesPer) {
-		statRow(w, "entries "+name, rep.Sum.EntriesPer[name], false, rep.NodeHist)
+		statRow(w, "entries "+name, rep.Sum.EntriesPer[name], false)
 	}
 	for _, y := range rep.C.Layers() {
-		statRow(w, "layer "+y.ID, rep.Sum.Layers[y.ID], true, true)
+		statRow(w, "layer "+y.ID, rep.Sum.Layers[y.ID], true)
 	}
 	rep.writeReachTable(w)
 	fmt.Fprintf(w, "\n%-12s %-32s %12s %12s %12s %5s\n", "criterion", "driver", "per period", "periods", "observed", "met")
@@ -289,9 +288,9 @@ func observed(x float64) string {
 }
 
 // statRow prints one quantity; quantiles only where a histogram exists.
-func statRow(w *bufio.Writer, name string, s variate.Stat, share, quantiles bool) {
+func statRow(w *bufio.Writer, name string, s variate.Stat, share bool) {
 	fmt.Fprintf(w, "%-28s %12.6g %12.4g %12.6g", name, s.Mean, s.StdErr, s.StdDev)
-	if quantiles {
+	if s.Quantiles {
 		fmt.Fprintf(w, " %12.6g %12.6g %12.6g %12.6g %12.6g", s.P50, s.P90, s.P95, s.P99, s.P999)
 	} else {
 		fmt.Fprintf(w, " %12s %12s %12s %12s %12s", "-", "-", "-", "-", "-")
@@ -481,12 +480,14 @@ func (j *jw) stat(k string, s variate.Stat) {
 	j.field("sd", s.StdDev)
 	j.field("min", s.Min)
 	j.field("max", s.Max)
-	j.field("p50", s.P50)
-	j.field("p90", s.P90)
-	j.field("p95", s.P95)
-	j.field("p99", s.P99)
-	j.field("p999", s.P999)
-	j.fieldBool("clipped", s.Clipped)
+	if s.Quantiles {
+		j.field("p50", s.P50)
+		j.field("p90", s.P90)
+		j.field("p95", s.P95)
+		j.field("p99", s.P99)
+		j.field("p999", s.P999)
+		j.fieldBool("clipped", s.Clipped)
+	}
 	j.field("share", s.Share)
 	j.closeC('}')
 }
@@ -772,10 +773,17 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 	}
 }
 
+// csvStat writes one quantity; the percentile and clipped cells are
+// empty where the quantity has no histogram.
 func csvStat(w *bufio.Writer, kind, name string, s variate.Stat) {
-	fmt.Fprintf(w, "%s,%s,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%v,%s\n", kind, CSVField(name), s.N,
-		csvNum(s.Mean), csvNum(s.StdErr), csvNum(s.StdDev), csvNum(s.Min), csvNum(s.Max),
-		csvNum(s.P50), csvNum(s.P90), csvNum(s.P95), csvNum(s.P99), csvNum(s.P999), s.Clipped, csvNum(s.Share))
+	fmt.Fprintf(w, "%s,%s,%d,%s,%s,%s,%s,%s,", kind, CSVField(name), s.N,
+		csvNum(s.Mean), csvNum(s.StdErr), csvNum(s.StdDev), csvNum(s.Min), csvNum(s.Max))
+	if s.Quantiles {
+		fmt.Fprintf(w, "%s,%s,%s,%s,%s,%v,", csvNum(s.P50), csvNum(s.P90), csvNum(s.P95), csvNum(s.P99), csvNum(s.P999), s.Clipped)
+	} else {
+		fmt.Fprint(w, ",,,,,,")
+	}
+	fmt.Fprintln(w, csvNum(s.Share))
 }
 
 // WriteExceedanceFile writes the curve as CSV: x, p, stderr, and the

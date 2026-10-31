@@ -353,9 +353,16 @@ func (k keptRun) layerOf(name string) (variate.Layer, bool) {
 	return variate.Layer{}, false
 }
 
+// statJSON writes a quantity's statistics; the percentiles only where
+// the quantity has a histogram.
 func statJSON(buf *bytes.Buffer, st variate.Stat) {
-	fmt.Fprintf(buf, "{\"n\":%d,\"mean\":%s,\"stderr\":%s,\"sd\":%s,\"min\":%s,\"max\":%s,\"p50\":%s,\"p90\":%s,\"p95\":%s,\"p99\":%s,\"p999\":%s,\"share\":%s}",
-		st.N, num(st.Mean), num(st.StdErr), num(st.StdDev), num(st.Min), num(st.Max), num(st.P50), num(st.P90), num(st.P95), num(st.P99), num(st.P999), num(st.Share))
+	fmt.Fprintf(buf, "{\"n\":%d,\"mean\":%s,\"stderr\":%s,\"sd\":%s,\"min\":%s,\"max\":%s,",
+		st.N, num(st.Mean), num(st.StdErr), num(st.StdDev), num(st.Min), num(st.Max))
+	if st.Quantiles {
+		fmt.Fprintf(buf, "\"p50\":%s,\"p90\":%s,\"p95\":%s,\"p99\":%s,\"p999\":%s,",
+			num(st.P50), num(st.P90), num(st.P95), num(st.P99), num(st.P999))
+	}
+	fmt.Fprintf(buf, "\"share\":%s}", num(st.Share))
 }
 
 // series(keep) returns a kept run's period totals when the run kept
