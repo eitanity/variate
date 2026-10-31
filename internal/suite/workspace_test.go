@@ -107,15 +107,15 @@ func TestWorkspaceFootprintRefused(t *testing.T) {
 }
 
 func TestWorkspaceCancel(t *testing.T) {
-	w := newWorkspace(t, Diamond(), variate.Config{Periods: 1 << 30, BlockPeriods: 1000, Workers: 2})
+	w := newWorkspace(t, Diamond(), variate.Config{Periods: 20000, BlockPeriods: 1000, Workers: 2})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := w.Run(ctx, 1); err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Errorf("got %v", err)
 	}
 	// The workspace is still usable.
-	if _, err := w.Run(context.Background(), 1); err == nil {
-		t.Error("a 2^30-period run finished instantly?")
+	if r, err := w.Run(context.Background(), 1); err != nil || r.Periods != 20000 {
+		t.Errorf("run after a cancelled one: %v", err)
 	}
 }
 

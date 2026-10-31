@@ -83,7 +83,7 @@ func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p, first int64) {
 	}
 	// bound: the Poisson count
 	for i := uint64(0); i < n && sl.err == nil; i++ {
-		t := float64(p) + wk.ss.Control().Float64()
+		t := arrivalTime(p, wk.ss.Control().Float64())
 		if w.stream {
 			w.beginRound(wk, t)
 		}
@@ -174,6 +174,17 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode) fl
 		booked += x
 	}
 	return booked
+}
+
+// arrivalTime is the time of an arrival at fraction u of period p. At a
+// large period number p + u can round up to p + 1, outside the period,
+// so the time is kept below it.
+func arrivalTime(p int64, u float64) float64 {
+	t := float64(p) + u
+	if end := float64(p) + 1; t >= end {
+		return math.Nextafter(end, math.Inf(-1))
+	}
+	return t
 }
 
 // rowFor returns the window row for a booking at time t, or ok = false
