@@ -22,8 +22,8 @@ jobs:
           check-latest: false
       - name: Every-push set
         run: make ci
-      - name: Nightly set
-        run: make nightly
+      - name: Weekly set
+        run: make weekly
 
   build:
     needs: gate

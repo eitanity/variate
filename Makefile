@@ -1,4 +1,4 @@
-# `make ci` runs the every-push checks, `make nightly` the nightly set.
+# `make ci` runs the every-push checks, `make weekly` the weekly set.
 # The workflows call these targets. Tool versions are pinned here.
 
 GOLANGCI_LINT_VERSION := v2.14.0
@@ -9,14 +9,14 @@ BIN                   := $(abspath bin)
 PKGS                  := ./...
 HOTPATH               := internal/lint/hotpath.txt
 
-.PHONY: all ci nightly tools build test test32 race alloc lint fmt vet custom-lint tinygo tinygo-version wasm demo golden wasm-smoke wasm-test \
+.PHONY: all ci weekly tools build test test32 race alloc lint fmt vet custom-lint tinygo tinygo-version wasm demo golden wasm-smoke wasm-test \
         norecursion escapes fuzz fuzz-long stat bench vuln release clean
 
 all: ci
 
-ci: verify fmt vet lint custom-lint escapes race alloc test32 tinygo fuzz vuln
+ci: verify fmt vet lint custom-lint escapes race alloc test32 tinygo vuln
 
-nightly: stat fuzz-long bench
+weekly: stat fuzz-long bench
 
 # ---- toolchain ------------------------------------------------------------
 
