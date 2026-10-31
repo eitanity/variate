@@ -10,7 +10,7 @@ PKGS                  := ./...
 HOTPATH               := internal/lint/hotpath.txt
 
 .PHONY: all ci weekly tools build test test32 race alloc lint fmt vet custom-lint tinygo tinygo-version wasm demo golden wasm-smoke wasm-test \
-        norecursion escapes fuzz fuzz-long stat bench vuln release clean
+        norecursion escapes fuzz fuzz-long stat bench vuln clean
 
 all: ci
 
@@ -154,12 +154,6 @@ bench:
 
 vuln: $(BIN)/govulncheck
 	$(BIN)/govulncheck $(PKGS)
-
-# ---- release ----------------------------------------------------------------
-
-release:
-	CGO_ENABLED=0 go build -trimpath -ldflags=-buildid= -o $(BIN)/variate ./cmd/variate
-	cd $(BIN) && sha256sum variate > variate.sha256
 
 clean:
 	rm -rf ./bin bench.out
