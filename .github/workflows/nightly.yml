@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   issues: write
 
 env:
@@ -54,12 +55,22 @@ jobs:
           check-latest: false
       - name: Benchmarks
         run: make bench
-      - name: Fetch previous night
+      - name: Find the newest baseline
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=bench-baseline&per_page=20" \
+            --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')"
+          echo "run-id=$run" >> "$GITHUB_OUTPUT"
+      - name: Fetch the baseline
+        if: steps.baseline.outputs.run-id != ''
         uses: actions/download-artifact@v8
-        continue-on-error: true
         with:
           name: bench-baseline
           path: baseline
+          run-id: ${{ steps.baseline.outputs.run-id }}
+          github-token: ${{ github.token }}
       - name: Compare with benchstat
         run: |
           go install golang.org/x/perf/cmd/benchstat@latest
