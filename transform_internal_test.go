@@ -56,7 +56,6 @@ func TestTransformTiltChoice(t *testing.T) {
 // simulated TailP quantile, and the second pass's span divides the
 // first's exactly.
 func TestTransformGridSizing(t *testing.T) {
-	skipUnderRace(t)
 	g := diamond()
 	m := compiled(t, g)
 	tr := newTransformer(m, TransformConfig{})
@@ -422,7 +421,6 @@ func bigExceedance(tr *transformer, h float64, m int, theta, lam float64) []floa
 // TestTransformRoundoffExtendedPrecision: for grids up to 2^14 the float64
 // pipeline is within ρ(x) of the extended-precision one at every point.
 func TestTransformRoundoffExtendedPrecision(t *testing.T) {
-	skipUnderRace(t)
 	e, _ := dist.NewExponential(2)
 	ln, _ := dist.NewLognormal(1, 0.5)
 	p, _ := dist.NewPERT(1, 2, 4, dist.DefaultPERTShape)
@@ -512,16 +510,6 @@ func TestAtomUnit(t *testing.T) {
 	g.Nodes[0].Functions = append(g.Nodes[0].Functions, fn("cap", "k", capped))
 	if got := compiled(t, g).atomUnit(); got != 2 {
 		t.Errorf("constant 4 and a cap at 6: unit %g", got)
-	}
-}
-
-// skipUnderRace skips a test of single-threaded code under the race
-// detector, where its instrumentation costs minutes and detects nothing;
-// make race says so with VARIATE_RACE=1.
-func skipUnderRace(t *testing.T) {
-	t.Helper()
-	if os.Getenv("VARIATE_RACE") == "1" {
-		t.Skip("single-threaded; skipped under the race detector")
 	}
 }
 

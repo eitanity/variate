@@ -1,9 +1,6 @@
 package suite
 
 import (
-	"os"
-	"testing"
-
 	"code.eitanity.com/variate"
 	"code.eitanity.com/variate/dist"
 )
@@ -46,15 +43,6 @@ func Diamond() variate.Graph {
 			{ID: "c", Next: "d"},
 			{ID: "d", Functions: []variate.Function{Fn("fd", "parts", C(10))}},
 		},
-	}
-}
-
-// SkipUnderRace skips a single-threaded test that the race detector
-// can learn nothing from.
-func SkipUnderRace(t *testing.T) {
-	t.Helper()
-	if os.Getenv("VARIATE_RACE") == "1" {
-		t.Skip("single-threaded; skipped under the race detector")
 	}
 }
 

@@ -89,9 +89,10 @@ func tempRecordFiles(t *testing.T) int {
 	return len(files)
 }
 
-// faultConfig: 32 workers, one-period blocks, small batches.
+// faultConfig: one-period blocks, small batches, and twice as many
+// workers as slots, so that they contend for them.
 func faultConfig(periods int64, obs variate.Observer) variate.Config {
-	return variate.Config{Periods: periods, BlockPeriods: 1, Batch: 4, Workers: 32, Observer: obs}
+	return variate.Config{Periods: periods, BlockPeriods: 1, Batch: 4, Workers: 8, Observer: obs}
 }
 
 func TestFaultObserverAtRandomRounds(t *testing.T) {

@@ -123,8 +123,15 @@ test:
 test32:
 	GOARCH=386 GOMAXPROCS=4 go test -count=1 -timeout 60m $(PKGS)
 
+# The race detector over the tests that drive the worker pool: its
+# lifecycle, cancellation and faults, the stream the finaliser delivers,
+# adaptive stops at batch boundaries and runs across worker counts. The
+# root package starts the only goroutines; elsewhere the detector has
+# nothing to find.
+RACE_TESTS := ^Test(Workspace|Fault|Stream|Adaptive|Engine|FixedRun|PacedCancel|DifferentialWorkers)
+
 race:
-	VARIATE_RACE=1 go test -race -count=1 -timeout 60m $(PKGS)
+	go test -race -count=1 -timeout 60m -run '$(RACE_TESTS)' . ./internal/suite
 
 alloc:
 	go test -count=1 -run 'Alloc|Churn' $(PKGS)

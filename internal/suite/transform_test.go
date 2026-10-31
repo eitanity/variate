@@ -493,7 +493,6 @@ func transformGraph(t *testing.T, seed uint64, maxScoped int) (variate.Graph, in
 // the bounds (Bonferroni over the points tested). The fast run keeps one
 // period-scoped probability per model; the stat run allows three.
 func TestTransformRandomDAGs(t *testing.T) {
-	SkipUnderRace(t)
 	checkRandomDAGs(t, []uint64{1, 6, 7}, 1, 1<<19)
 }
 
@@ -528,7 +527,6 @@ func checkRandomDAGs(t *testing.T, seeds []uint64, maxScoped, maxGrid int) {
 // folded away still passes the lattice-mean self-check, since the
 // dropped tail's mean is allowed for.
 func TestTransformHeavySeverityTail(t *testing.T) {
-	SkipUnderRace(t)
 	ln, _ := dist.NewLognormalFromMedianP90(5e4, 2e5)
 	g := variate.Graph{
 		Sources: []variate.Source{{ID: "trip", Frequency: C(5), To: "repair"}},

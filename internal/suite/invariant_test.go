@@ -93,7 +93,6 @@ func invariantCorpus(t *testing.T, seeds int) []corpusModel {
 // the first pass, so a loose tolerance on the smallest grid exercises
 // them all at a fraction of a real transform's cost.
 func TestInvariantNoSelfCheckRefusal(t *testing.T) {
-	SkipUnderRace(t)
 	// The sequential models pair an uncertain rate with a per-period
 	// probability, which costs the transform about a minute each on the
 	// smallest grid; the stat run covers them.
