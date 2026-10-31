@@ -73,7 +73,7 @@ demo: wasm
 
 # Runs the wasm engine under node and compares its report with the CLI's.
 wasm-smoke: wasm
-	go run ./cmd/variate run -f examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format json --analytic > web/native.json
+	go run ./cmd/variate run -f examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format json --analytic --node-hist > web/native.json
 	node web/smoke.js web/native.json
 
 # The engine's tests as wasm under the wazero runtime (WASI), with the

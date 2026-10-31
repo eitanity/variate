@@ -2,7 +2,7 @@
 // through variateRun and compare the report with the native CLI's JSON
 // written to the path given as the first argument (variate run -f
 // examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format
-// json --analytic). The wasm report adds "histogram", "log_histogram"
+// json --analytic --node-hist). The wasm report adds "histogram", "log_histogram"
 // and "warnings"; everything else must be identical.
 //
 //   node web/smoke.js native.json

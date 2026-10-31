@@ -44,7 +44,7 @@ jobs:
       - name: Build the wasm engine
         run: make wasm
       - name: Native report
-        run: go run ./cmd/variate run -f examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format json --analytic > native.json
+        run: go run ./cmd/variate run -f examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format json --analytic --node-hist > native.json
       - name: Run the wasm engine under node and compare
         run: node web/smoke.js native.json
 
