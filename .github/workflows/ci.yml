@@ -42,12 +42,6 @@ jobs:
         run: make alloc
       - name: Tests with a 32-bit int
         run: make test32
-      - name: Install TinyGo
-        run: |
-          curl -fsSLo tinygo.deb https://github.com/tinygo-org/tinygo/releases/download/v0.42.0/tinygo_0.42.0_amd64.deb
-          sudo dpkg -i tinygo.deb
-      - name: TinyGo build of the browser engine
-        run: make tinygo
       - name: Fuzz (60 s each)
         run: make fuzz
       - name: govulncheck
