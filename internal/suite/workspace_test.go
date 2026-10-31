@@ -5,7 +5,9 @@ import (
 	"math"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"code.eitanity.com/variate"
 	"code.eitanity.com/variate/config"
@@ -126,6 +128,91 @@ func TestWorkspaceClosed(t *testing.T) {
 	if _, err := w.Run(context.Background(), 1); err == nil {
 		t.Error("run on a closed workspace")
 	}
+}
+
+// holdingObserver holds the finaliser in its first delivery until
+// released, so that the run is certainly in progress.
+type holdingObserver struct {
+	entered, release chan struct{}
+	once             sync.Once
+}
+
+func newHoldingObserver() *holdingObserver {
+	return &holdingObserver{entered: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (h *holdingObserver) Observe(*variate.Round) error {
+	h.once.Do(func() {
+		close(h.entered)
+		<-h.release
+	})
+	return nil
+}
+
+// TestWorkspaceOneRunAtATime: a Run while another is in progress is
+// refused, and the first completes as if it had not been.
+func TestWorkspaceOneRunAtATime(t *testing.T) {
+	obs := newHoldingObserver()
+	w := newWorkspace(t, Diamond(), variate.Config{Periods: 2000, BlockPeriods: 10, Workers: 4, Observer: obs})
+	done := make(chan error)
+	go func() {
+		_, err := w.Run(context.Background(), 1)
+		done <- err
+	}()
+	<-obs.entered
+	if _, err := w.Run(context.Background(), 2); err == nil || !strings.Contains(err.Error(), "already in progress") {
+		t.Errorf("second run: %v", err)
+	}
+	close(obs.release)
+	if err := <-done; err != nil {
+		t.Errorf("first run: %v", err)
+	}
+	if _, err := w.Run(context.Background(), 3); err != nil {
+		t.Errorf("run after: %v", err)
+	}
+}
+
+// TestWorkspaceCloseDuringRun: Close during a Run ends it with an error
+// once the pool has stopped, instead of leaving it waiting, and leaks
+// nothing.
+func TestWorkspaceCloseDuringRun(t *testing.T) {
+	g := guard(t)
+	obs := newHoldingObserver()
+	cfg := variate.Config{Periods: 2000, BlockPeriods: 10, Workers: 4, Observer: obs}
+	m, _, err := Diamond().Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := m.NewWorkspace(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error)
+	go func() {
+		_, err := w.Run(context.Background(), 1)
+		done <- err
+	}()
+	<-obs.entered
+	closed := make(chan struct{})
+	go func() {
+		w.Close()
+		close(closed)
+	}()
+	// Once Close has begun, a further Run says the workspace is closed.
+	// bound: until Close has begun
+	for {
+		_, err := w.Run(context.Background(), 2)
+		if err != nil && strings.Contains(err.Error(), "closed") {
+			break
+		}
+		time.Sleep(time.Millisecond) //nolint:forbidigo // waiting for Close to begin
+	}
+	close(obs.release)
+	if err := <-done; err == nil || !strings.Contains(err.Error(), "closed during the run") {
+		t.Errorf("run: %v", err)
+	}
+	<-closed
+	g.check(t, "close during a run")
 }
 
 func TestSummarize(t *testing.T) {

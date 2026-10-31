@@ -53,7 +53,6 @@ type Workspace struct {
 	hasFn       []bool
 	sched       sched
 	wg          sync.WaitGroup
-	closed      bool
 	footprint   int64     // the planned footprint in bytes
 	means       []float64 // analytic mean per row quantity, for histogram ranges
 	rows        []PlanRow // the plan with observed values
@@ -200,6 +199,7 @@ func (w *Workspace) startPool(nw, pool int) {
 		w.workers = append(w.workers, wk)
 	}
 	w.sched.cv = sync.NewCond(&w.sched.mu)
+	w.sched.batch = w.batch
 	w.sched.slotState = make([]int8, len(w.slots))
 	w.sched.slotTask = make([]int64, len(w.slots))
 	w.sched.ctx = context.Background()
@@ -414,17 +414,27 @@ func (w *Workspace) resetResult(seed uint64) {
 }
 
 // Run simulates a fixed number of periods on the worker pool and returns
-// the workspace's Result, which the next Run overwrites.
+// the workspace's Result, which the next Run overwrites. One Run at a
+// time: a second while one is in progress is refused, and a Close
+// during a Run ends it with an error.
 func (w *Workspace) Run(ctx context.Context, seed uint64) (*Result, error) {
-	if w.closed {
+	s := &w.sched
+	s.mu.Lock()
+	switch {
+	case s.closing:
+		s.mu.Unlock()
 		return nil, errors.New("run: workspace is closed")
+	case s.busy:
+		s.mu.Unlock()
+		return nil, errors.New("run: a run is already in progress")
 	}
+	s.busy = true
+	s.mu.Unlock()
 	w.resetResult(seed)
 	w.adaptive = w.cfg.Periods == 0
 	w.seq = 0
 	w.stopped = false
 	w.start = w.clock.Now()
-	s := &w.sched
 	s.mu.Lock()
 	if w.adaptive {
 		s.tasks = (w.m.crit.maxPeriods + w.block - 1) / w.block
@@ -440,17 +450,24 @@ func (w *Workspace) Run(ctx context.Context, seed uint64) (*Result, error) {
 	s.seed = seed
 	s.ctx = ctx
 	s.cv.Broadcast()
-	// bound: wakes until the finaliser reports the run done
-	for !s.done {
+	// bound: wakes until the finaliser reports the run done, or Close
+	for !s.done && !s.closing {
 		s.cv.Wait()
 		if ctx.Err() != nil && !s.stop {
 			s.stop = true
 			s.cv.Broadcast()
 		}
 	}
-	s.active = false
+	s.active, s.busy = false, false
 	err := s.err
+	closed := !s.done
 	s.mu.Unlock()
+	if closed {
+		// The pool is stopping; nothing may still write the result once
+		// Run returns.
+		w.wg.Wait()
+		return nil, errors.New("run: workspace closed during the run")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -462,14 +479,15 @@ func (w *Workspace) Run(ctx context.Context, seed uint64) (*Result, error) {
 
 // Close stops the worker pool. The workspace cannot be used afterwards.
 func (w *Workspace) Close() {
-	if w.closed {
+	s := &w.sched
+	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
 		return
 	}
-	w.closed = true
-	w.sched.mu.Lock()
-	w.sched.closing = true
-	w.sched.cv.Broadcast()
-	w.sched.mu.Unlock()
+	s.closing = true
+	s.cv.Broadcast()
+	s.mu.Unlock()
 	w.wg.Wait()
 	for _, sl := range w.slots {
 		if sl.recFile != nil {

@@ -46,7 +46,9 @@ type sched struct {
 	mu        sync.Mutex
 	cv        *sync.Cond
 	closing   bool
+	busy      bool  // a caller is inside Run
 	active    bool  // a run is in progress
+	batch     int64 // tasks per histogram batch
 	tasks     int64 // tasks in the run
 	next      int64 // next task index to claim
 	finalNext int64 // next task index to finalise
@@ -60,9 +62,12 @@ type sched struct {
 	done      bool // the finaliser has finished the run
 }
 
-// canClaim: a run is active, not stopped, with a task left and a free slot.
+// canClaim: a run is active, not stopped, with a task left and a free
+// slot, and the task is at most one batch ahead of the finaliser. The
+// workers' histograms alternate by batch, so a task two batches ahead
+// would write into the set the finaliser is merging.
 func (s *sched) canClaim() bool {
-	return s.active && !s.stop && s.next < s.tasks && s.freeSlot() >= 0
+	return s.active && !s.stop && s.next < s.tasks && s.next/s.batch <= s.finalNext/s.batch+1 && s.freeSlot() >= 0
 }
 
 // canFinalise: the next task's slot is done, or the run is stopped with
