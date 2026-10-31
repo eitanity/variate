@@ -202,7 +202,9 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 	return e, nil
 }
 
-// PZero is the exact probability of a zero period total.
+// PZero is the exact probability of a zero period total; NaN with a
+// repair source, or when its mixture is above the work cap even with the
+// probabilities at their means.
 func (e *Expectation) PZero() float64 { return e.pzero }
 
 // quadRule is a fixed quadrature rule over a rate: nodes and weights.

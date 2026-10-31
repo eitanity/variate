@@ -10,8 +10,12 @@ const (
 	// probNodesStart is the first node count of a period-scoped
 	// probability's quadrature; it doubles until the mixture settles.
 	probNodesStart = 4
-	// zeroPasses caps the scalar mixture behind the exact P(T = 0).
-	zeroPasses = 1 << 22
+	// zeroWork caps the scalar mixture behind the exact P(T = 0): its
+	// points times the work of one.
+	zeroWork = 1 << 23
+	// passesCeiling is where the count of tensor points saturates, above
+	// every cap on it and within a 32-bit int.
+	passesCeiling = 1 << 30
 
 	reasonNoProbRule = "a period-scoped probability has no quadrature rule"
 	reasonProbCapped = "period-scoped probability quadrature did not converge within the pass cap"
@@ -72,10 +76,20 @@ func (m *Compiled) newThetaMix(qs []thetaQuantity) *thetaMix {
 	return x
 }
 
-// passes is the number of points in the tensor.
+// passes is the number of points in the tensor, at most passesCeiling:
+// the product of many quantities' node counts would otherwise wrap and
+// pass under every cap.
 func (x *thetaMix) passes() int {
+	for _, q := range x.q {
+		if len(q.nodes) == 0 {
+			return 0
+		}
+	}
 	n := 1
 	for _, q := range x.q {
+		if n > passesCeiling/len(q.nodes) {
+			return passesCeiling
+		}
 		n *= len(q.nodes)
 	}
 	return n
@@ -201,9 +215,10 @@ func probNodes(d dist.Distribution, x, w []float64) bool {
 // double until the mixture settles. Quantities that no common source can
 // reach are independent, so the mixture factors into one tensor per
 // connected component of quantities and sources, and the product of the
-// components is exact. A component whose tensor would exceed zeroPasses
-// takes its probabilities at their means, and PZero is then an
-// approximation for that component.
+// components is exact. A component whose mixture would exceed zeroWork
+// keeps its last settled value, or else takes its probabilities at their
+// means, and PZero is then an approximation for that component; when even
+// that is above zeroWork, PZero is NaN.
 func (m *Compiled) zeroProbability() float64 {
 	qs := m.periodQuantities()
 	for i := range qs {
@@ -213,6 +228,7 @@ func (m *Compiled) zeroProbability() float64 {
 		pz := m.pools[qs[i].pool].CDF(0)
 		qs[i].nodes = []float64{0, 1}
 		qs[i].weight = []float64{pz, 1 - pz}
+		qs[i].trim() // a value never 0, or always, is one point
 	}
 	rules := make([]quadRule, len(m.srcs))
 	for k, s := range m.srcs {
@@ -232,11 +248,12 @@ func (m *Compiled) zeroProbability() float64 {
 // component's quantities of the product over its sources.
 func (m *Compiled) zeroComponent(comp zeroComp, rules []quadRule, z []float64) float64 {
 	mix := m.newThetaMix(comp.qs)
+	point := m.zeroPointWork(comp.srcs, rules)
 	n := probNodesStart
 	prev := math.NaN()
 	// bound: quadDoublings
 	for i := 0; i <= quadDoublings; i++ {
-		if !mix.setProbNodes(m, n) || mix.passes() > zeroPasses {
+		if !mix.setProbNodes(m, n) || int64(mix.passes())*point > zeroWork {
 			break
 		}
 		total := m.zeroMixed(mix, comp.srcs, rules, z)
@@ -255,13 +272,27 @@ func (m *Compiled) zeroComponent(comp zeroComp, rules []quadRule, z []float64) f
 			mix.q[i].weight = []float64{1}
 		}
 	}
+	if int64(mix.passes())*point > zeroWork {
+		return math.NaN()
+	}
 	return m.zeroMixed(mix, comp.srcs, rules, z)
+}
+
+// zeroPointWork is the work of one point of a component's mixture: the
+// nodes, outcomes and functions zeroGiven visits, and a frequency-rule
+// node for each source without a count law.
+func (m *Compiled) zeroPointWork(srcs []int, rules []quadRule) int64 {
+	work := int64(len(m.topo) + len(m.outs) + len(m.fns))
+	for _, k := range srcs {
+		work += int64(len(rules[k].x))
+	}
+	return work
 }
 
 // zeroMixed sums the weighted conditional values over a mixture.
 func (m *Compiled) zeroMixed(mix *thetaMix, srcs []int, rules []quadRule, z []float64) float64 {
 	total := 0.0
-	// bound: zeroPasses
+	// bound: zeroWork
 	for ok := mix.start(); ok; ok = mix.next() {
 		total += mix.weight() * m.zeroGiven(mix.drawn, z, rules, srcs)
 	}
