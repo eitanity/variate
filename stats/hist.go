@@ -51,6 +51,9 @@ func (h *LogHist) index(x float64) int {
 
 // Merge adds another histogram with the same layout.
 func (h *LogHist) Merge(o *LogHist) {
+	if o.N == 0 {
+		return // every count moves with N, so o is empty
+	}
 	h.N += o.N
 	h.Zero += o.Zero
 	h.Under += o.Under
@@ -65,6 +68,9 @@ func (h *LogHist) Merge(o *LogHist) {
 
 // Reset clears every count.
 func (h *LogHist) Reset() {
+	if h.N == 0 {
+		return
+	}
 	h.N, h.Zero, h.Under, h.Over = 0, 0, 0, 0
 	for i := range h.bins {
 		h.bins[i] = 0

@@ -167,6 +167,16 @@ func TestLogHistOutsideAndMerge(t *testing.T) {
 	if g.N != 0 || g.AtOrAbove(0) != 0 {
 		t.Error("reset")
 	}
+	above := h.AtOrAbove(0)
+	h.Merge(g)
+	if h.N != 9 || h.Zero != 2 || h.AtOrAbove(0) != above {
+		t.Errorf("merging an empty histogram: N=%d zero=%d above0=%d", h.N, h.Zero, h.AtOrAbove(0))
+	}
+	g.Reset()
+	g.Add(2)
+	if g.N != 1 || g.AtOrAbove(1.5) != 1 {
+		t.Error("an empty histogram reset again does not count")
+	}
 }
 
 func TestIntHist(t *testing.T) {

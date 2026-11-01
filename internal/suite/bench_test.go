@@ -90,7 +90,9 @@ func BenchmarkWalk(b *testing.B) {
 	})
 }
 
-// BenchmarkChain: the pump-station model, one worker and all cores.
+// BenchmarkChain: the pump-station model, one worker and all cores, and
+// all cores on one-period blocks, where the hand-offs between the
+// workers and the finaliser dominate.
 func BenchmarkChain(b *testing.B) {
 	m, err := config.Load("../../examples/pump_station.yaml")
 	if err != nil {
@@ -98,6 +100,7 @@ func BenchmarkChain(b *testing.B) {
 	}
 	b.Run("workers1", func(b *testing.B) { benchRun(b, m.Graph, variate.Config{Workers: 1}, 50000) })
 	b.Run("workersAll", func(b *testing.B) { benchRun(b, m.Graph, variate.Config{}, 200000) })
+	b.Run("workersAllBlock1", func(b *testing.B) { benchRun(b, m.Graph, variate.Config{BlockPeriods: 1}, 50000) })
 }
 
 type nopObserver struct{}
