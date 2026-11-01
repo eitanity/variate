@@ -146,16 +146,16 @@ func TestTornadoScaledProbabilities(t *testing.T) {
 	}
 }
 
-// TestTornadoMeanRowsExact: on the corpus every mean row is exact and is
-// the analytic mean of the scaled model, the base row the model's own;
-// a model with many inputs has every 15th row checked so.
+// TestTornadoMeanRowsExact: on the corpus, screened, every mean row is
+// exact and is the analytic mean of the scaled model, the base row the
+// model's own; a model with many inputs has every 15th row checked so.
 func TestTornadoMeanRowsExact(t *testing.T) {
 	for _, cm := range corpus(t) {
 		base, err := mustCompile(t, cm.g).Analytic()
 		if err != nil {
 			t.Fatalf("%s: %v", cm.name, err)
 		}
-		sw, err := cm.g.Sweep(context.Background(), variate.SweepConfig{})
+		sw, err := cm.g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1})
 		if err != nil {
 			t.Fatalf("%s: %v", cm.name, err)
 		}
@@ -163,7 +163,7 @@ func TestTornadoMeanRowsExact(t *testing.T) {
 			t.Errorf("%s: %d rows for %d inputs", cm.name, len(sw.Rows), len(cm.g.Inputs()))
 		}
 		for i, row := range sw.Rows {
-			if row.Method != variate.MethodExact || row.Base.Lo != base.Mean || row.DownSE != 0 {
+			if row.Method != variate.MethodExact || row.Base.Lo != base.Mean || row.LowSE != 0 {
 				t.Fatalf("%s %s: %s row, base %g, want exact %g", cm.name, row.Input.Name, row.Method, row.Base.Lo, base.Mean)
 			}
 			if i > 0 && row.Swing > sw.Rows[i-1].Swing {
@@ -172,7 +172,7 @@ func TestTornadoMeanRowsExact(t *testing.T) {
 			if len(sw.Rows) > 40 && i%15 != 0 {
 				continue
 			}
-			for f, got := range map[float64]float64{0.9: row.Down.Lo, 1.1: row.Up.Lo} {
+			for f, got := range map[float64]float64{0.9: row.AtLow.Lo, 1.1: row.AtHigh.Lo} {
 				g, _, _ := cm.g.Scaled(row.Input.Name, f)
 				e, err := mustCompile(t, g).Analytic()
 				if err != nil || e.Mean != got {
@@ -190,7 +190,7 @@ func TestTornadoRateRow(t *testing.T) {
 	g := Diamond()
 	g.Sources = append(g.Sources, variate.Source{ID: "t", Frequency: Pert(1, 2, 4), To: "a"})
 	e, _ := mustCompile(t, g).Analytic()
-	sw, err := g.Sweep(context.Background(), variate.SweepConfig{Delta: 0.2, Inputs: []string{"frequency"}})
+	sw, err := g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.2, Inputs: []string{"frequency"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,24 +200,25 @@ func TestTornadoRateRow(t *testing.T) {
 	for _, row := range sw.Rows {
 		k := slices.Index([]string{"source s frequency", "source t frequency"}, row.Input.Name)
 		share := 0.2 * e.MeanBySource[k]
-		if math.Abs(row.Up.Lo-row.Base.Lo-share) > 1e-12*share || math.Abs(row.Base.Lo-row.Down.Lo-share) > 1e-12*share {
-			t.Errorf("%s: %g %g %g, want ±%g", row.Input.Name, row.Down.Lo, row.Base.Lo, row.Up.Lo, share)
+		if math.Abs(row.AtHigh.Lo-row.Base.Lo-share) > 1e-12*share || math.Abs(row.Base.Lo-row.AtLow.Lo-share) > 1e-12*share {
+			t.Errorf("%s: %g %g %g, want ±%g", row.Input.Name, row.AtLow.Lo, row.Base.Lo, row.AtHigh.Lo, share)
 		}
 	}
-	if a, b := sw.Rows[0], sw.Rows[1]; a.Down != b.Down || a.Up != b.Up || a.Swing != b.Swing {
+	if a, b := sw.Rows[0], sw.Rows[1]; a.AtLow != b.AtLow || a.AtHigh != b.AtHigh || a.Swing != b.Swing {
 		t.Errorf("symmetric sources: %+v and %+v", a, b)
 	}
 }
 
-// TestTornadoTopAndFilter: Top keeps the largest exact-mean swings, and a
-// filter matches by kind, by name and by a name's leading words.
+// TestTornadoTopAndFilter: Top keeps the largest exact-mean swings, a
+// filter matches by kind, by name and by a name's leading words, and a
+// model with no ranges is not swept but may be screened.
 func TestTornadoTopAndFilter(t *testing.T) {
 	g := sweepGraph()
-	all, err := g.Sweep(context.Background(), variate.SweepConfig{})
+	all, err := g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	top, err := g.Sweep(context.Background(), variate.SweepConfig{Top: 3})
+	top, err := g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1, Top: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,15 +231,18 @@ func TestTornadoTopAndFilter(t *testing.T) {
 		}
 	}
 	for filter, want := range map[string]int{"holding": 2, "node a": 3, "source r repair": 1, "node": 7} {
-		sw, err := g.Sweep(context.Background(), variate.SweepConfig{Inputs: []string{filter}})
+		sw, err := g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1, Inputs: []string{filter}})
 		if err != nil || len(sw.Rows) != want {
 			t.Errorf("filter %q: %v rows, want %d (%v)", filter, sw, want, err)
 		}
 	}
-	if _, err := g.Sweep(context.Background(), variate.SweepConfig{Inputs: []string{"nothing"}}); err == nil {
+	if _, err := g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1, Inputs: []string{"nothing"}}); err == nil {
 		t.Error("a filter matching nothing swept")
 	}
-	for _, bad := range []variate.SweepConfig{{Figure: "p100"}, {Figure: "rp:1"}, {Figure: "layer:"}, {Figure: "median"}, {Delta: 1}} {
+	if _, err := g.Sweep(context.Background(), variate.SweepConfig{}); err == nil || !strings.Contains(err.Error(), "no input has a range") {
+		t.Errorf("a model without ranges swept: %v", err)
+	}
+	for _, bad := range []variate.SweepConfig{{Screen: 0.1, Figure: "p100"}, {Screen: 0.1, Figure: "rp:1"}, {Screen: 0.1, Figure: "layer:"}, {Screen: 0.1, Figure: "median"}, {Screen: 1}, {Screen: -0.1}} {
 		if _, err := g.Sweep(context.Background(), bad); err == nil {
 			t.Errorf("%+v accepted", bad)
 		}
@@ -246,20 +250,20 @@ func TestTornadoTopAndFilter(t *testing.T) {
 }
 
 // TestTornadoTransformRows: where the transform applies a quantile row is
-// a bracket, and a long run of each nudged model puts its quantile
+// a bracket, and a long run of each moved model puts its quantile
 // inside it.
 func TestTornadoTransformRows(t *testing.T) {
 	g := Diamond()
-	sw, err := g.Sweep(context.Background(), variate.SweepConfig{Figure: "p99", Inputs: []string{"node b"}})
+	sw, err := g.Sweep(context.Background(), variate.SweepConfig{Figure: "p99", Screen: 0.1, Inputs: []string{"node b"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	const n = 400000
 	for _, row := range sw.Rows {
-		if row.Method != variate.MethodTransform || !(row.Base.Lo <= row.Base.Hi) || !math.IsNaN(row.UpSE) {
+		if row.Method != variate.MethodTransform || !(row.Base.Lo <= row.Base.Hi) || !math.IsNaN(row.HighSE) {
 			t.Fatalf("%s: %+v", row.Input.Name, row)
 		}
-		for f, r := range map[float64]variate.Range{0.9: row.Down, 1.1: row.Up} {
+		for f, r := range map[float64]variate.Range{0.9: row.AtLow, 1.1: row.AtHigh} {
 			sg, _, _ := g.Scaled(row.Input.Name, f)
 			_, res := run(t, sg, variate.Config{Periods: n, Series: true, Workers: 4}, 21)
 			x := res.Series.TotalColumn(make([]float64, n))
@@ -289,7 +293,7 @@ func TestTornadoSimulatedRows(t *testing.T) {
 	g := chainModel(variate.Chain{K: 1, N: 2, Fail: 3, Repair: 40})
 	g.Nodes[0].Functions = []variate.Function{Fn("cost", "c", Pert(1, 2, 6))}
 	g.Layers = []variate.Layer{{ID: "xs", Attachment: 1}}
-	cfg := variate.SweepConfig{Figure: "layer:xs", Run: variate.Config{Periods: 100000, Seed: 5, Workers: 4}}
+	cfg := variate.SweepConfig{Figure: "layer:xs", Screen: 0.1, Run: variate.Config{Periods: 100000, Seed: 5, Workers: 4}}
 	sw, err := g.Sweep(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -298,21 +302,92 @@ func TestTornadoSimulatedRows(t *testing.T) {
 		t.Fatalf("%d rows over %d periods", len(sw.Rows), sw.Periods)
 	}
 	row := sw.Rows[0]
-	if row.Method != variate.MethodSimulation || !(row.UpSE > 0) || !(row.DownSE > 0) {
+	if row.Method != variate.MethodSimulation || !(row.HighSE > 0) || !(row.LowSE > 0) {
 		t.Fatalf("%+v", row)
 	}
 	// Unpaired: the two runs' own standard errors, from independent
 	// seeds, combined.
 	_, a := run(t, g, variate.Config{Periods: 100000, Workers: 4}, 5)
 	unpaired := math.Sqrt2 * a.Layers[0].StdErr(true)
-	if !(row.UpSE < unpaired/3) {
-		t.Errorf("paired standard error %g, unpaired %g", row.UpSE, unpaired)
+	if !(row.HighSE < unpaired/3) {
+		t.Errorf("paired standard error %g, unpaired %g", row.HighSE, unpaired)
 	}
 	again, err := g.Sweep(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b := again.Rows[0]; b.Down != row.Down || b.Base != row.Base || b.Up != row.Up || b.UpSE != row.UpSE {
+	if b := again.Rows[0]; b.AtLow != row.AtLow || b.Base != row.Base || b.AtHigh != row.AtHigh || b.HighSE != row.HighSE {
 		t.Errorf("the sweep did not repeat: %+v and %+v", row, b)
+	}
+}
+
+// TestTornadoRanges: only the inputs with a range are swept, each to the
+// two ends of it. A range in the input's units is read as its mean at
+// each end, so the factors are the ends over the mean, and a fixed
+// probability's range is the probability itself at each end; a range
+// given as factors is used as it is. A range must be positive, ordered
+// and hold the mean.
+func TestTornadoRanges(t *testing.T) {
+	g := sweepGraph()
+	freq := g.Sources[0].Frequency.Mean()
+	g.Sources[0].FrequencyRange = &variate.InputRange{Low: 1.5, High: 4}
+	g.Nodes[0].Outcomes[0].PRange = &variate.InputRange{Low: 0.2, High: 0.5}
+	g.Nodes[3].Functions[0].Range = &variate.InputRange{Low: 0.5, High: 2, Factors: true}
+	sw, err := g.Sweep(context.Background(), variate.SweepConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sw.Screen != 0 || len(sw.Rows) != 3 {
+		t.Fatalf("screen %g, %d rows", sw.Screen, len(sw.Rows))
+	}
+	want := map[string][2]float64{
+		"source s frequency": {1.5 / freq, 4 / freq},
+		"node a outcome b p": {0.2 / 0.3, 0.5 / 0.3},
+		"node d function fd": {0.5, 2},
+	}
+	for _, row := range sw.Rows {
+		f, ok := want[row.Input.Name]
+		if !ok || math.Abs(row.Low-f[0]) > 1e-15 || math.Abs(row.High-f[1]) > 1e-15 {
+			t.Errorf("%s: factors %g, %g, want %v", row.Input.Name, row.Low, row.High, f)
+			continue
+		}
+		for i, got := range []float64{row.AtLow.Lo, row.AtHigh.Lo} {
+			sg, _, _ := g.Scaled(row.Input.Name, f[i])
+			e, err := mustCompile(t, sg).Analytic()
+			if err != nil || e.Mean != got {
+				t.Errorf("%s at end %d: %g, analytic %g (%v)", row.Input.Name, i, got, e.Mean, err)
+			}
+		}
+	}
+	// The probability is the range's end: 0.3 → 0.2 and 0.5, the other
+	// outcome taking up the rest.
+	sg, _, _ := g.Scaled("node a outcome b p", 0.5/0.3)
+	if p := sg.Nodes[0].Outcomes[0].P.Mean(); math.Abs(p-0.5) > 1e-15 {
+		t.Errorf("probability at the high end: %g", p)
+	}
+	for name, r := range map[string]variate.InputRange{
+		"reversed":         {Low: 4, High: 1.5},
+		"zero":             {Low: 0, High: 4},
+		"misses the mean":  {Low: 3, High: 4},
+		"factors miss one": {Low: 1.1, High: 2, Factors: true},
+		"infinite":         {Low: 1, High: math.Inf(1)},
+	} {
+		bad := g
+		bad.Sources = slices.Clone(g.Sources)
+		bad.Sources[0].FrequencyRange = &r
+		if _, err := bad.Sweep(context.Background(), variate.SweepConfig{}); err == nil || !strings.Contains(err.Error(), "source s frequency range") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	zero := g
+	zero.Nodes = slices.Clone(g.Nodes)
+	zero.Nodes[3].Functions = []variate.Function{{Name: "fd", Category: "parts", Model: C(0), Range: &variate.InputRange{Low: 1, High: 2}}}
+	if _, err := zero.Sweep(context.Background(), variate.SweepConfig{Inputs: []string{"node d"}}); err == nil || !strings.Contains(err.Error(), "as factors") {
+		t.Errorf("a range in units on a zero input: %v", err)
+	}
+	// A screen moves every input, ranges or none.
+	screen, err := g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1})
+	if err != nil || len(screen.Rows) != len(g.Inputs()) || screen.Rows[0].Low != 0.9 {
+		t.Errorf("screen: %v rows, %v", screen, err)
 	}
 }

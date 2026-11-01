@@ -21,7 +21,7 @@ const usage = `usage:
                  [--min-value X] [--pace DURATION] [--round-scratch N]
                  [--rounds jsonl|csv|bin] [--rounds-out FILE]
   variate sweep  -f model.yaml [settings] [-n PERIODS] [--figure mean]
-                 [--delta 0.1] [--inputs NAME,...] [--top K]
+                 [--screen 0.1] [--inputs NAME,...] [--top K]
                  [--format table|json|csv] [--out FILE]
 
 Every run setting of the model file has a flag of the same name in

@@ -11,8 +11,9 @@ import (
 	"code.eitanity.com/variate/report"
 )
 
-// sweep loads the model, nudges each input down and up, and writes the
-// tornado table: one row per input, the largest swing first.
+// sweep loads the model, moves each input with a range to its two ends,
+// or screens every input, and writes the tornado table: one row per
+// input, the largest swing first.
 func sweep(args []string, stdout, stderr io.Writer) error {
 	o, err := parseFlags("sweep", args, stderr)
 	if err != nil {
@@ -27,15 +28,20 @@ func sweep(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("compile: %w", err)
 	}
 	printWarnings(stderr, warnings)
-	cfg := variate.SweepConfig{Figure: o.figure, Delta: o.delta, Inputs: splitList(o.inputs), Top: o.top, Run: m.Config}
-	n := len(variate.SelectInputs(m.Graph.Inputs(), cfg.Inputs))
+	cfg := variate.SweepConfig{Figure: o.figure, Screen: o.screen, Inputs: splitList(o.inputs), Top: o.top, Run: m.Config}
+	n := 0
+	for _, in := range variate.SelectInputs(m.Graph.Inputs(), cfg.Inputs) {
+		if in.Range != nil || cfg.Screen > 0 {
+			n++
+		}
+	}
 	if cfg.Top > 0 {
 		n = min(n, cfg.Top)
 	}
-	fmt.Fprintf(stderr, "sweep: %d inputs × 2 nudges\n", n)
+	fmt.Fprintf(stderr, "sweep: %d inputs × 2 ends\n", n)
 	sw, err := m.Graph.Sweep(context.Background(), cfg)
 	if err != nil {
-		return fmt.Errorf("sweep: %w", err)
+		return fmt.Errorf("%w", err) // the library's errors name the sweep
 	}
 	dst := stdout
 	closer := func() error { return nil }

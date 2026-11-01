@@ -190,7 +190,7 @@ func (l *loader) parseFactors(x node) error {
 		return err
 	}
 	for _, it := range items {
-		m, err := it.mapping(append([]string{"id", "description", "unit", "t", "truncate", "cap", "scope"}, families()...)...)
+		m, err := it.mapping(append([]string{"id", "description", "unit", "t", "truncate", "cap", "scope", "range"}, families()...)...)
 		if err != nil {
 			return err
 		}
@@ -198,7 +198,7 @@ func (l *loader) parseFactors(x node) error {
 		if f.ID, err = required(it, m, "id"); err != nil {
 			return err
 		}
-		if f.Model, _, err = l.parseDist(it, slotFactor, "id", "description"); err != nil {
+		if f.Model, _, f.Range, err = l.parseDist(it, slotFactor, "id", "description"); err != nil {
 			return err
 		}
 		l.model.Graph.Factors = append(l.model.Graph.Factors, f)
@@ -215,7 +215,7 @@ func (l *loader) parseSchedules(x node) error {
 		return err
 	}
 	for _, it := range items {
-		m, err := it.mapping("id", "description", "values")
+		m, err := it.mapping("id", "description", "values", "range")
 		if err != nil {
 			return err
 		}
@@ -229,6 +229,11 @@ func (l *loader) parseSchedules(x node) error {
 		}
 		if sc.Values, err = v.floats(0); err != nil {
 			return err
+		}
+		if r, ok := m["range"]; ok {
+			if sc.Range, err = parseRange(r, 1); err != nil {
+				return err
+			}
 		}
 		l.model.Graph.Schedules = append(l.model.Graph.Schedules, sc)
 	}

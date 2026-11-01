@@ -4,20 +4,23 @@ period: { days: 365 }
 graphs:
   - id: pump_station
     description: Pump trips from wear or grid disturbance
+    # A range says how far an input's mean could plausibly be off, for
+    # variate sweep: [low, high] in the input's own units, or
+    # {times: [low, high]} as factors.
     sources:
-      - { id: wear_trip,   frequency: { pert: [20, 60, 200] }, to: trip }
-      - { id: grid_outage, frequency: { pert: [0, 0.3, 2] },   to: fault_check }
+      - { id: wear_trip,   frequency: { pert: [20, 60, 200], range: [50, 120] }, to: trip }
+      - { id: grid_outage, frequency: { pert: [0, 0.3, 2], range: { times: [0.5, 3] } }, to: fault_check }
     nodes:
       - id: trip
         outcomes:
-          - { to: fault_check, p: { pert: [0.005, 0.02, 0.08] } }    # selection; uncertain p, drawn once per period
+          - { to: fault_check, p: { pert: [0.005, 0.02, 0.08], range: [0.015, 0.05] } }   # selection; uncertain p, drawn once per period
           - { to: auto_restart }                                      # remainder
       - id: auto_restart                                              # leaf, no functions
       - id: fault_check
         mode: sequential
         outcomes:
           - { to: minor_repair, p: { pert: [0.4, 0.6, 0.8] }, holding: { lognormal: { median: 4, p90: 24 }, unit: hours } }
-          - { to: major_repair, p: 0.75, holding: { lognormal: { median: 2, p90: 7 }, unit: days } }
+          - { to: major_repair, p: { constant: 0.75, range: [0.6, 0.85] }, holding: { lognormal: { median: 2, p90: 7 }, unit: days, range: [2, 6] } }
           - { to: false_alarm }                                       # remainder
       - id: false_alarm                                               # leaf, no functions
       - id: minor_repair
@@ -26,13 +29,13 @@ graphs:
       - id: major_repair                                              # functions and a selection
         functions:
           - { name: parts,    category: materials,  basis: on_entry, logpert: [2e3, 8e3, 2e5] }
-          - { name: downtime, category: production, basis: per_time, unit: days, pert: [5e3, 2e4, 6e4] }
+          - { name: downtime, category: production, basis: per_time, unit: days, pert: [5e3, 2e4, 6e4], range: [15e3, 40e3] }
         outcomes:
-          - { to: replace,  p: 0.2, holding: { pert: [1, 3, 10], unit: days } }
+          - { to: replace,  p: { constant: 0.2, range: [0.1, 0.3] }, holding: { pert: [1, 3, 10], unit: days } }
           - { to: restored,         holding: { pert: [1, 3, 10], unit: days } }
       - id: replace                                                   # function, then carry on (no selection)
         functions:
-          - { name: new_pump, category: capital, basis: on_entry, logpert: [5e4, 1e5, 1e6] }
+          - { name: new_pump, category: capital, basis: on_entry, logpert: [5e4, 1e5, 1e6], range: { times: [0.7, 1.5] } }
         next: inspection
         next_holding: { pert: [5, 10, 30], unit: days }
       - id: inspection                                                # function only, leaf

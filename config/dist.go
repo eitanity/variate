@@ -73,44 +73,77 @@ type distSpec struct {
 	hasScope bool
 	hasTrunc bool
 	hasCap   bool
+	rng      node
+	hasRange bool
 }
 
 // parseDist reads a distribution: a bare number is a constant; a map has
 // exactly one family key with optional modifiers. The entries of other
 // keys (a function's name, an outcome's target) are taken from entries
 // and ignored here; ignore lists them.
-func (l *loader) parseDist(x node, s slot, ignore ...string) (dist.Distribution, variate.Scope, error) {
+func (l *loader) parseDist(x node, s slot, ignore ...string) (dist.Distribution, variate.Scope, *variate.InputRange, error) {
 	if x.isScalar() {
 		c, err := x.float()
 		if err != nil {
-			return nil, variate.PerEvent, err
+			return nil, variate.PerEvent, nil, err
 		}
 		d, err := dist.NewConstant(c)
 		if err != nil {
-			return nil, variate.PerEvent, x.errorf("%v", err)
+			return nil, variate.PerEvent, nil, x.errorf("%v", err)
 		}
-		return d, variate.PerEvent, nil
+		return d, variate.PerEvent, nil, nil
 	}
 	spec, err := l.takeApart(x, ignore)
 	if err != nil {
-		return nil, variate.PerEvent, err
+		return nil, variate.PerEvent, nil, err
 	}
 	if err := spec.checkSlot(x, s); err != nil {
-		return nil, variate.PerEvent, err
+		return nil, variate.PerEvent, nil, err
 	}
 	scale, err := l.scale(x, spec.unit, s)
 	if err != nil {
-		return nil, variate.PerEvent, err
+		return nil, variate.PerEvent, nil, err
 	}
 	d, err := l.build(spec, scale)
 	if err != nil {
-		return nil, variate.PerEvent, err
+		return nil, variate.PerEvent, nil, err
 	}
 	d, err = spec.modify(d, scale)
 	if err != nil {
-		return nil, variate.PerEvent, err
+		return nil, variate.PerEvent, nil, err
 	}
-	return d, spec.scope, nil
+	var rng *variate.InputRange
+	if spec.hasRange {
+		if rng, err = parseRange(spec.rng, scale); err != nil {
+			return nil, variate.PerEvent, nil, err
+		}
+	}
+	return d, spec.scope, rng, nil
+}
+
+// parseRange reads an input's range for a sweep: [low, high], the
+// input's mean at the two ends in the distribution's unit, which scale
+// converts as it does truncate's bounds; or {times: [low, high]}, the
+// factors on the input.
+func parseRange(x node, scale float64) (*variate.InputRange, error) {
+	if !x.isScalar() {
+		if m, err := x.mapping("times"); err == nil {
+			t, ok := m["times"]
+			if !ok {
+				return nil, x.errorf("a range is [low, high] or {times: [low, high]}")
+			}
+			b, err := t.floats(2)
+			if err != nil {
+				return nil, err
+			}
+			return &variate.InputRange{Low: b[0], High: b[1], Factors: true}, nil
+		}
+	}
+	b, err := x.floats(2)
+	if err != nil {
+		return nil, x.errorf("a range is [low, high] or {times: [low, high]}")
+	}
+	return &variate.InputRange{Low: b[0] * scale, High: b[1] * scale}, nil
 }
 
 // takeApart splits a map into its family and modifiers.
@@ -141,6 +174,8 @@ func (l *loader) takeApart(x node, ignore []string) (*distSpec, error) {
 			spec.truncate, spec.hasTrunc = e.value, true
 		case e.key == "cap":
 			spec.cap, spec.hasCap = e.value, true
+		case e.key == "range":
+			spec.rng, spec.hasRange = e.value, true
 		case e.key == "scope":
 			sc, err := e.value.oneOf("event", "period")
 			if err != nil {

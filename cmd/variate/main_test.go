@@ -302,15 +302,17 @@ func TestPlanJSONAndSeries(t *testing.T) {
 	}
 }
 
-// TestSweep: the sweep command writes the tornado table, JSON whose
-// rows are the library's, and CSV with a row per input; a bad figure
-// fails.
+// TestSweep: the sweep command moves the inputs with a range and writes
+// the tornado table, JSON whose rows are the library's, and CSV with a
+// row per input; a model without ranges needs a screen, and a bad
+// figure fails.
 func TestSweep(t *testing.T) {
-	out, errOut, code := invoke(t, "sweep", "-f", model)
-	if code != 0 || !strings.Contains(out, "sweep of mean") || !strings.Contains(out, "exact") || !strings.Contains(errOut, "inputs × 2 nudges") {
+	const ranged = "../../examples/pump_station.yaml"
+	out, errOut, code := invoke(t, "sweep", "-f", ranged)
+	if code != 0 || !strings.Contains(out, "sweep of mean, each input with a range") || !strings.Contains(out, "p 0.015 – 0.05") || !strings.Contains(errOut, "8 inputs × 2 ends") {
 		t.Fatalf("table: %d %s %s", code, out, errOut)
 	}
-	m, err := config.Load(model)
+	m, err := config.Load(ranged)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,29 +320,35 @@ func TestSweep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, _, code = invoke(t, "sweep", "-f", model, "--format", "json", "--top", "2")
+	out, _, code = invoke(t, "sweep", "-f", ranged, "--format", "json", "--top", "2")
 	var got struct {
 		Figure string
+		Screen float64
 		Rows   []struct {
 			Input, Kind, Method string
-			Up                  struct{ Lo, Hi float64 }
+			Range               *struct{ Low, High float64 }
+			LowFactor           float64                  `json:"low_factor"`
+			AtHigh              struct{ Lo, Hi float64 } `json:"at_high"`
 			Swing               float64
 		}
 	}
-	if code != 0 || json.Unmarshal([]byte(out), &got) != nil || got.Figure != "mean" || len(got.Rows) != 2 {
+	if code != 0 || json.Unmarshal([]byte(out), &got) != nil || got.Figure != "mean" || got.Screen != 0 || len(got.Rows) != 2 {
 		t.Fatalf("json: %d %s", code, out)
 	}
 	for i, r := range got.Rows {
-		if w := want.Rows[i]; r.Input != w.Input.Name || r.Kind != w.Input.Kind || r.Up.Lo != w.Up.Lo || r.Swing != w.Swing {
+		if w := want.Rows[i]; r.Input != w.Input.Name || r.Kind != w.Input.Kind || r.AtHigh.Lo != w.AtHigh.Lo || r.Swing != w.Swing || r.LowFactor != w.Low || r.Range == nil {
 			t.Errorf("row %d: %+v, want %+v", i, r, w)
 		}
 	}
-	out, _, code = invoke(t, "sweep", "-f", model, "--format", "csv", "--delta", "0.2")
+	if _, errOut, code := invoke(t, "sweep", "-f", model); code != 1 || !strings.Contains(errOut, "no input has a range") {
+		t.Errorf("no ranges: %d %q", code, errOut)
+	}
+	out, _, code = invoke(t, "sweep", "-f", model, "--format", "csv", "--screen", "0.2")
 	rows, err := csv.NewReader(strings.NewReader(out)).ReadAll()
-	if code != 0 || err != nil || len(rows) != len(want.Rows)+1 || rows[0][0] != "input" {
+	if code != 0 || err != nil || len(rows) < 2 || rows[0][0] != "input" || rows[1][3] != "0.8" {
 		t.Errorf("csv: %d %v %q", code, err, out)
 	}
-	if _, errOut, code := invoke(t, "sweep", "-f", model, "--figure", "median"); code != 1 || !strings.Contains(errOut, "figure median") {
+	if _, errOut, code := invoke(t, "sweep", "-f", model, "--screen", "0.1", "--figure", "median"); code != 1 || !strings.Contains(errOut, "figure median") {
 		t.Errorf("bad figure: %d %q", code, errOut)
 	}
 }

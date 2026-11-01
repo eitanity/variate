@@ -17,23 +17,22 @@ const (
 	MethodSimulation = "simulation" // paired fixed runs at one seed
 )
 
-const (
-	defaultSweepDelta = 0.1
-	// sweepGroups is the number of groups of whole blocks over which the
-	// paired difference of a simulated row is measured.
-	sweepGroups = 32
-)
+// sweepGroups is the number of groups of whole blocks over which the
+// paired difference of a simulated row is measured.
+const sweepGroups = 32
 
-// SweepConfig is what a sweep nudges and reports.
+// SweepConfig is what a sweep moves and reports.
 type SweepConfig struct {
 	// Figure is the quantity reported: "mean" (the default), "p<percent>"
 	// for a quantile (p99, p99.5), "rp:<periods>" for the total at a
 	// return period, "pzero" for P(T = 0), "layer:<id>", "category:<name>"
 	// or "source:<id>" for that mean.
 	Figure string
-	// Delta is the relative nudge: each input is multiplied by 1 − Delta
-	// and by 1 + Delta. 0 = 0.1.
-	Delta float64
+	// Screen, when positive, moves every selected input to 1 − Screen
+	// and 1 + Screen times itself, ranges or none: a screen of the inputs'
+	// leverage, for which are worth a range. 0 = each input with a range
+	// moves to the two ends of it, and the others stay.
+	Screen float64
 	// Inputs restricts the sweep to the inputs whose name or kind is one
 	// of these, or whose name starts with one followed by a space ("node
 	// pump" takes every input of node pump). nil = every input.
@@ -54,27 +53,29 @@ type Range struct{ Lo, Hi float64 }
 // Mid is the middle of the range.
 func (r Range) Mid() float64 { return (r.Lo + r.Hi) / 2 }
 
-// SweepRow is one input's row: the figure with the input scaled down, as
-// it is, and scaled up.
+// SweepRow is one input's row: the figure with the input at the low end
+// of its range, as it is, and at the high end.
 type SweepRow struct {
-	Input          Input
-	Method         string
-	Down, Base, Up Range
-	// Swing is |Up − Down| between the middles.
+	Input  Input
+	Method string
+	// Low and High are the factors that took the input to the ends.
+	Low, High           float64
+	AtLow, Base, AtHigh Range
+	// Swing is |AtHigh − AtLow| between the middles.
 	Swing float64
-	// DownSE and UpSE are the standard errors of Down − Base and Up −
-	// Base: 0 when exact, NaN for a bracket or too few blocks, and for a
+	// LowSE and HighSE are the standard errors of AtLow − Base and AtHigh
+	// − Base: 0 when exact, NaN for a bracket or too few blocks, and for a
 	// simulated row measured on the runs' paired blocks.
-	DownSE, UpSE float64
+	LowSE, HighSE float64
 	// Clamped reports that a probability was held at 1, or held to its
-	// node's sum, at one of the nudges.
+	// node's sum, at one of the ends.
 	Clamped bool
 }
 
 // Sweep is a sensitivity sweep: rows by swing, the largest first.
 type Sweep struct {
 	Figure  string
-	Delta   float64
+	Screen  float64 // the screen's relative move; 0 when the inputs' ranges were swept
 	Seed    uint64
 	Periods int64 // of the simulated rows; 0 when there are none
 	Rows    []SweepRow
@@ -130,12 +131,11 @@ func parseFigure(s string) (sweepFigure, error) {
 // sweeper holds a sweep's settings and the base model's figures, each
 // computed once when a row first needs it.
 type sweeper struct {
-	ctx   context.Context
-	g     Graph
-	cfg   SweepConfig
-	fig   sweepFigure
-	delta float64
-	base  struct {
+	ctx  context.Context
+	g    Graph
+	cfg  SweepConfig
+	fig  sweepFigure
+	base struct {
 		exact, transform          *Range
 		exactErr, transErr        error
 		series                    *Result
@@ -146,25 +146,23 @@ type sweeper struct {
 	}
 }
 
-// Sweep nudges each input of the graph down and up by cfg.Delta and
-// reports the change in cfg.Figure. A row is exact where the analytic
-// expectations give the figure, a bracket where the transform applies
-// to the base and both nudged models, and simulated otherwise: fixed
-// runs at the one seed, so that the nudged models draw from the base
-// model's streams, with the standard error of each difference measured
-// on the runs' paired blocks.
+// Sweep moves each input of the graph that has a range to the low and
+// the high end of it, or, with cfg.Screen, every input by that relative
+// amount, and reports the change in cfg.Figure. A row is exact where
+// the analytic expectations give the figure, a bracket where the
+// transform applies to the base and both moved models, and simulated
+// otherwise: fixed runs at the one seed, so that the moved models draw
+// from the base model's streams, with the standard error of each
+// difference measured on the runs' paired blocks.
 func (g Graph) Sweep(ctx context.Context, cfg SweepConfig) (*Sweep, error) {
 	fig, err := parseFigure(cfg.Figure)
 	if err != nil {
 		return nil, err
 	}
-	s := &sweeper{ctx: ctx, g: g, cfg: cfg, fig: fig, delta: cfg.Delta}
-	if s.delta == 0 {
-		s.delta = defaultSweepDelta
+	if !(cfg.Screen >= 0 && cfg.Screen < 1) {
+		return nil, errors.New("sweep: a screen must be in (0, 1)")
 	}
-	if !(s.delta > 0 && s.delta < 1) {
-		return nil, errors.New("sweep: delta must be in (0, 1)")
-	}
+	s := &sweeper{ctx: ctx, g: g, cfg: cfg, fig: fig}
 	s.cfg.Run.Transform = false
 	s.cfg.Run.Series = false
 	s.cfg.Run.Observer = nil
@@ -172,12 +170,18 @@ func (g Graph) Sweep(ctx context.Context, cfg SweepConfig) (*Sweep, error) {
 	if len(inputs) == 0 {
 		return nil, errors.New("sweep: no input matches")
 	}
+	if cfg.Screen == 0 {
+		inputs = slices.DeleteFunc(inputs, func(in Input) bool { return in.Range == nil })
+		if len(inputs) == 0 {
+			return nil, errors.New("sweep: no input has a range; give the uncertain inputs a range, or screen them all by a relative amount")
+		}
+	}
 	if cfg.Top > 0 && cfg.Top < len(inputs) {
 		if inputs, err = s.rankByMean(inputs); err != nil {
 			return nil, err
 		}
 	}
-	out := &Sweep{Figure: cfg.Figure, Delta: s.delta, Seed: cfg.Run.Seed}
+	out := &Sweep{Figure: cfg.Figure, Screen: cfg.Screen, Seed: cfg.Run.Seed}
 	if out.Figure == "" {
 		out.Figure = "mean"
 	}
@@ -224,8 +228,12 @@ func (s *sweeper) rankByMean(inputs []Input) ([]Input, error) {
 	}
 	rs := make([]ranked, 0, len(inputs))
 	for _, in := range inputs {
+		lo, hi, err := s.ends(in)
+		if err != nil {
+			return nil, err
+		}
 		var v [2]float64
-		for i, f := range []float64{1 - s.delta, 1 + s.delta} {
+		for i, f := range []float64{lo, hi} {
 			g, _, err := s.g.Scaled(in.Name, f)
 			if err != nil {
 				return nil, err
@@ -246,12 +254,30 @@ func (s *sweeper) rankByMean(inputs []Input) ([]Input, error) {
 	return out, nil
 }
 
+// ends are the factors that move an input to the two ends of its range,
+// or of the screen.
+func (s *sweeper) ends(in Input) (lo, hi float64, err error) {
+	if s.cfg.Screen > 0 {
+		return 1 - s.cfg.Screen, 1 + s.cfg.Screen, nil
+	}
+	for _, r := range s.g.inputRefs() {
+		if r.Name == in.Name {
+			return s.g.factors(r)
+		}
+	}
+	return 0, 0, errors.New("sweep: no input named " + in.Name)
+}
+
 // row computes one input's row by the cheapest method that holds for
-// the base and both nudged models.
+// the base and both moved models.
 func (s *sweeper) row(in Input) (SweepRow, error) {
 	row := SweepRow{Input: in}
+	var err error
+	if row.Low, row.High, err = s.ends(in); err != nil {
+		return row, err
+	}
 	var nudged [2]Graph
-	for i, f := range []float64{1 - s.delta, 1 + s.delta} {
+	for i, f := range []float64{row.Low, row.High} {
 		g, clamped, err := s.g.Scaled(in.Name, f)
 		if err != nil {
 			return row, err
@@ -263,7 +289,7 @@ func (s *sweeper) row(in Input) (SweepRow, error) {
 		down, derr := s.exact(nudged[0], s.fig)
 		up, uerr := s.exact(nudged[1], s.fig)
 		if derr == nil && uerr == nil {
-			row.Method, row.Base, row.Down, row.Up = MethodExact, base, down, up
+			row.Method, row.Base, row.AtLow, row.AtHigh = MethodExact, base, down, up
 			return finishRow(row), nil
 		}
 	}
@@ -271,8 +297,8 @@ func (s *sweeper) row(in Input) (SweepRow, error) {
 		down, derr := s.transform(nudged[0], s.fig)
 		up, uerr := s.transform(nudged[1], s.fig)
 		if derr == nil && uerr == nil {
-			row.Method, row.Base, row.Down, row.Up = MethodTransform, base, down, up
-			row.DownSE, row.UpSE = math.NaN(), math.NaN()
+			row.Method, row.Base, row.AtLow, row.AtHigh = MethodTransform, base, down, up
+			row.LowSE, row.HighSE = math.NaN(), math.NaN()
 			return finishRow(row), nil
 		}
 	}
@@ -280,7 +306,7 @@ func (s *sweeper) row(in Input) (SweepRow, error) {
 }
 
 func finishRow(row SweepRow) SweepRow {
-	row.Swing = math.Abs(row.Up.Mid() - row.Down.Mid())
+	row.Swing = math.Abs(row.AtHigh.Mid() - row.AtLow.Mid())
 	return row
 }
 
@@ -397,7 +423,7 @@ func (m *Compiled) layerIndex(id string) int {
 	return -1
 }
 
-// simulatedRow runs the nudged models for the base run's length at its
+// simulatedRow runs the moved models for the base run's length at its
 // seed and pairs their blocks with the base run's.
 func (s *sweeper) simulatedRow(row SweepRow, nudged [2]Graph) (SweepRow, error) {
 	base, err := s.baseSeries()
@@ -428,9 +454,9 @@ func (s *sweeper) simulatedRow(row SweepRow, nudged [2]Graph) (SweepRow, error) 
 		v := s.fig.of(y)
 		se := s.pairedSE(x, y)
 		if i == 0 {
-			row.Down, row.DownSE = Range{Lo: v, Hi: v}, se
+			row.AtLow, row.LowSE = Range{Lo: v, Hi: v}, se
 		} else {
-			row.Up, row.UpSE = Range{Lo: v, Hi: v}, se
+			row.AtHigh, row.HighSE = Range{Lo: v, Hi: v}, se
 		}
 	}
 	return finishRow(row), nil

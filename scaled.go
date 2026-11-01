@@ -19,6 +19,15 @@ const (
 	InputHolding     = "holding"
 )
 
+// InputRange is how uncertain an input is: its mean at the low and the
+// high end of what is plausible, in the input's own units, a probability
+// as a probability; or, with Factors, the factors on the input at the
+// two ends. A sweep moves the input to each end.
+type InputRange struct {
+	Low, High float64
+	Factors   bool
+}
+
 // Input is one distribution of a graph that a sweep can scale, named as
 // the report names things: "source <id> frequency", "source <id> repair",
 // "node <id> function <name>", "node <id> outcome <target> p", "node
@@ -26,8 +35,9 @@ const (
 // <id>", "schedule <id>". A repeated target carries its #n as in the
 // outcome names. Constants are inputs too.
 type Input struct {
-	Name string
-	Kind string
+	Name  string
+	Kind  string
+	Range *InputRange // nil when the model gives the input none
 }
 
 // inputRef locates an input: the factor, schedule, source or node i, and
@@ -52,21 +62,21 @@ func (g Graph) Inputs() []Input {
 
 func (g Graph) inputRefs() []inputRef {
 	var refs []inputRef
-	add := func(name, kind string, i, j int) {
-		refs = append(refs, inputRef{Input: Input{Name: name, Kind: kind}, i: i, j: j})
+	add := func(name, kind string, r *InputRange, i, j int) {
+		refs = append(refs, inputRef{Input: Input{Name: name, Kind: kind, Range: r}, i: i, j: j})
 	}
 	for i, f := range g.Factors {
-		add("factor "+f.ID, InputFactor, i, 0)
+		add("factor "+f.ID, InputFactor, f.Range, i, 0)
 	}
 	for i, sc := range g.Schedules {
-		add("schedule "+sc.ID, InputSchedule, i, 0)
+		add("schedule "+sc.ID, InputSchedule, sc.Range, i, 0)
 	}
 	for i, s := range g.Sources {
 		if len(s.Chains) == 0 && s.Frequency != nil {
-			add("source "+s.ID+" frequency", InputFrequency, i, 0)
+			add("source "+s.ID+" frequency", InputFrequency, s.FrequencyRange, i, 0)
 		}
 		if s.Repair != nil {
-			add("source "+s.ID+" repair", InputRepair, i, 0)
+			add("source "+s.ID+" repair", InputRepair, s.RepairRange, i, 0)
 		}
 	}
 	for i, n := range g.Nodes {
@@ -78,14 +88,14 @@ func (g Graph) inputRefs() []inputRef {
 // inputRefs appends node i's inputs: its functions, its continuation's
 // holding, and its outcomes' probabilities and holdings.
 func (n Node) inputRefs(refs []inputRef, i int) []inputRef {
-	add := func(name, kind string, j int) {
-		refs = append(refs, inputRef{Input: Input{Name: "node " + n.ID + " " + name, Kind: kind}, i: i, j: j})
+	add := func(name, kind string, r *InputRange, j int) {
+		refs = append(refs, inputRef{Input: Input{Name: "node " + n.ID + " " + name, Kind: kind, Range: r}, i: i, j: j})
 	}
 	for j, f := range n.Functions {
-		add("function "+f.Name, InputFunction, j)
+		add("function "+f.Name, InputFunction, f.Range, j)
 	}
 	if n.Next != "" && n.NextHolding != nil {
-		add("next holding", InputHolding, -1)
+		add("next holding", InputHolding, n.NextRange, -1)
 	}
 	dupes := map[string]int{}
 	for j, o := range n.Outcomes {
@@ -95,13 +105,73 @@ func (n Node) inputRefs(refs []inputRef, i int) []inputRef {
 			target += "#" + itoa(dupes[o.To])
 		}
 		if o.P != nil && (n.Mode == Sequential || len(n.Outcomes) > 1) {
-			add("outcome "+target+" p", InputProbability, j)
+			add("outcome "+target+" p", InputProbability, o.PRange, j)
 		}
 		if o.Holding != nil {
-			add("outcome "+target+" holding", InputHolding, j)
+			add("outcome "+target+" holding", InputHolding, o.HoldingRange, j)
 		}
 	}
 	return refs
+}
+
+// mean is the input's mean in its own units: a distribution's mean, a
+// probability's, or the mean of a schedule's values.
+func (g Graph) mean(r inputRef) float64 {
+	switch r.Kind {
+	case InputFactor:
+		return g.Factors[r.i].Model.Mean()
+	case InputSchedule:
+		v := g.Schedules[r.i].Values
+		sum := 0.0
+		for _, x := range v {
+			sum += x
+		}
+		return sum / float64(len(v))
+	case InputFrequency:
+		return g.Sources[r.i].Frequency.Mean()
+	case InputRepair:
+		return g.Sources[r.i].Repair.Mean()
+	}
+	n := g.Nodes[r.i]
+	switch {
+	case r.Kind == InputFunction:
+		return n.Functions[r.j].Model.Mean()
+	case r.Kind == InputHolding && r.j < 0:
+		return n.NextHolding.Mean()
+	case r.Kind == InputHolding:
+		return n.Outcomes[r.j].Holding.Mean()
+	}
+	return n.Outcomes[r.j].P.Mean()
+}
+
+// factors are the factors that move input r to the two ends of its
+// range. A range must be positive and hold the input's mean between
+// its ends.
+func (g Graph) factors(r inputRef) (lo, hi float64, err error) {
+	rg := r.Range
+	if rg == nil {
+		return 0, 0, errors.New("sweep: " + r.Name + " has no range")
+	}
+	bad := func(why string) error {
+		return errors.New("sweep: " + r.Name + " range [" + ftoa(rg.Low) + ", " + ftoa(rg.High) + "] " + why)
+	}
+	if !(rg.Low > 0 && rg.Low < rg.High) || math.IsInf(rg.High, 1) {
+		return 0, 0, bad("needs 0 < low < high, both finite")
+	}
+	if rg.Factors {
+		if !(rg.Low <= 1 && rg.High >= 1) {
+			return 0, 0, bad("needs low ≤ 1 ≤ high as factors")
+		}
+		return rg.Low, rg.High, nil
+	}
+	m := g.mean(r)
+	if !(m > 0) || math.IsInf(m, 1) {
+		return 0, 0, bad("needs an input with a positive, finite mean; give the range as factors")
+	}
+	if !(rg.Low <= m && m <= rg.High) {
+		return 0, 0, bad("does not hold the input's mean " + ftoa(m))
+	}
+	return rg.Low / m, rg.High / m, nil
 }
 
 // Scaled returns a copy of the graph with one input multiplied by f > 0;

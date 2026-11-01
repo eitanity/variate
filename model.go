@@ -38,6 +38,7 @@ type Function struct {
 	Model          dist.Distribution // value; for PerTime, a rate per period
 	Basis          Basis
 	Scope          Scope
+	Range          *InputRange // how uncertain Model is, for a sweep; nil = not swept
 }
 
 // Outcome is one branch of a node's selection.
@@ -46,7 +47,9 @@ type Outcome struct {
 	P             dist.Distribution // nil = remainder; Constant for fixed; otherwise drawn per period
 	Holding       dist.Continuous   // nil = no delay
 	HoldingScope  Scope
-	OutageHolding bool // hold for the time the reliability block that fired the round stays down
+	OutageHolding bool        // hold for the time the reliability block that fired the round stays down
+	PRange        *InputRange // how uncertain P is, for a sweep, as probabilities; nil = not swept
+	HoldingRange  *InputRange // how uncertain Holding is; nil = not swept
 }
 
 // Node is a state an event passes through.
@@ -59,6 +62,7 @@ type Node struct {
 	NextOutage      bool            // the continuation holds for the block's outage (as OutageHolding)
 	NextHolding     dist.Continuous // holding time on Next; nil = 0
 	NextScope       Scope
+	NextRange       *InputRange // how uncertain NextHolding is; nil = not swept
 }
 
 // Source is an initiating event flow.
@@ -71,6 +75,8 @@ type Source struct {
 	Chains          []Chain           // a reliability diagram the engine simulates in place of Frequency; nil = none
 	Factor          string            // a Factor's ID scaling the rate, drawn once per period and shared; "" = none
 	Schedule        string            // a Schedule's ID scaling the rate by the period's place in a cycle; "" = none
+	FrequencyRange  *InputRange       // how uncertain Frequency is, for a sweep; nil = not swept
+	RepairRange     *InputRange       // how uncertain Repair is; nil = not swept
 }
 
 // Schedule is a cycle of multipliers on rates: period p uses the value
@@ -80,7 +86,8 @@ type Source struct {
 // from its values.
 type Schedule struct {
 	ID     string
-	Values []float64 // finite, not negative
+	Values []float64   // finite, not negative
+	Range  *InputRange // how uncertain the values' mean is, for a sweep; nil = not swept
 }
 
 // Factor is a multiplier on rates, drawn once per period and shared by
@@ -90,6 +97,7 @@ type Schedule struct {
 type Factor struct {
 	ID    string
 	Model dist.Distribution // support in [0, ∞)
+	Range *InputRange       // how uncertain Model is, for a sweep; nil = not swept
 }
 
 // Graph is a model: sources feeding a DAG of nodes.

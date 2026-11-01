@@ -228,7 +228,7 @@ func (l *loader) sourceLaw(m map[string]node, s *variate.Source) error {
 	}
 	if r, ok := m["repair"]; ok {
 		var err error
-		if s.Repair, _, err = l.parseDist(r, slotHolding); err != nil {
+		if s.Repair, _, s.RepairRange, err = l.parseDist(r, slotHolding); err != nil {
 			return err
 		}
 	}
@@ -245,7 +245,7 @@ func (l *loader) sourceRate(it node, m map[string]node, s *variate.Source) error
 		return it.errorf("a source has frequency or block, not both")
 	case hasF:
 		var err error
-		s.Frequency, _, err = l.parseDist(f, slotFrequency)
+		s.Frequency, _, s.FrequencyRange, err = l.parseDist(f, slotFrequency)
 		return err
 	case hasB:
 		if _, ok := m["every"]; ok {
@@ -332,7 +332,7 @@ func (l *loader) parseNext(n variate.Node, m map[string]node, nm naming) (variat
 	if hasHolding {
 		if s, serr := nh.str(); serr == nil && s == "outage" {
 			n.NextOutage = true
-		} else if n.NextHolding, n.NextScope, err = l.parseDist(nh, slotHolding); err != nil {
+		} else if n.NextHolding, n.NextScope, n.NextRange, err = l.parseDist(nh, slotHolding); err != nil {
 			return n, err
 		}
 	}
@@ -381,7 +381,7 @@ func (l *loader) parseFunction(it node) (variate.Function, error) {
 	if f.Name == "" || f.Category == "" {
 		return f, it.errorf("a function needs name and category")
 	}
-	f.Model, f.Scope, err = l.parseDist(it, s, "name", "category", "basis")
+	f.Model, f.Scope, f.Range, err = l.parseDist(it, s, "name", "category", "basis")
 	return f, err
 }
 
@@ -405,14 +405,14 @@ func (l *loader) parseOutcomes(x node, nm naming) ([]variate.Outcome, error) {
 			return nil, err
 		}
 		if p, ok := m["p"]; ok {
-			if o.P, _, err = l.parseDist(p, slotProbability); err != nil {
+			if o.P, _, o.PRange, err = l.parseDist(p, slotProbability); err != nil {
 				return nil, err
 			}
 		}
 		if h, ok := m["holding"]; ok {
 			if s, serr := h.str(); serr == nil && s == "outage" {
 				o.OutageHolding = true
-			} else if o.Holding, o.HoldingScope, err = l.parseDist(h, slotHolding); err != nil {
+			} else if o.Holding, o.HoldingScope, o.HoldingRange, err = l.parseDist(h, slotHolding); err != nil {
 				return nil, err
 			}
 		}

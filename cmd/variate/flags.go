@@ -39,7 +39,7 @@ type options struct {
 	minValue   float64
 	// sweep
 	figure string
-	delta  float64
+	screen float64
 	inputs string
 	top    int
 }
@@ -110,7 +110,7 @@ func parseFlags(name string, args []string, stderr io.Writer) (*options, error) 
 // sweepFlags adds the flags of sweep.
 func (o *options) sweepFlags(fs *flag.FlagSet) {
 	fs.StringVar(&o.figure, "figure", "mean", "mean, p<percent>, rp:<periods>, pzero, layer:<id>, category:<name> or source:<id>")
-	fs.Float64Var(&o.delta, "delta", 0.1, "each input is multiplied by 1 − delta and 1 + delta")
+	fs.Float64Var(&o.screen, "screen", 0, "screen every input by this relative amount, × (1 ± screen), instead of moving the inputs with a range to its ends")
 	fs.StringVar(&o.inputs, "inputs", "", "sweep only these inputs, by name, kind or leading words (comma-separated)")
 	fs.IntVar(&o.top, "top", 0, "keep the inputs with the largest exact-mean swings")
 }

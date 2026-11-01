@@ -127,7 +127,10 @@ ends. The graph must be acyclic.
 A distribution is a bare number, meaning a constant, or a map with
 exactly one family key. Beside the family key may stand `unit` (time
 unit of a holding, a per-time rate or a frequency), `t` (the shape of a
-PERT, default 4), `truncate: [lo, hi]`, `cap: c` and `scope`.
+PERT, default 4), `truncate: [lo, hi]`, `cap: c`, `scope` and `range`
+(how far the input could be off, for `variate sweep`; below). A
+constant that takes a range is written `{ constant: 0.3, range: [0.2,
+0.4] }`.
 
 | family | written as | notes |
 |---|---|---|
@@ -207,6 +210,44 @@ graphs:
 
 A schedule's values are finite and not negative; a cycle of up to
 65536 values. A schedule with mean 1 leaves the mean rate unchanged.
+
+## What the inputs could be: ranges
+
+A distribution says how a value varies from event to event; the
+simulation already covers that. A range says something else: how far
+the distribution itself could be wrong, the uncertainty in the
+estimate. `variate sweep` moves each input that has a range to the low
+and to the high end of it, every other input as written, and ranks the
+inputs by how far that moves a figure (the mean by default; `--figure`
+takes a quantile, a return period, P(T = 0) or a layer's, category's
+or source's mean). Inputs without a range are not moved.
+
+```yaml
+sources:
+  - { id: wear_trip, frequency: { pert: [20, 60, 200], range: [50, 120] }, to: trip }   # 50 to 120 a year
+  - { id: grid_outage, frequency: { pert: [0, 0.3, 2], range: { times: [0.5, 3] } }, to: fault_check }
+nodes:
+  - id: fault_check
+    outcomes:
+      - { to: major_repair, p: { constant: 0.75, range: [0.6, 0.85] },
+          holding: { lognormal: { median: 2, p90: 7 }, unit: days, range: [2, 6] } }
+```
+
+`range: [low, high]` is the input's **mean** at the two ends, in the
+distribution's own unit (a holding in days takes its range in days, a
+rate per day its range per day) and a probability as probabilities.
+The whole distribution is scaled to reach each end, so its shape and
+spread stay; the range must hold the input's mean. `range: { times:
+[low, high] }` gives the factors instead, which suits an input without
+a natural unit, and is the form to use on a demo knob, whose mean
+moves. A schedule takes `range` beside its `values`, for the mean of
+the cycle; a factor beside its family. A probability moved past 1 is
+held there, and a node's other probabilities make room so that it
+still sums to 1.
+
+Without ranges, `variate sweep --screen 0.1` moves every input by a
+tenth either way. That ranks leverage, not uncertainty: it shows which
+inputs are worth giving a range.
 
 ## Layers of the period total
 

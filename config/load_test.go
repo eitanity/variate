@@ -550,3 +550,78 @@ graphs:
 	}
 	parseErr(t, strings.Replace(text, "share: 0.9", "share: 0.9, basis: x", 1), "unknown key")
 }
+
+// TestRangeKeys: range on any distribution reaches the graph, in the
+// distribution's unit converted as its values are, or as factors with
+// times; a schedule takes one beside its values; a template's copies
+// keep their ranges; and a range is two numbers.
+func TestRangeKeys(t *testing.T) {
+	text := `
+period: { days: 365 }
+factors:
+  - { id: climate, pert: [0.5, 1, 2], range: { times: [0.8, 1.5] } }
+schedules:
+  - { id: season, values: [0.5, 1.5], range: [0.8, 1.4] }
+templates:
+  - id: site
+    entry: n
+    nodes:
+      - { id: n, functions: [ { name: x, category: c, constant: 3, range: [2, 5] } ] }
+graphs:
+  - id: g
+    instances:
+      - { template: site, as: east }
+    sources:
+      - { id: e, frequency: 1, to: east.n }
+      - { id: a, frequency: { pert: [1, 2, 4], range: [1.5, 3] }, factor: climate, to: n }
+      - { id: b, frequency: 1, repair: { pert: [1, 3, 10], unit: days, range: [2, 6] }, to: m }
+      - { id: q, frequency: 2, schedule: season, to: k }
+    nodes:
+      - id: n
+        functions: [ { name: cost, category: c, pert: [1, 2, 4], range: { times: [0.5, 2] } } ]
+        outcomes:
+          - { to: m, p: { constant: 0.3, range: [0.2, 0.4] }, holding: { exponential: { mean: 2 }, unit: days, range: [1, 4] } }
+          - { to: k }
+      - { id: m, next: k, next_holding: { constant: 7, unit: days, range: [3, 14] } }
+      - { id: k }
+`
+	m := parse(t, text)
+	g := m.Graph
+	day := 1.0 / 365
+	node := map[string]variate.Node{}
+	for _, n := range g.Nodes {
+		node[n.ID] = n
+	}
+	for name, c := range map[string]struct {
+		got  *variate.InputRange
+		want variate.InputRange
+	}{
+		"factor":       {g.Factors[0].Range, variate.InputRange{Low: 0.8, High: 1.5, Factors: true}},
+		"schedule":     {g.Schedules[0].Range, variate.InputRange{Low: 0.8, High: 1.4}},
+		"frequency":    {g.Sources[1].FrequencyRange, variate.InputRange{Low: 1.5, High: 3}},
+		"repair":       {g.Sources[2].RepairRange, variate.InputRange{Low: 2 * day, High: 6 * day}},
+		"function":     {node["n"].Functions[0].Range, variate.InputRange{Low: 0.5, High: 2, Factors: true}},
+		"probability":  {node["n"].Outcomes[0].PRange, variate.InputRange{Low: 0.2, High: 0.4}},
+		"holding":      {node["n"].Outcomes[0].HoldingRange, variate.InputRange{Low: 1 * day, High: 4 * day}},
+		"next holding": {node["m"].NextRange, variate.InputRange{Low: 3 * day, High: 14 * day}},
+	} {
+		if c.got == nil || math.Abs(c.got.Low-c.want.Low) > 1e-15 || math.Abs(c.got.High-c.want.High) > 1e-15 || c.got.Factors != c.want.Factors {
+			t.Errorf("%s: range %+v, want %+v", name, c.got, c.want)
+		}
+	}
+	copied := false
+	for _, n := range g.Nodes {
+		if n.ID == "east.n" && n.Functions[0].Range != nil && n.Functions[0].Range.High == 5 {
+			copied = true
+		}
+	}
+	if !copied {
+		t.Errorf("the template's copy lost its range: %+v", g.Nodes)
+	}
+	if _, err := g.Sweep(t.Context(), variate.SweepConfig{}); err != nil {
+		t.Errorf("sweep of the parsed ranges: %v", err)
+	}
+	parseErr(t, strings.Replace(text, "range: [1.5, 3]", "range: [1.5]", 1), "range")
+	parseErr(t, strings.Replace(text, "range: [1.5, 3]", "range: { by: [1, 2] }", 1), "range")
+	parseErr(t, strings.Replace(text, "range: [1.5, 3]", "range: 2", 1), "range")
+}
