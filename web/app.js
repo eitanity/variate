@@ -577,10 +577,13 @@ function drawContributions(canvas, r) {
   caption(ctx, "bars: mean per period (tallest " + fmt(peak, 3) + "); line: cumulative share of the total mean", lx + 4, plotW - 8, top);
 }
 
-// drawTornado sweeps the model's inputs, each multiplied by 0.9 and by
-// 1.1, and draws the change in the exact mean as a tornado: one row per
-// input, the largest swing at the top, the fifteen largest shown. The
-// sweep needs no simulation, a compile per nudge.
+// drawTornado sweeps the model's inputs for the exact mean and draws a
+// tornado: one row per input, the largest swing at the top, the fifteen
+// largest shown, each bar the change from the base mean with the input
+// at the low and at the high end of its range. A model that gives no
+// input a range is screened instead, every input × 0.9 and × 1.1, which
+// shows where a range is worth giving. The sweep needs no simulation, a
+// compile per move.
 const tornadoRows = 15, tornadoRowH = 20;
 
 async function drawTornado(canvas, yaml) {
@@ -600,7 +603,7 @@ async function drawTornado(canvas, yaml) {
   if (rows.length === 0) { note.textContent = "The model has no inputs to sweep."; return; }
   const base = rows[0].base.lo;
   const labelW = Math.min(300, w * 0.4), plotW = w - labelW - 80, cx = labelW + plotW / 2;
-  const reach = Math.max(...rows.map((r) => Math.max(Math.abs(r.down.lo - base), Math.abs(r.up.lo - base))), 1e-12);
+  const reach = Math.max(...rows.map((r) => Math.max(Math.abs(r.at_low.lo - base), Math.abs(r.at_high.lo - base))), 1e-12);
   const scale = (plotW / 2) / reach;
   const clamped = rows.some((r) => r.clamped);
   rows.forEach((r, i) => {
@@ -609,18 +612,22 @@ async function drawTornado(canvas, yaml) {
     while (name.length > 4 && ctx.measureText(name).width > labelW - 10) name = name.slice(0, -2) + "…";
     ctx.fillStyle = "#333";
     ctx.textAlign = "right"; ctx.fillText(name, labelW - 8, y + 11); ctx.textAlign = "left";
-    for (const [v, colour] of [[r.down.lo, COLOURS.baseline], [r.up.lo, COLOURS.current]]) {
+    for (const [v, colour] of [[r.at_low.lo, COLOURS.baseline], [r.at_high.lo, COLOURS.current]]) {
       const d = (v - base) * scale;
       ctx.fillStyle = colour;
       ctx.fillRect(Math.min(cx, cx + d), y + (colour === COLOURS.baseline ? 1 : 8), Math.max(Math.abs(d), 1), 7);
     }
     ctx.fillStyle = "#666";
-    ctx.fillText("±" + fmt(r.swing / 2, 3), cx + plotW / 2 + 6, y + 11);
+    ctx.fillText(fmt(r.swing, 3), cx + plotW / 2 + 6, y + 11);
   });
   ctx.strokeStyle = "#999"; ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, top + 8 + rows.length * tornadoRowH); ctx.stroke();
-  caption(ctx, `change in the exact mean per period (${fmt(base, 4)}) with each input × 0.9 (orange) and × 1.1 (blue)`, labelW, plotW + 70, top);
-  note.textContent = `${sw.rows.length} inputs swept` + (sw.rows.length > tornadoRows ? `, the ${tornadoRows} that move the mean most shown` : "") +
-    (clamped ? ". * a probability was held at 1, or to its node's sum, at a nudge." : ".");
+  const ends = sw.screen > 0 ? `each input × ${1 - sw.screen} (orange) and × ${1 + sw.screen} (blue)` : "each input at the low (orange) and the high (blue) end of its range";
+  caption(ctx, `change in the exact mean per period (${fmt(base, 4)}) with ${ends}; right: the swing`, labelW, plotW + 70, top);
+  note.textContent = (sw.screen > 0
+    ? "No input in this model has a range, so this is a screen: every input moved by a tenth, which ranks leverage, not uncertainty. Give the uncertain inputs a range (range: [low, high] on a distribution) to see what they could move. "
+    : `${sw.rows.length} inputs with a range swept. `) +
+    (sw.rows.length > tornadoRows ? `The ${tornadoRows} that move the mean most are shown. ` : "") +
+    (clamped ? "* a probability was held at 1, or to its node's sum, at an end." : "");
 }
 
 // drawTailContributions draws each source's share of the total over

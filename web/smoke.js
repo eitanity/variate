@@ -6,7 +6,8 @@
 // and "warnings"; everything else must be identical. The sweep of the
 // same model through variateSweep must equal the native sweep JSON given
 // as the second argument (variate sweep -f examples/compound.yaml
-// --format json).
+// --screen 0.1 --format json: the model gives no input a range, so the
+// page screens it).
 //
 //   node web/smoke.js native.json native-sweep.json
 "use strict";

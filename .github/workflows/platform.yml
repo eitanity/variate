@@ -46,7 +46,7 @@ jobs:
       - name: Native report
         run: go run ./cmd/variate run -f examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format json --analytic --node-hist > native.json
       - name: Native sweep
-        run: go run ./cmd/variate sweep -f examples/compound.yaml --format json > native-sweep.json
+        run: go run ./cmd/variate sweep -f examples/compound.yaml --screen 0.1 --format json > native-sweep.json
       - name: Run the wasm engine under node and compare
         run: node web/smoke.js native.json native-sweep.json
 

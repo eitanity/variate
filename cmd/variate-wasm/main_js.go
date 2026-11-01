@@ -149,9 +149,10 @@ func planFunc(_ js.Value, args []js.Value) any {
 }
 
 // sweepFunc sweeps the model's inputs for the mean and returns the
-// sweep JSON: every row exact, so it costs a compile per nudge and no
-// simulation. A model whose mean is not exact is refused rather than
-// simulated twice per input in the page.
+// sweep JSON: the inputs with a range to its ends, or, when none has
+// one, a screen of every input by a tenth. Every row is exact, so it
+// costs a compile per move and no simulation; a model whose mean is not
+// exact is refused rather than simulated twice per input in the page.
 func sweepFunc(_ js.Value, args []js.Value) any {
 	m, err := load(args)
 	if err != nil {
@@ -166,14 +167,25 @@ func sweepFunc(_ js.Value, args []js.Value) any {
 		return result("", err)
 	}
 	if math.IsNaN(e.Mean) || math.IsInf(e.Mean, 0) {
-		return result("", errors.New("the mean is not exact, so the sweep would simulate every nudge"))
+		return result("", errors.New("the mean is not exact, so the sweep would simulate every move"))
 	}
-	sw, err := m.Graph.Sweep(context.Background(), variate.SweepConfig{Run: m.Config})
+	cfg := variate.SweepConfig{Run: m.Config, Screen: browserScreen}
+	for _, in := range m.Graph.Inputs() {
+		if in.Range != nil {
+			cfg.Screen = 0
+			break
+		}
+	}
+	sw, err := m.Graph.Sweep(context.Background(), cfg)
 	if err != nil {
 		return result("", err)
 	}
 	return result(string(report.SweepJSON(sw)), nil)
 }
+
+// browserScreen is the relative move of the page's screen, for a model
+// that gives no input a range.
+const browserScreen = 0.1
 
 // run runs the model and returns the report JSON, extended with a
 // linear and a log-scaled histogram of the period total for drawing.
