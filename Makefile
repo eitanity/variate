@@ -140,9 +140,15 @@ fuzz:
 	go test -run=^$$ -fuzz=FuzzLoad -fuzztime=60s ./config
 	go test -run=^$$ -fuzz=FuzzCompile -fuzztime=60s ./internal/suite
 
+# The weekly fuzz. FuzzCompile has found every fuzz-found defect so
+# far, each within five minutes of a fresh corpus; with that rate as
+# uncertain as two finds leave it, a 20-minute run finds such a defect
+# with probability 0.92 (0.95 at 30). FuzzLoad has found nothing. The
+# weekly workflow keeps the corpus between runs, so each run starts
+# where the last one stopped.
 fuzz-long:
-	go test -run=^$$ -fuzz=FuzzLoad -fuzztime=30m ./config
-	go test -run=^$$ -fuzz=FuzzCompile -fuzztime=30m ./internal/suite
+	go test -run=^$$ -fuzz=FuzzLoad -fuzztime=5m ./config
+	go test -run=^$$ -fuzz=FuzzCompile -fuzztime=20m ./internal/suite
 
 stat:
 	VARIATE_STAT=1 go test -count=1 -timeout 6h $(PKGS)
