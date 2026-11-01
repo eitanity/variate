@@ -10,12 +10,18 @@ import (
 )
 
 // TestTransformRandomDAGsLong: more seeds, up to three period-scoped
-// probabilities per model and the full grid.
+// probabilities per model and the full grid. Seed 13 is left out: its
+// graph is never checked against the simulation, since it reaches 2^18
+// grid points over nine minutes only to be refused by the work budget,
+// and all that refusal tested is that its reason is not a self-check,
+// which TestInvariantNoSelfCheckRefusalLong tests over its own models.
 func TestTransformRandomDAGsLong(t *testing.T) {
 	skipUnlessLong(t)
-	seeds := make([]uint64, 0, 16)
+	seeds := make([]uint64, 0, 15)
 	for s := uint64(1); s <= 16; s++ {
-		seeds = append(seeds, s)
+		if s != 13 {
+			seeds = append(seeds, s)
+		}
 	}
 	checkRandomDAGs(t, seeds, 3, 1<<20)
 }

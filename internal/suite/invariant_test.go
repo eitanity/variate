@@ -105,31 +105,36 @@ func TestInvariantNoSelfCheckRefusal(t *testing.T) {
 	checkNoSelfCheckRefusal(t, fast)
 }
 
+// checkNoSelfCheckRefusal runs each model as a parallel subtest: the
+// transform uses one core, so the models share the machine's.
 func checkNoSelfCheckRefusal(t *testing.T, models []corpusModel) {
 	t.Helper()
 	cfg := variate.TransformConfig{Tol: 0.25, MaxGrid: 1 << 16}
 	for _, m := range models {
-		start := time.Now() //nolint:forbidigo // timing a test
-		g := transformable(m.g)
-		c, _, err := g.Compile(variate.Config{AllowUnconverged: true})
-		if err != nil {
-			t.Fatalf("%s: %v", m.name, err)
-		}
-		tr, err := c.Transform(cfg)
-		if err != nil {
-			t.Fatalf("%s: %v", m.name, err)
-		}
-		if !tr.Applicable && strings.HasPrefix(tr.Reason, "self-check") {
-			t.Errorf("%s: transform self-check refusal: %s", m.name, tr.Reason)
-		}
-		cs, err := c.TransformEntries(cfg)
-		if err != nil {
-			t.Fatalf("%s: %v", m.name, err)
-		}
-		if !cs.Applicable && strings.HasPrefix(cs.Reason, "self-check") {
-			t.Errorf("%s: entries self-check refusal: %s", m.name, cs.Reason)
-		}
-		t.Logf("%s: %v; transform %v (%s); entries %v (%s)", m.name, time.Since(start).Round(time.Millisecond), tr.Applicable, tr.Reason, cs.Applicable, cs.Reason)
+		t.Run(m.name, func(t *testing.T) {
+			t.Parallel()
+			start := time.Now() //nolint:forbidigo // timing a test
+			g := transformable(m.g)
+			c, _, err := g.Compile(variate.Config{AllowUnconverged: true})
+			if err != nil {
+				t.Fatalf("%s: %v", m.name, err)
+			}
+			tr, err := c.Transform(cfg)
+			if err != nil {
+				t.Fatalf("%s: %v", m.name, err)
+			}
+			if !tr.Applicable && strings.HasPrefix(tr.Reason, "self-check") {
+				t.Errorf("%s: transform self-check refusal: %s", m.name, tr.Reason)
+			}
+			cs, err := c.TransformEntries(cfg)
+			if err != nil {
+				t.Fatalf("%s: %v", m.name, err)
+			}
+			if !cs.Applicable && strings.HasPrefix(cs.Reason, "self-check") {
+				t.Errorf("%s: entries self-check refusal: %s", m.name, cs.Reason)
+			}
+			t.Logf("%s: %v; transform %v (%s); entries %v (%s)", m.name, time.Since(start).Round(time.Millisecond), tr.Applicable, tr.Reason, cs.Applicable, cs.Reason)
+		})
 	}
 }
 

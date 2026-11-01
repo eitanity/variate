@@ -496,30 +496,35 @@ func TestTransformRandomDAGs(t *testing.T) {
 	checkRandomDAGs(t, []uint64{1, 6, 7}, 1, 1<<19)
 }
 
+// checkRandomDAGs runs each seed as a parallel subtest: the transform
+// uses one core, so the seeds share the machine's.
 func checkRandomDAGs(t *testing.T, seeds []uint64, maxScoped, maxGrid int) {
 	t.Helper()
 	const h = 20000
 	for _, seed := range seeds {
-		g, _ := transformGraph(t, seed, maxScoped)
-		m, tr := transformOf(t, g, variate.TransformConfig{Tol: 1e-2, MaxGrid: maxGrid})
-		if !tr.Applicable {
-			if strings.HasPrefix(tr.Reason, "self-check") {
-				t.Errorf("seed %d: %s", seed, tr.Reason)
+		t.Run("seed"+strconv.FormatUint(seed, 10), func(t *testing.T) {
+			t.Parallel()
+			g, _ := transformGraph(t, seed, maxScoped)
+			m, tr := transformOf(t, g, variate.TransformConfig{Tol: 1e-2, MaxGrid: maxGrid})
+			if !tr.Applicable {
+				if strings.HasPrefix(tr.Reason, "self-check") {
+					t.Errorf("seed %d: %s", seed, tr.Reason)
+				}
+				t.Logf("seed %d: %s", seed, tr.Reason)
+				return
 			}
-			t.Logf("seed %d: %s", seed, tr.Reason)
-			continue
-		}
-		e, _ := m.Analytic()
-		meanLo, meanHi := curveMean(tr.Total.Lower, tr.H), curveMean(tr.Total.Upper, tr.H)
-		if meanLo > e.Mean || meanHi < e.Mean {
-			t.Errorf("seed %d: curve means %g %g do not bracket %g", seed, meanLo, meanHi, e.Mean)
-		}
-		if math.Abs(tr.PZero-e.PZero()) > 1e-9 {
-			t.Errorf("seed %d: pzero %g exact %g", seed, tr.PZero, e.PZero())
-		}
-		_, r := run(t, g, variate.Config{Periods: h, Series: true}, seed)
-		totals := r.Series.TotalColumn(make([]float64, h))
-		checkBracketsSeries(t, "seed "+strconv.FormatUint(seed, 10), tr.Total, totals, 50, 5)
+			e, _ := m.Analytic()
+			meanLo, meanHi := curveMean(tr.Total.Lower, tr.H), curveMean(tr.Total.Upper, tr.H)
+			if meanLo > e.Mean || meanHi < e.Mean {
+				t.Errorf("seed %d: curve means %g %g do not bracket %g", seed, meanLo, meanHi, e.Mean)
+			}
+			if math.Abs(tr.PZero-e.PZero()) > 1e-9 {
+				t.Errorf("seed %d: pzero %g exact %g", seed, tr.PZero, e.PZero())
+			}
+			_, r := run(t, g, variate.Config{Periods: h, Series: true}, seed)
+			totals := r.Series.TotalColumn(make([]float64, h))
+			checkBracketsSeries(t, "seed "+strconv.FormatUint(seed, 10), tr.Total, totals, 50, 5)
+		})
 	}
 }
 
