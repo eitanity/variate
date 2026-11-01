@@ -3,9 +3,12 @@
 // written to the path given as the first argument (variate run -f
 // examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format
 // json --analytic --node-hist). The wasm report adds "histogram", "log_histogram"
-// and "warnings"; everything else must be identical.
+// and "warnings"; everything else must be identical. The sweep of the
+// same model through variateSweep must equal the native sweep JSON given
+// as the second argument (variate sweep -f examples/compound.yaml
+// --format json).
 //
-//   node web/smoke.js native.json
+//   node web/smoke.js native.json native-sweep.json
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -57,7 +60,10 @@ async function main() {
     delete report[k];
   }
   deepEqual(native, report, "report");
-  console.log(`wasm report matches the native CLI to ${TOLERANCE} relative, bounds to ${BOUND_TOLERANCE}; version ${variateVersion()}; ${report.periods} periods in ${Date.now() - t0} ms`);
+  const sweep = variateSweep(yaml, {});
+  if (sweep.error !== undefined) throw new Error(sweep.error);
+  deepEqual(JSON.parse(fs.readFileSync(process.argv[3], "utf8")), JSON.parse(sweep.ok), "sweep");
+  console.log(`wasm report and sweep match the native CLI to ${TOLERANCE} relative, bounds to ${BOUND_TOLERANCE}; version ${variateVersion()}; ${report.periods} periods in ${Date.now() - t0} ms`);
   process.exit(0);
 }
 

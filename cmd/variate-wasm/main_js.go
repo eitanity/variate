@@ -1,5 +1,5 @@
 // Command variate-wasm is the engine for the browser: it exposes run,
-// plan, version, histogram and release to JavaScript through syscall/js,
+// plan, sweep, version, histogram and release to JavaScript through syscall/js,
 // taking a model as YAML text and settings as JSON text, and returning
 // the report as JSON text. A run's workspace is kept until released so
 // the page can ask for its histogram again on other bands, to draw two
@@ -27,6 +27,7 @@ func main() {
 	s := &session{kept: map[int]keptRun{}, nextKeep: 1}
 	js.Global().Set("variateRun", js.FuncOf(s.run))
 	js.Global().Set("variatePlan", js.FuncOf(planFunc))
+	js.Global().Set("variateSweep", js.FuncOf(sweepFunc))
 	js.Global().Set("variateVersion", js.FuncOf(versionFunc))
 	js.Global().Set("variateHistogram", js.FuncOf(s.histogram))
 	js.Global().Set("variateQuantity", js.FuncOf(s.quantity))
@@ -145,6 +146,33 @@ func planFunc(_ js.Value, args []js.Value) any {
 		return result("", err)
 	}
 	return result(buf.String(), nil)
+}
+
+// sweepFunc sweeps the model's inputs for the mean and returns the
+// sweep JSON: every row exact, so it costs a compile per nudge and no
+// simulation. A model whose mean is not exact is refused rather than
+// simulated twice per input in the page.
+func sweepFunc(_ js.Value, args []js.Value) any {
+	m, err := load(args)
+	if err != nil {
+		return result("", err)
+	}
+	c, _, err := m.Graph.Compile(m.Config)
+	if err != nil {
+		return result("", err)
+	}
+	e, err := c.Analytic()
+	if err != nil {
+		return result("", err)
+	}
+	if math.IsNaN(e.Mean) || math.IsInf(e.Mean, 0) {
+		return result("", errors.New("the mean is not exact, so the sweep would simulate every nudge"))
+	}
+	sw, err := m.Graph.Sweep(context.Background(), variate.SweepConfig{Run: m.Config})
+	if err != nil {
+		return result("", err)
+	}
+	return result(string(report.SweepJSON(sw)), nil)
 }
 
 // run runs the model and returns the report JSON, extended with a
