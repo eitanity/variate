@@ -20,3 +20,4 @@ slot.go
 worker.go
 record.go
 stream.go
+dist/scaled.go
