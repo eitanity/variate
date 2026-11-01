@@ -114,26 +114,8 @@ type Compiled struct {
 // Compile validates the graph and flattens it; the warnings are the
 // non-fatal findings.
 func (g Graph) Compile(cfg Config) (*Compiled, []Warning, error) {
-	b := &builder{g: g, cfg: cfg, nodeIndex: map[string]int32{}}
-	if err := b.validate(); err != nil {
-		return nil, nil, err
-	}
-	m, err := b.flatten()
+	m, b, warnings, err := g.flattenChecked(cfg)
 	if err != nil {
-		return nil, nil, err
-	}
-	m.cfg = cfg
-	if err := reachCap(g.ID, len(m.srcs), len(m.nodes)); err != nil {
-		return nil, nil, err
-	}
-	m.reach = m.reachTable()
-	if err := m.outageHolds(); err != nil {
-		return nil, nil, err
-	}
-	warnings := b.warnings
-	warnings = append(warnings, m.unreachableWarnings()...)
-	warnings = append(warnings, m.workWarning())
-	if err := m.setSpill(cfg.Spill, &warnings); err != nil {
 		return nil, nil, err
 	}
 	e, err := m.Analytic()
@@ -155,6 +137,34 @@ func (g Graph) Compile(cfg Config) (*Compiled, []Warning, error) {
 		}
 	}
 	return m, warnings, nil
+}
+
+// flattenChecked validates and flattens the graph and builds its reach
+// tables: the model as far as its means need it.
+func (g Graph) flattenChecked(cfg Config) (*Compiled, *builder, []Warning, error) {
+	b := &builder{g: g, cfg: cfg, nodeIndex: map[string]int32{}}
+	if err := b.validate(); err != nil {
+		return nil, nil, nil, err
+	}
+	m, err := b.flatten()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	m.cfg = cfg
+	if err := reachCap(g.ID, len(m.srcs), len(m.nodes)); err != nil {
+		return nil, nil, nil, err
+	}
+	m.reach = m.reachTable()
+	if err := m.outageHolds(); err != nil {
+		return nil, nil, nil, err
+	}
+	warnings := b.warnings
+	warnings = append(warnings, m.unreachableWarnings()...)
+	warnings = append(warnings, m.workWarning())
+	if err := m.setSpill(cfg.Spill, &warnings); err != nil {
+		return nil, nil, nil, err
+	}
+	return m, b, warnings, nil
 }
 
 // reachCap refuses a model whose reach tables, sources × nodes, would

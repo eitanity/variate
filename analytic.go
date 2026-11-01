@@ -157,13 +157,26 @@ func rateSecond(rho2, tau2 float64) float64 {
 
 // Analytic computes the exact expectations of the model.
 func (m *Compiled) Analytic() (*Expectation, error) {
-	e := &Expectation{Reach: m.reach}
+	e, lam, m1, m2 := m.means()
+	e.Var = m.variance(valueFilter{kind: filterAll}, lam, m1, m2, e.Mean)
+	d1, d2 := m.valueToGo(valueFilter{kind: filterDraws})
+	e.DrawsVar = m.variance(valueFilter{kind: filterDraws}, lam, d1, d2, e.DrawsMean)
+	m.breakdownVariances(e, lam, m1, m2)
+	e.pzero = m.zeroProbability()
+	return e, nil
+}
+
+// means computes the expectations' means, rates and reach, and returns
+// with them the count means and the values to go that the variances
+// start from.
+func (m *Compiled) means() (e *Expectation, lam, m1, m2 []float64) {
+	e = &Expectation{Reach: m.reach}
 	e.EntriesPer = make([]float64, len(m.nodes))
 	e.OutcomeRate = make([]float64, len(m.outs))
 	e.Terminal = make([][]float64, len(m.srcs))
 	e.MeanBySource = make([]float64, len(m.srcs))
-	lam := make([]float64, len(m.srcs))
-	m1, m2 := m.valueToGo(valueFilter{kind: filterAll})
+	lam = make([]float64, len(m.srcs))
+	m1, m2 = m.valueToGo(valueFilter{kind: filterAll})
 	for k, s := range m.srcs {
 		lam[k] = m.countMean[k]
 		e.RoundsPerPeriod += lam[k]
@@ -194,12 +207,7 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 		}
 	}
 	e.DrawsMean = m.meanUnder(valueFilter{kind: filterDraws}, e.EntriesPer)
-	e.Var = m.variance(valueFilter{kind: filterAll}, lam, m1, m2, e.Mean)
-	d1, d2 := m.valueToGo(valueFilter{kind: filterDraws})
-	e.DrawsVar = m.variance(valueFilter{kind: filterDraws}, lam, d1, d2, e.DrawsMean)
-	m.breakdownVariances(e, lam, m1, m2)
-	e.pzero = m.zeroProbability()
-	return e, nil
+	return e, lam, m1, m2
 }
 
 // PZero is the exact probability of a zero period total; NaN with a
