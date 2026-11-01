@@ -4,7 +4,7 @@
 GOLANGCI_LINT_VERSION := v2.14.0
 GOIMPORTS_VERSION     := v0.52.0
 GOVULNCHECK_VERSION   := latest
-TINYGO_VERSION        := 0.42.0
+TINYGO_VERSION        := 0.44.0
 BIN                   := $(abspath bin)
 PKGS                  := ./...
 HOTPATH               := internal/lint/hotpath.txt

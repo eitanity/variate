@@ -39,7 +39,7 @@ jobs:
           node-version: "24"
       - name: Install TinyGo
         run: |
-          curl -fsSLo tinygo.deb https://github.com/tinygo-org/tinygo/releases/download/v0.42.0/tinygo_0.42.0_amd64.deb
+          curl -fsSLo tinygo.deb https://github.com/tinygo-org/tinygo/releases/download/v0.44.0/tinygo_0.44.0_amd64.deb
           sudo dpkg -i tinygo.deb
       - name: Build the wasm engine
         run: make wasm
