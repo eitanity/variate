@@ -37,9 +37,14 @@ type options struct {
 	watch      string
 	leaf       string
 	minValue   float64
+	// sweep
+	figure string
+	delta  float64
+	inputs string
+	top    int
 }
 
-// parseFlags reads the flags of plan, run and stream.
+// parseFlags reads the flags of plan, run, stream and sweep.
 func parseFlags(name string, args []string, stderr io.Writer) (*options, error) {
 	fs := flag.NewFlagSet("variate "+name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -65,6 +70,9 @@ func parseFlags(name string, args []string, stderr io.Writer) (*options, error) 
 	fs.StringVar(&o.watch, "watch", "", "deliver rounds reaching any of these nodes (comma-separated)")
 	fs.StringVar(&o.leaf, "leaf", "", "deliver rounds ending at any of these leaves")
 	fs.Float64Var(&o.minValue, "min-value", 0, "deliver rounds booking at least this value")
+	if name == "sweep" {
+		o.sweepFlags(fs)
+	}
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("flags: %w", err)
 	}
@@ -97,6 +105,14 @@ func parseFlags(name string, args []string, stderr io.Writer) (*options, error) 
 		return nil, errors.New("--rounds must be jsonl, csv or bin")
 	}
 	return o, nil
+}
+
+// sweepFlags adds the flags of sweep.
+func (o *options) sweepFlags(fs *flag.FlagSet) {
+	fs.StringVar(&o.figure, "figure", "mean", "mean, p<percent>, rp:<periods>, pzero, layer:<id>, category:<name> or source:<id>")
+	fs.Float64Var(&o.delta, "delta", 0.1, "each input is multiplied by 1 − delta and 1 + delta")
+	fs.StringVar(&o.inputs, "inputs", "", "sweep only these inputs, by name, kind or leading words (comma-separated)")
+	fs.IntVar(&o.top, "top", 0, "keep the inputs with the largest exact-mean swings")
 }
 
 // apply loads the model and lays the flags over its settings.

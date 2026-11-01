@@ -138,3 +138,8 @@ func (s *Series) EntriesColumn(v int, dst []float64) []float64 {
 func (s *Series) CategoryColumn(c int, dst []float64) []float64 {
 	return s.column(s.l.cat(index(c)), dst)
 }
+
+// SourceColumn copies source k's values into dst.
+func (s *Series) SourceColumn(k int, dst []float64) []float64 {
+	return s.column(s.l.src(index(k)), dst)
+}

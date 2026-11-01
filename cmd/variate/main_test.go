@@ -301,3 +301,46 @@ func TestPlanJSONAndSeries(t *testing.T) {
 		t.Errorf("series columns %v", len(run.Series["total"]))
 	}
 }
+
+// TestSweep: the sweep command writes the tornado table, JSON whose
+// rows are the library's, and CSV with a row per input; a bad figure
+// fails.
+func TestSweep(t *testing.T) {
+	out, errOut, code := invoke(t, "sweep", "-f", model)
+	if code != 0 || !strings.Contains(out, "sweep of mean") || !strings.Contains(out, "exact") || !strings.Contains(errOut, "inputs × 2 nudges") {
+		t.Fatalf("table: %d %s %s", code, out, errOut)
+	}
+	m, err := config.Load(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := m.Graph.Sweep(t.Context(), variate.SweepConfig{Run: m.Config})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _, code = invoke(t, "sweep", "-f", model, "--format", "json", "--top", "2")
+	var got struct {
+		Figure string
+		Rows   []struct {
+			Input, Kind, Method string
+			Up                  struct{ Lo, Hi float64 }
+			Swing               float64
+		}
+	}
+	if code != 0 || json.Unmarshal([]byte(out), &got) != nil || got.Figure != "mean" || len(got.Rows) != 2 {
+		t.Fatalf("json: %d %s", code, out)
+	}
+	for i, r := range got.Rows {
+		if w := want.Rows[i]; r.Input != w.Input.Name || r.Kind != w.Input.Kind || r.Up.Lo != w.Up.Lo || r.Swing != w.Swing {
+			t.Errorf("row %d: %+v, want %+v", i, r, w)
+		}
+	}
+	out, _, code = invoke(t, "sweep", "-f", model, "--format", "csv", "--delta", "0.2")
+	rows, err := csv.NewReader(strings.NewReader(out)).ReadAll()
+	if code != 0 || err != nil || len(rows) != len(want.Rows)+1 || rows[0][0] != "input" {
+		t.Errorf("csv: %d %v %q", code, err, out)
+	}
+	if _, errOut, code := invoke(t, "sweep", "-f", model, "--figure", "median"); code != 1 || !strings.Contains(errOut, "figure median") {
+		t.Errorf("bad figure: %d %q", code, errOut)
+	}
+}

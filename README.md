@@ -45,11 +45,20 @@ risks, a plant as a block diagram, and a shift with its own period.
     go run ./cmd/variate run -f examples/compound.yaml --analytic   # with the exact distribution
     go run ./cmd/variate plan -f examples/compound.yaml         # the convergence plan and work
     go run ./cmd/variate stream -f examples/sequential.yaml --leaf undetected --rounds csv
+    go run ./cmd/variate sweep -f examples/pump_station.yaml --figure p99 --top 5
 
 `run` reports a table, JSON or CSV; `plan` says how many periods each
 convergence criterion needs and what the run will cost; `stream`
 writes the rounds, the path each event takes with the values it
-books, filtered to a node or a leaf. A run without a period count
+books, filtered to a node or a leaf; `sweep` multiplies each input,
+every frequency, value, probability, holding time, factor and schedule,
+by 0.9 and by 1.1 and ranks the inputs by how far they move a figure:
+the mean, a quantile, a return period's loss, P(T = 0), or a layer's,
+category's or source's mean. Its rows are exact where the analytic
+means give the figure, brackets where the exact distribution applies,
+and otherwise simulated at one seed, the nudged models drawing from
+the base model's random streams so that each difference's standard
+error is measured on paired blocks. A run without a period count
 continues until every criterion is met: enough hits on every outcome,
 a small enough error on every mean, enough periods in the tail. The
 same model, seed and block size repeat a run exactly.
@@ -63,7 +72,8 @@ exceedance curve of the total or of any category, source or node, with
 return periods and the exact bounds when asked for; the sources'
 contributions and who the tail belongs to beyond a return period; a
 source's events per period against a Poisson reference; the totals
-over the run; and the compiled graph as a flow diagram. A run can be
+over the run; the inputs that move the mean most, as a tornado chart;
+and the compiled graph as a flow diagram. A run can be
 pinned as a baseline and the next drawn beside it, for
 cheaper-and-slower against faster-and-dearer. The page lives under
 `web/`; `cmd/variate-wasm` is the engine's browser entry point.
@@ -76,8 +86,8 @@ a YAML file and the report returning as JSON. The engine runs as a
 separate program, so a notebook, a library or a product built on the
 package takes on none of the engine's obligations; embedding the engine
 itself is what this repository's licence and its commercial licences
-cover. `variate plan --format json` and the series in the JSON report
-exist for it.
+cover. `variate plan --format json`, `variate sweep --format json` and
+the series in the JSON report exist for it.
 
 ## Building and testing
 

@@ -1,6 +1,7 @@
 // Command variate is the generic command-line interface: it loads a
 // model file, sizes or runs it, and reports the results as a table,
-// JSON or CSV, with the rounds streamed on request.
+// JSON or CSV, with the rounds streamed on request; or sweeps its inputs
+// for the figure each moves most.
 package main
 
 import (
@@ -19,6 +20,9 @@ const usage = `usage:
   variate stream -f model.yaml [run flags] [--watch NODE,...] [--leaf LEAF,...]
                  [--min-value X] [--pace DURATION] [--round-scratch N]
                  [--rounds jsonl|csv|bin] [--rounds-out FILE]
+  variate sweep  -f model.yaml [settings] [-n PERIODS] [--figure mean]
+                 [--delta 0.1] [--inputs NAME,...] [--top K]
+                 [--format table|json|csv] [--out FILE]
 
 Every run setting of the model file has a flag of the same name in
 kebab-case (--min-hits, --target-rse, --tail, --max-periods, ...), and
@@ -44,6 +48,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = runModel(args[1:], stdout, stderr, false)
 	case "stream":
 		err = runModel(args[1:], stdout, stderr, true)
+	case "sweep":
+		err = sweep(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		_, err = io.WriteString(stdout, usage+"\n")
 	default:
