@@ -169,17 +169,21 @@ func TestChainValidation(t *testing.T) {
 // TestOutageHolding: a per-time cost over the outage of the block that
 // fired the round books, per period, exactly the block's unavailability
 // times the rate; the exact mean says so and the simulation agrees,
-// whether the outage lands inside a period or runs past its end.
+// whether the outage lands inside a period, runs past its end, or runs
+// on for several periods. The failures come at the stationary rate, so
+// no period simulates again the time an outage has already run through.
 func TestOutageHolding(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		chains []variate.Chain
+		spill  int
 	}{
-		{"one unit, down as long as up", []variate.Chain{{K: 1, N: 1, Fail: 10, Repair: 10}}},
-		{"one of two", []variate.Chain{{K: 1, N: 2, Fail: 3, Repair: 6}}},
-		{"series", []variate.Chain{{K: 1, N: 2, Fail: 3, Repair: 40}, {K: 1, N: 1, Fail: 1, Repair: 5}}},
+		{"one unit, down as long as up", []variate.Chain{{K: 1, N: 1, Fail: 10, Repair: 10}}, 0},
+		{"one of two", []variate.Chain{{K: 1, N: 2, Fail: 3, Repair: 6}}, 0},
+		{"series", []variate.Chain{{K: 1, N: 2, Fail: 3, Repair: 40}, {K: 1, N: 1, Fail: 1, Repair: 5}}, 0},
+		{"one unit, down five periods", []variate.Chain{{K: 1, N: 1, Fail: 0.5, Repair: 0.2}}, 200},
 	} {
-		_, u := variate.ChainFigures(tc.chains)
+		f, u := variate.ChainFigures(tc.chains)
 		g := variate.Graph{
 			Sources: []variate.Source{{ID: "s", To: "outage", Chains: tc.chains}},
 			Nodes: []variate.Node{
@@ -189,7 +193,7 @@ func TestOutageHolding(t *testing.T) {
 			},
 		}
 		for _, block := range []int{1, 0} {
-			c, r := run(t, g, variate.Config{Periods: 100000, Workers: 4, BlockPeriods: block}, 13)
+			c, r := run(t, g, variate.Config{Periods: 100000, Workers: 4, BlockPeriods: block, Spill: tc.spill}, 13)
 			e, _ := c.Analytic()
 			if math.Abs(e.Mean-u) > 1e-9*u {
 				t.Errorf("%s: exact mean %g, want the unavailability %g", tc.name, e.Mean, u)
@@ -197,6 +201,11 @@ func TestOutageHolding(t *testing.T) {
 			se := r.Total.StdErr(true)
 			if z := (r.Total.Mean() - u) / se; math.Abs(z) > 5 || math.IsNaN(z) {
 				t.Errorf("%s, block %d: booked %g ± %g per period, want %g: z %g", tc.name, block, r.Total.Mean(), se, u, z)
+			}
+			// The failures are at most Poisson-dispersed: one per outage.
+			rate := float64(r.Events[0]) / float64(r.Periods)
+			if z := (rate - f) / math.Sqrt(f/float64(r.Periods)); math.Abs(z) > 5 {
+				t.Errorf("%s, block %d: %g failures per period, want %g: z %g", tc.name, block, rate, f, z)
 			}
 		}
 	}

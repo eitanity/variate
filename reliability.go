@@ -103,14 +103,14 @@ func (w *Workspace) startChains(wk *worker, src csrc) {
 // units are needed and never otherwise. When the system goes down the
 // chains are run on until it is up again, so the round carries its
 // outage for a holding that asks for it, and the period resumes from
-// there; a look-ahead past the period's end is where the next period
-// starts.
+// there; a look-ahead past the period's end is where the period it ends
+// in resumes.
 func (w *Workspace) runChainSource(wk *worker, sl *slot, k int32, p, first int64) {
 	m := w.m
 	src := m.srcs[k]
 	end := float64(p) + 1
 	t := math.Max(float64(p), wk.chainT[k])
-	wk.chainT[k] = end
+	wk.chainT[k] = math.Max(end, t)
 	up := w.chainsUp(wk, src)
 	drawn := 0
 	// bound: the period's unit events, a Poisson count at the total rate, capped
