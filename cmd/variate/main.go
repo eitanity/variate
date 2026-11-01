@@ -26,8 +26,8 @@ const usage = `usage:
 
 Every run setting of the model file has a flag of the same name in
 kebab-case (--min-hits, --target-rse, --tail, --max-periods, ...), and
-flags override the file. A seed of 0 picks a random seed, which is
-printed. Example models live under examples/`
+flags override the file. A seed of 0 (the default) picks a random
+seed, which the report gives. Example models live under examples/`
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))

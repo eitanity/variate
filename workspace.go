@@ -529,8 +529,10 @@ func (w *Workspace) Means() []float64 { return w.means }
 var _ = math.Inf
 
 // Simulate is the one-shot form: a workspace for cfg, one run with
-// cfg.Seed, and the workspace closed. The Result stays valid.
+// cfg.Seed, or a random seed when that is 0, and the workspace closed.
+// The Result stays valid and records the seed.
 func (m *Compiled) Simulate(ctx context.Context, cfg Config) (*Result, error) {
+	cfg.PickSeed()
 	w, err := m.NewWorkspace(cfg)
 	if err != nil {
 		return nil, err

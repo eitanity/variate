@@ -60,6 +60,7 @@ func runModel(args []string, stdout, stderr io.Writer, stream bool) error {
 	if err != nil {
 		return err
 	}
+	m.Config.PickSeed()
 	c, warnings, err := m.Graph.Compile(m.Config)
 	if err != nil {
 		return fmt.Errorf("compile: %w", err)

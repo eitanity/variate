@@ -6,7 +6,7 @@
 // and "warnings"; everything else must be identical. The sweep of the
 // same model through variateSweep must equal the native sweep JSON given
 // as the second argument (variate sweep -f examples/compound.yaml
-// --screen 0.1 --format json: the model gives no input a range, so the
+// --screen 0.1 --seed 1 --format json: the model gives no input a range, so the
 // page screens it).
 //
 //   node web/smoke.js native.json native-sweep.json
@@ -61,7 +61,7 @@ async function main() {
     delete report[k];
   }
   deepEqual(native, report, "report");
-  const sweep = variateSweep(yaml, {});
+  const sweep = variateSweep(yaml, { seed: "1" });
   if (sweep.error !== undefined) throw new Error(sweep.error);
   deepEqual(JSON.parse(fs.readFileSync(process.argv[3], "utf8")), JSON.parse(sweep.ok), "sweep");
   console.log(`wasm report and sweep match the native CLI to ${TOLERANCE} relative, bounds to ${BOUND_TOLERANCE}; version ${variateVersion()}; ${report.periods} periods in ${Date.now() - t0} ms`);

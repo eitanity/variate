@@ -23,6 +23,7 @@ func sweep(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	m.Config.PickSeed()
 	_, warnings, err := m.Graph.Compile(m.Config)
 	if err != nil {
 		return fmt.Errorf("compile: %w", err)

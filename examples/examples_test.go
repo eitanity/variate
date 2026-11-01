@@ -35,6 +35,7 @@ func TestExamplesRun(t *testing.T) {
 		}
 		ex, _ := c.Analytic()
 		m.Config.Periods = max(5000, int64(2000/ex.RoundsPerPeriod))
+		m.Config.Seed = max(m.Config.Seed, 1)
 		r, err := c.Simulate(context.Background(), m.Config)
 		if err != nil {
 			t.Fatalf("%s: run: %v", e.Name(), err)

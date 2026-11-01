@@ -158,6 +158,7 @@ func sweepFunc(_ js.Value, args []js.Value) any {
 	if err != nil {
 		return result("", err)
 	}
+	m.Config.PickSeed()
 	c, _, err := m.Graph.Compile(m.Config)
 	if err != nil {
 		return result("", err)
@@ -194,6 +195,7 @@ func (s *session) run(_ js.Value, args []js.Value) any {
 	if err != nil {
 		return result("", err)
 	}
+	m.Config.PickSeed()
 	c, warnings, err := m.Graph.Compile(m.Config)
 	if err != nil {
 		return result("", err)

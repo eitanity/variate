@@ -334,7 +334,7 @@ flag wins.
 | setting | meaning |
 |---|---|
 | `periods` | run exactly this many periods. Omitted: the plan decides, running until every criterion below is met. |
-| `seed` | the random seed; 0 means a fresh seed each run. The same seed, model and `block_periods` repeat a run exactly. |
+| `seed` | the random seed; 0, the default, draws a fresh seed each run, which the report gives. The same seed, model and `block_periods` repeat a run exactly. |
 | `workers` | simulation threads; default all cores. |
 | `min_hits` | events every reachable outcome must see (default 1000). |
 | `contrib_rse`, `target_rse` | relative standard error asked of each node's contribution and of each mean (default 1%). |

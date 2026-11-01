@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -101,6 +102,30 @@ type jsonStat struct {
 type prop struct {
 	P      float64 `json:"p"`
 	StdErr float64 `json:"stderr"`
+}
+
+// TestRandomSeed: a seed of 0 draws a fresh seed each run, the report
+// gives it, and running at that seed repeats the run.
+func TestRandomSeed(t *testing.T) {
+	runAt := func(args ...string) jsonSummary {
+		out, errOut, code := invoke(t, append([]string{"run", "-f", model, "-n", "200", "--format", "json"}, args...)...)
+		if code != 0 {
+			t.Fatalf("run failed: %s", errOut)
+		}
+		var got jsonSummary
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatalf("decode: %v\n%s", err, out)
+		}
+		return got
+	}
+	a, b := runAt(), runAt("--seed", "0")
+	if a.Seed == 0 || b.Seed == 0 || a.Seed == b.Seed {
+		t.Fatalf("seeds %d and %d: want two fresh nonzero seeds", a.Seed, b.Seed)
+	}
+	again := runAt("--seed", strconv.FormatUint(a.Seed, 10))
+	if again.Seed != a.Seed || again.Total.Mean != a.Total.Mean {
+		t.Fatalf("rerun at seed %d: mean %v, first run %v", a.Seed, again.Total.Mean, a.Total.Mean)
+	}
 }
 
 // TestRunJSON: the JSON report decodes and matches a direct run with the
