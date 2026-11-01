@@ -108,8 +108,8 @@ func (w *Workspace) startChains(wk *worker, src csrc) {
 func (w *Workspace) runChainSource(wk *worker, sl *slot, k int32, p, first int64) {
 	m := w.m
 	src := m.srcs[k]
-	end := float64(p) + 1
-	t := math.Max(float64(p), wk.chainT[k])
+	end := 1.0
+	t := math.Max(0, wk.chainT[k])
 	wk.chainT[k] = math.Max(end, t)
 	up := w.chainsUp(wk, src)
 	drawn := 0
@@ -150,9 +150,9 @@ func (w *Workspace) fireChain(wk *worker, sl *slot, k int32, src csrc, t float64
 	wk.outage = 0
 	resume := t
 	if !nowUp {
-		resume = w.lookAhead(wk, src, t, float64(p)+float64(w.s)+1)
+		resume = w.lookAhead(wk, src, t, float64(w.s)+1)
 		wk.outage = resume - t
-		if resume > float64(p)+1 {
+		if resume > 1 {
 			wk.chainT[k] = resume
 		}
 	}

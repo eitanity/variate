@@ -19,7 +19,7 @@ func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64, hs []*stats.LogHi
 		first = -int64(w.s)
 	}
 	if m.renewal {
-		w.startSources(wk, float64(first))
+		w.startSources(wk)
 	}
 	// bound: the block plus the burn-in
 	for p := first; p < sl.b && sl.err == nil; p++ {
@@ -62,12 +62,16 @@ func (w *Workspace) draw(wk *worker, pool int32) float64 {
 func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p, first int64) {
 	m := w.m
 	src := m.srcs[k]
+	// The times a source carries are from the period's start; they move
+	// to the next period's start by one exact subtraction.
 	if src.chainEnd > src.chainStart {
 		w.runChainSource(wk, sl, k, p, first)
+		wk.chainT[k]--
 		return
 	}
 	if src.every > 1 || src.repair != noIndex {
 		w.runRenewalSource(wk, sl, k, p, first)
+		wk.downUntil[k]--
 		return
 	}
 	lam := wk.period[m.poolPeriod[src.pool]]
@@ -83,7 +87,7 @@ func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p, first int64) {
 	}
 	// bound: the Poisson count
 	for i := uint64(0); i < n && sl.err == nil; i++ {
-		t := arrivalTime(p, wk.ss.Control().Float64())
+		t := wk.ss.Control().Float64()
 		if w.stream {
 			w.beginRound(wk, t)
 		}
@@ -92,7 +96,9 @@ func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p, first int64) {
 }
 
 // walk follows one round from node v at time t to a leaf, booking as it
-// goes. The round's arrival period is p; counts are kept for p ≥ 0.
+// goes. The round's arrival period is p, and t is from its start, so a
+// time within a period keeps its resolution at any p; counts are kept
+// for p ≥ 0.
 func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p, first int64) {
 	m := w.m
 	nodes := len(m.nodes)
@@ -176,30 +182,18 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode) fl
 	return booked
 }
 
-// arrivalTime is the time of an arrival at fraction u of period p. At a
-// large period number p + u can round up to p + 1, outside the period,
-// so the time is kept below it.
-func arrivalTime(p int64, u float64) float64 {
-	t := float64(p) + u
-	if end := float64(p) + 1; t >= end {
-		return math.Nextafter(end, math.Inf(-1))
-	}
-	return t
-}
-
-// rowFor returns the window row for a booking at time t, or ok = false
-// after recording a window error: the booking lands more than S periods
-// after the arrival period.
+// rowFor returns the window row for a booking at time t from the start
+// of arrival period p, or ok = false after recording a window error: the
+// booking lands more than S periods after the arrival period.
 func (w *Workspace) rowFor(sl *slot, t float64, p int64, via int32) ([]float64, bool) {
-	limit := float64(p) + float64(w.s) + 1
-	if !(t < limit) {
+	if !(t < float64(w.s)+1) {
 		sl.err = w.windowError(p, t, via)
 		return nil, false
 	}
-	// The row of period q = ⌊t⌋ lies d = q − p rows past the period's own
-	// row in the ring; d is within [0, S] by the check above, so one
+	// The booking's period lies d = ⌊t⌋ rows past the arrival period's
+	// own row in the ring; d is within [0, S] by the check above, so one
 	// subtraction wraps it.
-	r := sl.base + int(int64(math.Floor(t))-p)
+	r := sl.base + int(math.Floor(t))
 	if r > w.s {
 		r -= w.s + 1
 	}

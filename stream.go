@@ -125,6 +125,14 @@ func (w *Workspace) deliver(sl *slot) (stop bool, err error) {
 // leaves the workspace usable.
 func (w *Workspace) observe(rec []byte) (stop bool, err error) {
 	getRound(rec, &w.round)
+	// The engine times a round from the start of its arrival period; the
+	// observer sees times from period zero.
+	base := float64(w.round.Period)
+	w.round.Arrival += base
+	w.round.End += base
+	for i := range w.round.Steps {
+		w.round.Steps[i].T += base
+	}
 	w.round.Seq = w.seq
 	w.seq++
 	if w.cfg.Pace > 0 {

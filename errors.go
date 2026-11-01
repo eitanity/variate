@@ -33,7 +33,7 @@ func index(n int) int32 {
 // Errors raised on the hot path are built here, off it.
 
 func (w *Workspace) windowError(p int64, t float64, via int32) error {
-	msg := "booking at period " + ftoa(math.Floor(t)) + " from an arrival in period " + ftoa(float64(p)) +
+	msg := "booking at period " + ftoa(float64(p)+math.Floor(t)) + " from an arrival in period " + ftoa(float64(p)) +
 		" is beyond the window S = " + itoa(w.s) + "; raise Spill or cap the holding time"
 	if via != noIndex {
 		msg = "outcome " + w.m.outcomeNames[via] + ": " + msg

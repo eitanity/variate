@@ -20,11 +20,11 @@ type worker struct {
 	ss     *dist.SamplerSet
 	period []float64
 	// Renewal source state, carried within a block: the Erlang phase and
-	// the time a repair ends.
+	// the time a repair ends, from the start of the current period.
 	phase     []int32
 	downUntil []float64
 	failed    []int32             // per chain, the units down
-	chainT    []float64           // per source, the time its chains are simulated to
+	chainT    []float64           // per source, the time its chains are simulated to, from the period's start
 	outage    float64             // the current round's outage, when its block fired it
 	hists     [2][]*stats.LogHist // by batch parity
 	// Round stream scratch: the round being walked, the period's matching

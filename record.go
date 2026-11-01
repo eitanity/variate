@@ -8,7 +8,8 @@ import (
 // Record layout: a 56-byte header followed by 24 bytes per step. The
 // header holds Seq, Period, Source, Arrival, End, Leaf, Value (48 bytes),
 // a uint32 step count and 4 bytes of padding. Steps hold Node, Outcome,
-// T and Value. All little-endian.
+// T and Value. All little-endian. The engine's own records time a round
+// from the start of its Period; it adds the Period before delivery.
 const (
 	recordHeader = 56
 	recordStep   = 24

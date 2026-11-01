@@ -258,18 +258,18 @@ func polyAt(p []float64, z complex128) complex128 {
 // block's start, from the control stream: the Erlang phase uniform over
 // its positions; the repair law down with the stationary probability,
 // for the equilibrium residual of its repair time.
-func (w *Workspace) startSources(wk *worker, start float64) {
+func (w *Workspace) startSources(wk *worker) {
 	m := w.m
 	for k, s := range m.srcs {
 		switch {
 		case s.chainEnd > s.chainStart:
 			w.startChains(wk, s)
-			wk.chainT[k] = start
+			wk.chainT[k] = 0
 		case s.repair != noIndex:
 			wk.downUntil[k] = math.Inf(-1)
 			lam, h := m.poolMean[s.pool], m.poolMean[s.repair]
 			if lam > 0 && h > 0 && wk.ss.Control().Float64() < h/(1/lam+h) {
-				wk.downUntil[k] = start + w.residual(wk, s.repair)
+				wk.downUntil[k] = w.residual(wk, s.repair)
 			}
 		case s.every > 1:
 			wk.phase[k] = int32(wk.ss.Control().Float64() * float64(s.every))
@@ -312,10 +312,10 @@ func (w *Workspace) runRenewalSource(wk *worker, sl *slot, k int32, p, first int
 	if !(lam > 0) {
 		return
 	}
-	end := float64(p) + 1
+	end := 1.0
 	drawn := 0
 	// bound: the period's underlying arrivals, a Poisson count, capped
-	for t := float64(p) + wk.ss.Control().ExpFloat64()/lam; t < end && sl.err == nil; t += wk.ss.Control().ExpFloat64() / lam {
+	for t := wk.ss.Control().ExpFloat64() / lam; t < end && sl.err == nil; t += wk.ss.Control().ExpFloat64() / lam {
 		if drawn++; drawn > maxEventsPeriod {
 			sl.err = eventsCapError(m.sourceIDs[k], p)
 			return
