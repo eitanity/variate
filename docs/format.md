@@ -196,8 +196,10 @@ schedule has its rate multiplied by the period's value. The series
 shows the cycle; the exact mean, variance, P(T = 0) and distribution
 treat the schedule as a multiplier seen equally often at each of its
 values, which is what a run over whole cycles sees, so they describe a
-period taken at random from the cycle. Two sources on the same
-schedule rise and fall together, and the variance carries that.
+period taken at random from the cycle. Every schedule steps with the
+same period, so the schedules move together: those figures take them
+jointly over their combined cycle, and two schedules peaking in the
+same season raise the variance where opposite seasons lower it.
 
 ```yaml
 period: { days: 30 }

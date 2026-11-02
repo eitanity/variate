@@ -239,6 +239,9 @@ func (t *transformer) applicable() string {
 	if m.hasRepair {
 		return "the model has a source with repair or a reliability diagram"
 	}
+	if m.cycle.over {
+		return "the schedules' combined cycle is longer than " + itoa(maxJointPeriods) + " periods or has more than " + itoa(maxJointPoints) + " distinct places"
+	}
 	scoped := 0
 	for k, slot := range m.poolPeriod {
 		if slot == noIndex || t.isFrequency(index(k)) {

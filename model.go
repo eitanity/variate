@@ -82,8 +82,9 @@ type Source struct {
 // Schedule is a cycle of multipliers on rates: period p uses the value
 // at p modulo the cycle's length, so a rate can follow a season or a
 // shift pattern. Over whole cycles every value is seen equally often,
-// so the analytics treat the schedule as a multiplier drawn uniformly
-// from its values.
+// and every schedule steps with the same period, so the analytics take
+// the schedules jointly over their combined cycle: a period drawn
+// uniformly from it.
 type Schedule struct {
 	ID     string
 	Values []float64   // finite, not negative

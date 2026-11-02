@@ -75,13 +75,11 @@ func TestPhaseExact(t *testing.T) {
 	}
 }
 
-// TestPhaseTotalVariance: with one schedule the phases' variances and
-// means give the unphased variance by the law of total variance, and
-// their P(T = 0) average to the unphased one.
+// TestPhaseTotalVariance: the phases' variances and means give the
+// unphased variance by the law of total variance, and their P(T = 0)
+// average to the unphased one: the two schedules move together.
 func TestPhaseTotalVariance(t *testing.T) {
 	g := seasonal(t)
-	g.Schedules = g.Schedules[:1]
-	g.Sources[1].Schedule = ""
 	c, _, err := g.Compile(variate.Config{})
 	if err != nil {
 		t.Fatal(err)

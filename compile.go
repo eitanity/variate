@@ -95,6 +95,8 @@ type Compiled struct {
 	chains                                       []Chain     // every source's chains, in source order
 	layers                                       []Layer     // the model's layers, defaults filled
 	schedules                                    []schedule  // the model's schedules, with their pools
+	cycle                                        jointCycle  // the schedules' values over their combined cycle
+	scheduleRatio                                [][]float64 // [schedule][schedule]: E[a·b]/(E[a]·E[b]) over the combined cycle
 	countMean, countN2, countTail                []float64   // per source: E[N], E[N(N−1)], truncated mass of the Erlang law
 	countPMF                                     [][]float64 // per source: the Erlang law's mass function, or nil
 	cfg                                          Config

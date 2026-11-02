@@ -16,8 +16,10 @@ func (b *builder) flatten() (*Compiled, error) {
 	}
 	for _, sc := range b.g.Schedules {
 		// Over whole cycles every value is seen equally often: the pool's
-		// law is the uniform categorical over the values; the walk sets
-		// the period's value by its place in the cycle instead of drawing.
+		// law is the uniform categorical over the values, its moments
+		// those of one schedule alone; the walk sets the period's value by
+		// its place in the cycle instead of drawing, and the mixtures take
+		// the schedules jointly, by the combined cycle.
 		probs := make([]float64, len(sc.Values))
 		for i := range probs {
 			probs[i] = 1 / float64(len(probs))
@@ -28,6 +30,8 @@ func (b *builder) flatten() (*Compiled, error) {
 		}
 		m.schedules = append(m.schedules, schedule{pool: m.addPool(d, PerPeriod), values: sc.Values})
 	}
+	m.cycle = newJointCycle(m.schedules)
+	m.scheduleRatio = scheduleRatios(m.schedules)
 	if err := b.flattenSources(m, factorPool); err != nil {
 		return nil, err
 	}

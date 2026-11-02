@@ -29,8 +29,9 @@ const (
 // its mixture is taken over.
 type thetaQuantity struct {
 	pool   int32
-	fn     int32 // the function for a value; noIndex for a probability or a factor
-	factor bool  // a shared factor on rates, which sits on no node
+	fn     int32       // the function for a value; noIndex for a probability or a factor
+	factor bool        // a shared factor on rates, or the schedules, which sit on no node
+	cycle  *jointCycle // the schedules' joint cycle, its nodes the indices of its points; nil otherwise
 	nodes  []float64
 	weight []float64
 }
@@ -58,13 +59,16 @@ func (m *Compiled) periodQuantities() []thetaQuantity {
 		}
 	}
 	seen := map[int32]bool{}
+	scheduled := false
 	for _, s := range m.srcs {
-		for _, pool := range [2]int32{s.factor, s.schedule} {
-			if pool != noIndex && !seen[pool] {
-				seen[pool] = true
-				qs = append(qs, thetaQuantity{pool: pool, fn: noIndex, factor: true})
-			}
+		scheduled = scheduled || s.schedule != noIndex
+		if s.factor != noIndex && !seen[s.factor] {
+			seen[s.factor] = true
+			qs = append(qs, thetaQuantity{pool: s.factor, fn: noIndex, factor: true})
 		}
+	}
+	if scheduled {
+		qs = append(qs, m.cycle.quantity())
 	}
 	return qs
 }
@@ -80,6 +84,11 @@ func (m *Compiled) newThetaMix(qs []thetaQuantity) *thetaMix {
 // the product of many quantities' node counts would otherwise wrap and
 // pass under every cap.
 func (x *thetaMix) passes() int {
+	for _, q := range x.q {
+		if q.cycle != nil && q.cycle.over {
+			return passesCeiling
+		}
+	}
 	for _, q := range x.q {
 		if len(q.nodes) == 0 {
 			return 0
@@ -111,7 +120,7 @@ func (x *thetaMix) probabilities() int {
 func (x *thetaMix) setProbNodes(m *Compiled, n int) bool {
 	for i := range x.q {
 		q := &x.q[i]
-		if q.fn != noIndex {
+		if q.fn != noIndex || q.cycle != nil {
 			continue
 		}
 		q.nodes = make([]float64, n)
@@ -167,7 +176,7 @@ func (x *thetaMix) start() bool {
 			return false
 		}
 		x.idx[i] = 0
-		x.drawn[q.pool] = q.nodes[0]
+		x.set(i)
 	}
 	return true
 }
@@ -178,13 +187,26 @@ func (x *thetaMix) next() bool {
 		q := &x.q[i]
 		x.idx[i]++
 		if x.idx[i] < len(q.nodes) {
-			x.drawn[q.pool] = q.nodes[x.idx[i]]
+			x.set(i)
 			return true
 		}
 		x.idx[i] = 0
-		x.drawn[q.pool] = q.nodes[0]
+		x.set(i)
 	}
 	return false
+}
+
+// set draws quantity i at its current node: the joint cycle's point sets
+// every schedule at once.
+func (x *thetaMix) set(i int) {
+	q := &x.q[i]
+	if q.cycle == nil {
+		x.drawn[q.pool] = q.nodes[x.idx[i]]
+		return
+	}
+	for s, pool := range q.cycle.pools {
+		x.drawn[pool] = q.cycle.points[x.idx[i]][s]
+	}
 }
 
 // weight is the product of the current nodes' weights.
@@ -267,7 +289,7 @@ func (m *Compiled) zeroComponent(comp zeroComp, rules []quadRule, z []float64) f
 		return prev
 	}
 	for i := range mix.q {
-		if mix.q[i].fn == noIndex {
+		if mix.q[i].fn == noIndex && mix.q[i].cycle == nil {
 			mix.q[i].nodes = []float64{m.poolMean[mix.q[i].pool]}
 			mix.q[i].weight = []float64{1}
 		}
@@ -361,7 +383,8 @@ func (m *Compiled) quantitySources(q thetaQuantity) []int {
 	var out []int
 	v := m.quantityNode(q)
 	for k := range m.srcs {
-		if (q.factor && (m.srcs[k].factor == q.pool || m.srcs[k].schedule == q.pool)) || (!q.factor && m.reach[k][v] > 0) {
+		s := m.srcs[k]
+		if (q.cycle != nil && s.schedule != noIndex) || (q.factor && q.cycle == nil && s.factor == q.pool) || (!q.factor && m.reach[k][v] > 0) {
 			out = append(out, k)
 		}
 	}

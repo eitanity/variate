@@ -70,16 +70,17 @@ func (m *Compiled) countLaws() error {
 }
 
 // countPair is E[N_k N_l] for two different sources: the product of
-// their means, times E[M²]/E[M]² for each multiplier they share, a
-// factor or a schedule.
+// their means, times E[M²]/E[M]² for a factor they share, and for two
+// scheduled sources E[a·b]/(E[a]·E[b]) of their schedules over the
+// combined cycle, the schedules moving together period by period.
 func (m *Compiled) countPair(k, l int) float64 {
 	pair := m.countMean[k] * m.countMean[l]
-	shared := [2][2]int32{{m.srcs[k].factor, m.srcs[l].factor}, {m.srcs[k].schedule, m.srcs[l].schedule}}
-	for _, pools := range shared {
-		if f := pools[0]; f != noIndex && f == pools[1] {
-			mean := m.poolMean[f]
-			pair *= (m.pools[f].Var() + mean*mean) / (mean * mean)
-		}
+	if f := m.srcs[k].factor; f != noIndex && f == m.srcs[l].factor {
+		mean := m.poolMean[f]
+		pair *= (m.pools[f].Var() + mean*mean) / (mean * mean)
+	}
+	if a, b := m.srcs[k].schedule, m.srcs[l].schedule; a != noIndex && b != noIndex {
+		pair *= m.scheduleRatio[m.scheduleIndex(a)][m.scheduleIndex(b)]
 	}
 	return pair
 }
