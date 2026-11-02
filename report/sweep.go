@@ -15,6 +15,9 @@ import (
 // high end, an exact or simulated figure as one number and a bracket as
 // [lo, hi], and a simulated difference's standard error beside it.
 func WriteSweepTable(w *bufio.Writer, sw *variate.Sweep) {
+	if t := PhaseText(sw.Phase); t != "" {
+		fmt.Fprintln(w, t)
+	}
 	if sw.Screen > 0 {
 		pct := strconv.FormatFloat(100*sw.Screen, 'g', -1, 64) + "%"
 		fmt.Fprintf(w, "screen of %s, each input × (1 ± %s)", sw.Figure, pct)
@@ -85,6 +88,7 @@ func SweepJSON(sw *variate.Sweep) []byte {
 func WriteSweepJSON(w *bufio.Writer, sw *variate.Sweep) {
 	j := &jw{w: w}
 	j.open('{')
+	j.phase(sw.Phase)
 	j.fieldStr("figure", sw.Figure)
 	j.field("screen", sw.Screen)
 	j.fieldUint("seed", sw.Seed)

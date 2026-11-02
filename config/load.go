@@ -32,6 +32,20 @@ type Model struct {
 	Config      variate.Config
 	PeriodHours float64
 	Blocks      []Block // the sources whose rates came from reliability blocks
+	Phase       int     // the phase of the schedules' cycle to run, from 1; 0 = the whole cycle
+}
+
+// ApplyPhase fixes the graph at the model's phase, if it names one.
+func (m *Model) ApplyPhase() error {
+	if m.Phase == 0 {
+		return nil
+	}
+	g, err := m.Graph.Phase(m.Phase)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+	m.Graph = g
+	return nil
 }
 
 // Load reads and parses a model file. Data files it names resolve
@@ -134,7 +148,7 @@ type loader struct {
 
 // topKeys are the keys allowed at the top level besides the settings.
 func topKeys() []string {
-	return append([]string{"period", "graphs", "templates", "factors", "schedules", "layers"}, settingKeys()...)
+	return append([]string{"period", "phase", "graphs", "templates", "factors", "schedules", "layers"}, settingKeys()...)
 }
 
 func (l *loader) load(root node) (*Model, error) {
@@ -318,7 +332,7 @@ func settingKeys() []string {
 		"pace", "round_scratch", "record_buffer"}
 }
 
-// settings fills Config from the top-level keys.
+// settings fills Config, and the phase, from the top-level keys.
 func (l *loader) settings(top map[string]node) error {
 	c := &l.model.Config
 	for _, key := range settingKeys() {
@@ -327,6 +341,12 @@ func (l *loader) settings(top map[string]node) error {
 			continue
 		}
 		if err := setSetting(c, key, v); err != nil {
+			return err
+		}
+	}
+	if p, ok := top["phase"]; ok {
+		var err error
+		if l.model.Phase, err = smallInt(p); err != nil {
 			return err
 		}
 	}

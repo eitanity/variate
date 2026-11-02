@@ -98,6 +98,7 @@ type Compiled struct {
 	countMean, countN2, countTail                []float64   // per source: E[N], E[N(N−1)], truncated mass of the Erlang law
 	countPMF                                     [][]float64 // per source: the Erlang law's mass function, or nil
 	cfg                                          Config
+	phase                                        Phase
 	crit                                         criteria
 	plan                                         []planRow
 	expect                                       *Expectation
@@ -151,6 +152,7 @@ func (g Graph) flattenChecked(cfg Config) (*Compiled, *builder, []Warning, error
 		return nil, nil, nil, err
 	}
 	m.cfg = cfg
+	m.phase = g.Phased
 	if err := reachCap(g.ID, len(m.srcs), len(m.nodes)); err != nil {
 		return nil, nil, nil, err
 	}

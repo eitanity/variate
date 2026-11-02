@@ -108,6 +108,7 @@ type Graph struct {
 	Factors         []Factor
 	Schedules       []Schedule
 	Layers          []Layer // functions of the period total reported beside it
+	Phased          Phase   // set by Phase: the place in the cycle every schedule is fixed at
 }
 
 // Config holds every run setting; each field's zero value selects the

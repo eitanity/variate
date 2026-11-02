@@ -183,6 +183,9 @@ func printWarnings(stderr io.Writer, warnings []variate.Warning) {
 // writePlan prints the sizing table and the expected work.
 func writePlan(w io.Writer, c *variate.Compiled, e *variate.Expectation, cfg variate.Config) {
 	rows := c.Plan()
+	if t := report.PhaseText(c.Phase()); t != "" {
+		fmt.Fprintln(w, t)
+	}
 	fmt.Fprintf(w, "%-12s %-32s %14s %14s\n", "criterion", "driver", "per period", "periods")
 	var need int64
 	binding := ""

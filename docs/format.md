@@ -27,6 +27,7 @@ the line.
 
 | key | meaning |
 |---|---|
+| `phase` | run one place in the schedules' cycle, counted from 1; 0 or omitted is the whole cycle (see rates that vary by period). |
 | `period` | the length of one period, as one of `{ hours: n }`, `{ days: n }`, `{ weeks: n }`. Needed when any distribution, holding time or block uses a time `unit`. |
 | `graphs` | a list of graphs; sources and nodes of every graph form one model. |
 | `templates` | reusable sub-graphs instanced inside graphs (below). |
@@ -210,6 +211,20 @@ graphs:
 
 A schedule's values are finite and not negative; a cycle of up to
 65536 values. A schedule with mean 1 leaves the mean rate unchanged.
+
+To ask about one place in the cycle instead, a January rather than a
+month at random, give the top-level `phase: i` (or `--phase i` on the
+command line, which overrides it): every schedule is fixed at its value
+for that place, counted from 1, so every period of the run is that
+phase and the exact figures and the distribution are those of one such
+period. With several schedules the cycle is the least common multiple
+of their lengths, and phase i takes each schedule's value for the
+periods at that place: schedules of 4 and 6 values make a cycle of 12,
+whose phase 8 takes the fourth value of the first and the second of the
+other. A phase outside 1 to the cycle's length is refused with the
+length, as is a phase of a model without schedules; 0, the default, is
+the whole cycle. Every report of a phased model starts with
+`phase i of n`.
 
 ## What the inputs could be: ranges
 

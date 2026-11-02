@@ -13,8 +13,8 @@ import (
 
 const usage = `usage:
   variate version
-  variate plan   -f model.yaml [settings] [--format table|json]
-  variate run    -f model.yaml [settings] [-n PERIODS [--series]] [--analytic]
+  variate plan   -f model.yaml [settings] [--phase I] [--format table|json]
+  variate run    -f model.yaml [settings] [--phase I] [-n PERIODS [--series]] [--analytic]
                  [--format table|json|csv] [--out FILE] [--exceedance FILE]
                  [--rounds jsonl|csv|bin --rounds-out FILE] [watch flags]
   variate stream -f model.yaml [run flags] [--watch NODE,...] [--leaf LEAF,...]

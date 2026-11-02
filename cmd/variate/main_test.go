@@ -377,3 +377,40 @@ func TestSweep(t *testing.T) {
 		t.Errorf("bad figure: %d %q", code, errOut)
 	}
 }
+
+// TestPhase: --phase, or the file's phase key, runs one phase of the
+// cycle and says so in every report; one outside the cycle names it.
+func TestPhase(t *testing.T) {
+	seasonal := filepath.Join("..", "..", "examples", "seasonal.yaml")
+	out, errOut, code := invoke(t, "run", "-f", seasonal, "-n", "200", "--seed", "1", "--phase", "8")
+	if code != 0 || !strings.HasPrefix(out, "phase 8 of 12") {
+		t.Fatalf("run: %d %s\n%s", code, errOut, out)
+	}
+	out, _, code = invoke(t, "run", "-f", seasonal, "-n", "200", "--seed", "1", "--phase", "8", "--format", "json")
+	var got struct {
+		Phase struct{ Index, Cycle int } `json:"phase"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); code != 0 || err != nil || got.Phase.Index != 8 || got.Phase.Cycle != 12 {
+		t.Fatalf("json: %d %v %+v", code, err, got)
+	}
+	if out, _, code = invoke(t, "plan", "-f", seasonal, "--phase", "1"); code != 0 || !strings.HasPrefix(out, "phase 1 of 12") {
+		t.Fatalf("plan: %s", out)
+	}
+	if _, errOut, code = invoke(t, "run", "-f", seasonal, "--phase", "13"); code != 1 || !strings.Contains(errOut, "1 to 12") {
+		t.Fatalf("phase 13: %s", errOut)
+	}
+	text, err := os.ReadFile(seasonal) //nolint:gosec // repository file
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "phased.yaml")
+	if err := os.WriteFile(file, append([]byte("phase: 3\n"), text...), 0o600); err != nil { //nolint:gosec // test temp dir
+		t.Fatal(err)
+	}
+	if out, _, code = invoke(t, "run", "-f", file, "-n", "200", "--seed", "1"); code != 0 || !strings.HasPrefix(out, "phase 3 of 12") {
+		t.Fatalf("file phase: %s", out)
+	}
+	if out, _, code = invoke(t, "run", "-f", file, "-n", "200", "--seed", "1", "--phase", "0"); code != 0 || strings.HasPrefix(out, "phase") {
+		t.Fatalf("--phase 0 over a file phase: %s", out)
+	}
+}

@@ -28,6 +28,8 @@ type options struct {
 	settings   map[string]string // settings given on the command line, by file key
 	periods    int64
 	hasPeriods bool
+	phase      int
+	hasPhase   bool
 	analytic   bool
 	format     string
 	out        string
@@ -61,6 +63,7 @@ func parseFlags(name string, args []string, stderr io.Writer) (*options, error) 
 		}
 	}
 	fs.Int64Var(&o.periods, "n", 0, "fixed run length in periods")
+	fs.IntVar(&o.phase, "phase", 0, "run one phase of the schedules' cycle, from 1; 0 = the whole cycle")
 	fs.BoolVar(&o.analytic, "analytic", false, "print the exact expectations and the transform")
 	fs.StringVar(&o.format, "format", formatTable, "table, json or csv")
 	fs.StringVar(&o.out, "out", "", "write the summary here")
@@ -90,21 +93,29 @@ func parseFlags(name string, args []string, stderr io.Writer) (*options, error) 
 		if b, ok := bools[key]; ok {
 			o.settings[key] = strconv.FormatBool(*b)
 		}
-		if f.Name == "n" {
+		switch f.Name {
+		case "n":
 			o.hasPeriods = true
+		case "phase":
+			o.hasPhase = true
 		}
 	})
+	return o, o.checkFormats()
+}
+
+// checkFormats checks the output formats named.
+func (o *options) checkFormats() error {
 	switch o.format {
 	case formatTable, formatJSON, formatCSV:
 	default:
-		return nil, errors.New("--format must be table, json or csv")
+		return errors.New("--format must be table, json or csv")
 	}
 	switch o.rounds {
 	case "", formatJSONL, formatCSV, formatBin:
 	default:
-		return nil, errors.New("--rounds must be jsonl, csv or bin")
+		return errors.New("--rounds must be jsonl, csv or bin")
 	}
-	return o, nil
+	return nil
 }
 
 // sweepFlags adds the flags of sweep.
@@ -139,6 +150,12 @@ func (o *options) apply() (*config.Model, error) {
 		m.Config.Transform = true
 	}
 	m.Config.Watch = variate.Watch{Nodes: splitList(o.watch), Leaves: splitList(o.leaf), MinValue: o.minValue}
+	if o.hasPhase {
+		m.Phase = o.phase
+	}
+	if err := m.ApplyPhase(); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 

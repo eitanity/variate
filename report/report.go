@@ -172,6 +172,7 @@ type BlockFigure struct {
 func PlanJSON(w *bufio.Writer, c *variate.Compiled, e *variate.Expectation, cfg variate.Config, warnings []variate.Warning, estimate string, blocks []BlockFigure) {
 	j := &jw{w: w}
 	j.open('{')
+	j.phase(c.Phase())
 	j.field("rounds_per_period", e.RoundsPerPeriod)
 	j.field("steps_per_period", e.StepsPerPeriod)
 	j.field("arrivals_per_period", e.ArrivalsPerPeriod)
@@ -236,6 +237,9 @@ func jsonHistogram(j *jw, key string, h *Histogram) {
 // WriteTable writes the human-readable report.
 func (rep *Report) WriteTable(w *bufio.Writer) {
 	r := rep.R
+	if t := PhaseText(rep.C.Phase()); t != "" {
+		fmt.Fprintln(w, t)
+	}
 	fmt.Fprintf(w, "seed %d  periods %d  converged %v  binding %s", r.Seed, r.Periods, r.Converged, r.Binding)
 	if r.Stopped {
 		fmt.Fprint(w, "  stopped")
@@ -526,6 +530,7 @@ func (rep *Report) WriteJSON(w *bufio.Writer) {
 	j := &jw{w: w}
 	r := rep.R
 	j.open('{')
+	j.phase(rep.C.Phase())
 	j.fieldUint("seed", r.Seed)
 	j.fieldInt("periods", r.Periods)
 	j.fieldBool("converged", r.Converged)
@@ -751,6 +756,9 @@ func csvNum(x float64) string { return strconv.FormatFloat(x, 'g', -1, 64) }
 // WriteCSV writes one row per quantity.
 func (rep *Report) WriteCSV(w *bufio.Writer) {
 	fmt.Fprintln(w, "quantity,name,n,mean,stderr,sd,min,max,p50,p90,p95,p99,p999,clipped,share")
+	if ph := rep.C.Phase(); ph.Index != 0 {
+		fmt.Fprintf(w, "phase,%d of %d,,,,,,,,,,,,,\n", ph.Index, ph.Cycle)
+	}
 	csvStat(w, "total", "", rep.Sum.Total)
 	for _, name := range sortedKeys(rep.Sum.ByCategory) {
 		csvStat(w, "category", name, rep.Sum.ByCategory[name])
@@ -835,4 +843,26 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// PhaseText heads a report of one phase, so that it cannot be taken for
+// the whole cycle; empty for a model over its whole cycle.
+func PhaseText(p variate.Phase) string {
+	if p.Index == 0 {
+		return ""
+	}
+	return fmt.Sprintf("phase %d of %d: every period is at this place in the cycle", p.Index, p.Cycle)
+}
+
+// phase writes the phase a model was fixed at, and nothing for a model
+// over its whole cycle.
+func (j *jw) phase(p variate.Phase) {
+	if p.Index == 0 {
+		return
+	}
+	j.key("phase")
+	j.open('{')
+	j.fieldInt("index", int64(p.Index))
+	j.fieldInt("cycle", int64(p.Cycle))
+	j.closeC('}')
 }

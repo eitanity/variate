@@ -78,6 +78,7 @@ type Sweep struct {
 	Screen  float64 // the screen's relative move; 0 when the inputs' ranges were swept
 	Seed    uint64
 	Periods int64 // of the simulated rows; 0 when there are none
+	Phase   Phase // the phase the graph was fixed at; Index 0 for the whole cycle
 	Rows    []SweepRow
 }
 
@@ -181,7 +182,7 @@ func (g Graph) Sweep(ctx context.Context, cfg SweepConfig) (*Sweep, error) {
 			return nil, err
 		}
 	}
-	out := &Sweep{Figure: cfg.Figure, Screen: cfg.Screen, Seed: cfg.Run.Seed}
+	out := &Sweep{Figure: cfg.Figure, Screen: cfg.Screen, Seed: cfg.Run.Seed, Phase: g.Phased}
 	if out.Figure == "" {
 		out.Figure = "mean"
 	}

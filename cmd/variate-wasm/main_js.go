@@ -102,10 +102,19 @@ func load(args []js.Value) (*config.Model, error) {
 		keys := js.Global().Get("Object").Call("keys", args[1])
 		for i := 0; i < keys.Length(); i++ {
 			key := keys.Index(i).String()
+			if key == "phase" {
+				if m.Phase, err = strconv.Atoi(args[1].Get(key).String()); err != nil {
+					return nil, errors.New("phase: not a whole number")
+				}
+				continue
+			}
 			if err := config.SetSetting(&m.Config, key, args[1].Get(key).String()); err != nil {
 				return nil, err
 			}
 		}
+	}
+	if err := m.ApplyPhase(); err != nil {
+		return nil, err
 	}
 	m.Config.Workers = 1
 	// The page draws any node's entry count, so the node histograms are
