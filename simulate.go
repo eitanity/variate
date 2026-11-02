@@ -294,10 +294,22 @@ func (w *Workspace) leavePeriod(sl *slot, p, first int64, hs []*stats.LogHist) {
 }
 
 // closeRow folds a finished period into the slot statistics and the
-// histograms, after checking that the breakdowns sum to the total.
+// histograms, after checking that the breakdowns sum to the total; with
+// the breakdowns off, only the total, the entries and the layers.
 func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHist) {
 	l := &w.l
 	total := row[l.total()]
+	if !w.m.crit.breakdown {
+		w.applyLayers(row, total)
+		w.fold(sl, row, 0, 1, hs)
+		w.fold(sl, row, l.entryAt, l.contribAt, hs)
+		w.fold(sl, row, l.layerAt, l.width, hs)
+		if w.m.tailX > 0 && total >= w.m.tailX {
+			sl.tail++
+		}
+		w.keepSeries(row, p)
+		return
+	}
 	var cats, srcs float64
 	// bound: row width
 	for c := 0; c < l.cats; c++ {
@@ -313,18 +325,31 @@ func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHi
 		return
 	}
 	w.applyLayers(row, total)
-	for i, x := range row {
-		sl.stats[i].add(x)
-		if h := hs[i]; h != nil {
-			h.Add(x)
-		}
-	}
+	w.fold(sl, row, 0, l.width, hs)
 	if w.m.tailX > 0 && total >= w.m.tailX {
 		sl.tail++
 	}
 	w.addTail(sl, row, total)
+	w.keepSeries(row, p)
+}
+
+// fold adds the row's quantities lo to hi to the slot statistics and
+// their histograms.
+func (w *Workspace) fold(sl *slot, row []float64, lo, hi int, hs []*stats.LogHist) {
+	// bound: row width
+	for i := lo; i < hi; i++ {
+		sl.stats[i].add(row[i])
+		if h := hs[i]; h != nil {
+			h.Add(row[i])
+		}
+	}
+}
+
+// keepSeries copies a closed period's row into the series, if one is kept.
+func (w *Workspace) keepSeries(row []float64, p int64) {
 	if s := w.result.Series; s != nil {
-		copy(s.rows[int(p)*l.width:(int(p)+1)*l.width], row)
+		width := w.l.width
+		copy(s.rows[int(p)*width:(int(p)+1)*width], row)
 	}
 }
 

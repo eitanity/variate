@@ -38,7 +38,7 @@ type PlanRow struct {
 type Summary struct {
 	Total      Stat
 	Exceedance []ECPoint
-	ByCategory map[string]Stat
+	ByCategory map[string]Stat // empty, as are BySource, ContribPer and TailShares, with Config.NoBreakdown
 	BySource   map[string]Stat
 
 	ReachProb  map[string]map[string]Prop
@@ -60,19 +60,29 @@ func (w *Workspace) Summarize(dst *Summary) {
 	r := &w.result
 	dst.Total = w.stat(&r.Total, 1)
 	dst.Exceedance = w.exceedance(dst.Exceedance[:0])
+	breakdown := w.m.crit.breakdown
 	dst.ByCategory = ensureStats(dst.ByCategory)
-	for c, name := range r.Categories {
-		dst.ByCategory[name] = w.stat(&r.ByCategory[c], r.Total.Mean())
-	}
 	dst.BySource = ensureStats(dst.BySource)
-	for k, name := range r.Sources {
-		dst.BySource[name] = w.stat(&r.BySource[k], r.Total.Mean())
-	}
 	dst.EntriesPer = ensureStats(dst.EntriesPer)
 	dst.ContribPer = ensureStats(dst.ContribPer)
+	clear(dst.ByCategory)
+	clear(dst.BySource)
+	clear(dst.ContribPer)
+	for c, name := range r.Categories {
+		if breakdown {
+			dst.ByCategory[name] = w.stat(&r.ByCategory[c], r.Total.Mean())
+		}
+	}
+	for k, name := range r.Sources {
+		if breakdown {
+			dst.BySource[name] = w.stat(&r.BySource[k], r.Total.Mean())
+		}
+	}
 	for v, name := range r.Nodes {
 		dst.EntriesPer[name] = w.stat(&r.EntriesPer[v], 1)
-		dst.ContribPer[name] = w.stat(&r.Contrib[v], r.Total.Mean())
+		if breakdown {
+			dst.ContribPer[name] = w.stat(&r.Contrib[v], r.Total.Mean())
+		}
 	}
 	dst.Layers = ensureStats(dst.Layers)
 	for j, y := range w.m.layers {

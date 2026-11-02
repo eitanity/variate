@@ -298,10 +298,8 @@ const exactBuckets = 4096
 // means.
 func (w *Workspace) allocResult() error {
 	m := w.m
-	e, err := m.Analytic()
-	if err != nil {
-		return err
-	}
+	// The histograms are sized from the means alone.
+	e, _, _, _ := m.means()
 	res := w.histRes()
 	r := &w.result
 	r.Nodes, r.Outcomes, r.Categories, r.Sources = m.nodeIDs, m.outcomeNames, m.categories, m.sourceIDs
@@ -321,15 +319,19 @@ func (w *Workspace) allocResult() error {
 	for c := range r.ByCategory {
 		q := w.l.cat(index(c))
 		w.means[q] = e.MeanByCategory[c]
-		r.ByCategory[c].Hist = stats.NewLogHist(e.MeanByCategory[c], res)
-		w.hists[q] = r.ByCategory[c].Hist
+		if m.crit.breakdown {
+			r.ByCategory[c].Hist = stats.NewLogHist(e.MeanByCategory[c], res)
+			w.hists[q] = r.ByCategory[c].Hist
+		}
 	}
 	r.BySource = make([]Accum, len(m.srcs))
 	for k := range r.BySource {
 		q := w.l.src(index(k))
 		w.means[q] = e.MeanBySource[k]
-		r.BySource[k].Hist = stats.NewLogHist(e.MeanBySource[k], res)
-		w.hists[q] = r.BySource[k].Hist
+		if m.crit.breakdown {
+			r.BySource[k].Hist = stats.NewLogHist(e.MeanBySource[k], res)
+			w.hists[q] = r.BySource[k].Hist
+		}
 	}
 	r.EntriesPer = make([]Accum, len(m.nodes))
 	r.TailCounts = make([]int64, len(m.tailThresholds))
@@ -347,7 +349,7 @@ func (w *Workspace) allocResult() error {
 		if w.cfg.NodeHist {
 			r.EntriesPer[v].Hist = stats.NewIntHist(e.EntriesPer[v], res)
 			w.hists[w.l.entry(index(v))] = r.EntriesPer[v].Hist
-			if w.hasFn[v] {
+			if w.hasFn[v] && m.crit.breakdown {
 				r.Contrib[v].Hist = stats.NewLogHist(e.Contrib[v], res)
 				w.hists[w.l.contrib(index(v))] = r.Contrib[v].Hist
 			}

@@ -346,7 +346,7 @@ flag wins.
 | `batch`, `pool_size`, `spill`, `max_memory`, `round_scratch`, `record_buffer` | sizing of the run's buffers; the defaults suit nearly every model. |
 | `hist_res` | the relative width of the histogram bins the quantiles come from (default 0.001). |
 | `series` | keep every period's totals for output. |
-| `no_breakdown` | skip the per-category and per-source breakdowns. |
+| `no_breakdown` | skip the per-category, per-source and per-node contribution figures, their precision criteria and the tail shares, so the run is sized by the total alone: much faster when a breakdown sets the length. |
 | `node_hist` | keep histograms of entries per node. |
 | `pace` | when streaming rounds, play them at this duration per period (`1.5s`). |
 

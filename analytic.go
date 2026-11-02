@@ -155,13 +155,19 @@ func rateSecond(rho2, tau2 float64) float64 {
 	return rho2 * tau2
 }
 
-// Analytic computes the exact expectations of the model.
+// Analytic computes the exact expectations of the model; with
+// Config.NoBreakdown the per-source, per-category and per-node variances
+// are NaN, left uncomputed.
 func (m *Compiled) Analytic() (*Expectation, error) {
 	e, lam, m1, m2 := m.means()
 	e.Var = m.variance(valueFilter{kind: filterAll}, lam, m1, m2, e.Mean)
 	d1, d2 := m.valueToGo(valueFilter{kind: filterDraws})
 	e.DrawsVar = m.variance(valueFilter{kind: filterDraws}, lam, d1, d2, e.DrawsMean)
-	m.breakdownVariances(e, lam, m1, m2)
+	if m.cfg.NoBreakdown {
+		m.unknownBreakdownVariances(e)
+	} else {
+		m.breakdownVariances(e, lam, m1, m2)
+	}
 	e.pzero = m.zeroProbability()
 	return e, nil
 }
@@ -258,7 +264,6 @@ func (m *Compiled) breakdownVariances(e *Expectation, lam, m1, m2 []float64) {
 	e.VarBySource = make([]float64, len(m.srcs))
 	e.VarByCategory = make([]float64, len(m.categories))
 	e.ContribVar = make([]float64, len(m.nodes))
-	nan := math.NaN()
 	passes := 1 + len(m.categories)
 	for v := range m.nodes {
 		if m.nodes[v].fnStart != m.nodes[v].rateEnd {
@@ -266,15 +271,7 @@ func (m *Compiled) breakdownVariances(e *Expectation, lam, m1, m2 []float64) {
 		}
 	}
 	if m.hasDelays || m.hasRepair || m.pairCost()*float64(passes) > pairBudget {
-		for k := range e.VarBySource {
-			e.VarBySource[k] = nan
-		}
-		for c := range e.VarByCategory {
-			e.VarByCategory[c] = nan
-		}
-		for v := range e.ContribVar {
-			e.ContribVar[v] = nan
-		}
+		m.unknownBreakdownVariances(e)
 		return
 	}
 	q := m.pairPass(valueFilter{kind: filterAll}, m1)
@@ -293,6 +290,23 @@ func (m *Compiled) breakdownVariances(e *Expectation, lam, m1, m2 []float64) {
 		f := valueFilter{kind: filterNode, index: index(v)}
 		n1, n2 := m.valueToGo(f)
 		e.ContribVar[v] = m.variance(f, lam, n1, n2, e.Contrib[v])
+	}
+}
+
+// unknownBreakdownVariances sets every breakdown variance to NaN.
+func (m *Compiled) unknownBreakdownVariances(e *Expectation) {
+	nan := math.NaN()
+	e.VarBySource = make([]float64, len(m.srcs))
+	e.VarByCategory = make([]float64, len(m.categories))
+	e.ContribVar = make([]float64, len(m.nodes))
+	for k := range e.VarBySource {
+		e.VarBySource[k] = nan
+	}
+	for c := range e.VarByCategory {
+		e.VarByCategory[c] = nan
+	}
+	for v := range e.ContribVar {
+		e.ContribVar[v] = nan
 	}
 }
 

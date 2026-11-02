@@ -30,12 +30,16 @@ type criteria struct {
 	tailHits   uint64
 	maxPeriods int64
 	maxSteps   uint64
+	// breakdown: the categories, sources and node contributions are
+	// kept, and so have criteria of their own.
+	breakdown bool
 }
 
 func criteriaFrom(cfg Config) criteria {
 	c := criteria{
 		minHits: cfg.MinHits, contribRSE: cfg.ContribRSE, targetRSE: cfg.TargetRSE,
 		tailP: cfg.TailP, tailHits: cfg.TailHits, maxPeriods: cfg.MaxPeriods, maxSteps: cfg.MaxSteps,
+		breakdown: !cfg.NoBreakdown,
 	}
 	if c.minHits == 0 {
 		c.minHits = defaultMinHits
@@ -83,7 +87,7 @@ func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
 		}})
 	}
 	for v := range m.nodes {
-		if m.nodes[v].fnStart == m.nodes[v].rateEnd || e.Contrib[v] <= 0 {
+		if !c.breakdown || m.nodes[v].fnStart == m.nodes[v].rateEnd || e.Contrib[v] <= 0 {
 			continue
 		}
 		need := e.ContribVar[v] / (c.contribRSE * c.contribRSE * e.Contrib[v] * e.Contrib[v])
@@ -102,11 +106,13 @@ func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
 		}})
 	}
 	target("total", l.total(), e.Mean, e.Var)
-	for i, name := range m.categories {
-		target("category "+name, l.cat(index(i)), e.MeanByCategory[i], e.VarByCategory[i])
-	}
-	for k, name := range m.sourceIDs {
-		target("source "+name, l.src(index(k)), e.MeanBySource[k], e.VarBySource[k])
+	if c.breakdown {
+		for i, name := range m.categories {
+			target("category "+name, l.cat(index(i)), e.MeanByCategory[i], e.VarByCategory[i])
+		}
+		for k, name := range m.sourceIDs {
+			target("source "+name, l.src(index(k)), e.MeanBySource[k], e.VarBySource[k])
+		}
 	}
 	rows = append(rows, planRow{kind: critTail, PlanRow: PlanRow{
 		Criterion: critTail, Driver: totalSubject, PlannedPerPeriod: 1 - c.tailP,

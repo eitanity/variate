@@ -9,7 +9,7 @@ import "math"
 
 // QuantityRow finds the row of a quantity by kind ("total", "category",
 // "source", "entries", "contrib", "layer") and name; ok is false for a kind or
-// name the model does not have.
+// name the model does not have, and for a breakdown with Config.NoBreakdown.
 func (w *Workspace) QuantityRow(kind, name string) (row int, ok bool) {
 	l := w.l
 	if kind == "total" {
@@ -27,6 +27,9 @@ func (w *Workspace) QuantityRow(kind, name string) (row int, ok bool) {
 // quantityNames lists the names of a kind and the row of each.
 func (w *Workspace) quantityNames(kind string) (names []string, at func(int) int) {
 	l := w.l
+	if !w.m.crit.breakdown && (kind == "category" || kind == "source" || kind == "contrib") {
+		return nil, nil
+	}
 	switch kind {
 	case "category":
 		return w.m.categories, func(i int) int { return l.cat(index(i)) }
