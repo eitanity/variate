@@ -515,7 +515,7 @@
   "id": "seasonal",
   "title": "Rates that vary by period: a storm season",
   "file": "seasonal.yaml",
-  "about": "Monthly periods. Storm claims follow a twelve-value cycle peaking in late summer, burst pipes one peaking in winter, theft none: period p takes the multiplier at p modulo twelve. Tick the series to see the cycle in the totals; the exact mean, variance and distribution describe a month taken at random from the cycle, which is what a run over whole years sees.",
+  "about": "Monthly periods. Storm claims follow a twelve-value cycle peaking in late summer, burst pipes one peaking in winter, theft none: period p takes the multiplier at p modulo twelve. Tick the series to see the cycle in the totals; the exact mean, variance and distribution describe a month taken at random from the cycle, which is what a run over whole years sees. Set the month to run one place in the cycle instead: every period is then that month, so the figures are those of an August, say, not of a month at random, and the series is not drawn.",
   "knobs": [
    {
     "key": "storm_rate",
@@ -556,6 +556,14 @@
     "max": 40000,
     "step": 500,
     "value": 8000
+   },
+   {
+    "key": "phase",
+    "label": "Month of the cycle to run (0 = the whole year)",
+    "min": 0,
+    "max": 12,
+    "step": 1,
+    "value": 0
    }
   ]
  },

@@ -141,8 +141,9 @@ async function run() {
     await drawTornado($("tornado"), $("yaml").value);
     drawFlow($("flow"), graph, result);
     await drawCountsFor($("countsource").value);
-    await drawSeriesIfKept(settings.series === "true");
-    $("status").textContent = `${result.periods.toLocaleString()} periods in ${(ms / 1000).toFixed(2)} s: ${Math.round(result.periods / (ms / 1000)).toLocaleString()} periods/s, ${Math.round(result.steps / (ms / 1000) / 1e6)} M steps/s. Seed ${result.seed}: enter it to repeat this run exactly; leave 0 for an independent run each time.`;
+    // Every period of a phased run is the same month, so it has no cycle to show.
+    await drawSeriesIfKept(settings.series === "true" && !result.phase);
+    $("status").textContent = (result.phase ? `Phase ${result.phase.index} of ${result.phase.cycle}: every period is that month. ` : "") + `${result.periods.toLocaleString()} periods in ${(ms / 1000).toFixed(2)} s: ${Math.round(result.periods / (ms / 1000)).toLocaleString()} periods/s, ${Math.round(result.steps / (ms / 1000) / 1e6)} M steps/s. Seed ${result.seed}: enter it to repeat this run exactly; leave 0 for an independent run each time.`;
   } catch (err) {
     if (err.message !== "cancelled") {
       $("status").textContent = "";

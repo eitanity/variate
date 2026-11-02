@@ -2,6 +2,7 @@
 # a twelve-value cycle with its peak in late summer; burst pipes peak
 # in winter on their own cycle; theft does not vary.
 period: { days: 30 }
+phase: {{phase}}
 schedules:
   - { id: storms, values: [0.3, 0.3, 0.5, 0.8, 1.2, 1.6, 2.0, {{storm_peak}}, 1.6, 0.8, 0.4, 0.3] }
   - { id: freeze, values: [{{freeze_peak}}, 2.0, 1.0, 0.3, 0.1, 0.1, 0.1, 0.1, 0.2, 0.6, 1.5, {{freeze_peak}}] }
