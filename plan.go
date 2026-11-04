@@ -19,6 +19,9 @@ const (
 	critContrib = "contrib-rse"
 	critTarget  = "target-rse"
 	critTail    = "tail"
+	// critFires is the min-hits criterion on a trigger's firings, which
+	// count as hits of its node.
+	critFires = "fires"
 )
 
 // criteria holds the convergence settings with their defaults applied.
@@ -84,6 +87,19 @@ func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
 		rows = append(rows, planRow{kind: critMinHits, index: j, PlanRow: PlanRow{
 			Criterion: critMinHits, Driver: m.outcomeNames[j], PlannedPerPeriod: h,
 			PeriodsNeeded: periodsFor(float64(c.minHits) / h),
+		}})
+	}
+	for _, tr := range m.trigs {
+		p := m.countMean[tr.src]
+		if !tr.firing.Exact() {
+			p = math.NaN()
+		}
+		if p <= 0 {
+			continue
+		}
+		rows = append(rows, planRow{kind: critFires, index: int(tr.src), PlanRow: PlanRow{
+			Criterion: critMinHits, Driver: m.nodeIDs[tr.node], PlannedPerPeriod: p,
+			PeriodsNeeded: periodsFor(float64(c.minHits) / p),
 		}})
 	}
 	for v := range m.nodes {

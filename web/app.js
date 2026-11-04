@@ -738,12 +738,18 @@ function drawFlow(svg, graph, r) {
   const NS = "http://www.w3.org/2000/svg";
   const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text !== undefined) e.textContent = text; return e; };
   const depth = {};
-  for (const s of graph.sources) depth[s.to] = 1;
+  const sources = graph.sources.filter((s) => !s.trigger), triggers = graph.sources.filter((s) => s.trigger);
+  for (const s of sources) depth[s.to] = 1;
   let changed = true, guard = 0;
   while (changed && guard++ < graph.nodes.length + 2) {
     changed = false;
     for (const o of graph.outcomes) {
       if (depth[o.from] !== undefined && (depth[o.to] === undefined || depth[o.to] < depth[o.from] + 1)) { depth[o.to] = depth[o.from] + 1; changed = true; }
+    }
+    // A trigger's node sits after the nodes its sum adds up.
+    for (const t of triggers) {
+      const d = Math.max(0, ...(t.inputs || []).map((id) => depth[id] || 0)) + 1;
+      if (depth[t.to] === undefined || depth[t.to] < d) { depth[t.to] = d; changed = true; }
     }
   }
   const nodes = graph.nodes.filter((n) => depth[n.id] !== undefined);
@@ -756,7 +762,7 @@ function drawFlow(svg, graph, r) {
   const pos = {};
   for (const [d, list] of Object.entries(byCol)) list.forEach((n, i) => { pos[n.id] = { x: colX(Number(d)), y: 20 + (H - 60) * (i + 0.5) / list.length }; });
   const srcPos = {};
-  graph.sources.forEach((s, i) => { srcPos[s.id] = { x: colX(0), y: 20 + (H - 60) * (i + 0.5) / graph.sources.length }; });
+  sources.forEach((s, i) => { srcPos[s.id] = { x: colX(0), y: 20 + (H - 60) * (i + 0.5) / sources.length }; });
   const entries = (id) => (r.entries_per[id] ? r.entries_per[id].mean : 0);
   const flows = graph.outcomes.map((o) => ({ o, share: r.outcomes[o.name] ? r.outcomes[o.name].p : 0, flow: entries(o.from) * (r.outcomes[o.name] ? r.outcomes[o.name].p : 0) }));
   const maxFlow = Math.max(1e-9, ...flows.map((f) => f.flow), ...graph.sources.map((s) => entries(s.to)));
@@ -765,7 +771,14 @@ function drawFlow(svg, graph, r) {
     svg.appendChild(path);
     if (label) svg.appendChild(el("text", { x: (a.x + 120 + b.x) / 2, y: (a.y + b.y) / 2 - 3, "text-anchor": "middle" }, label));
   };
-  for (const s of graph.sources) {
+  for (const t of triggers) {
+    const b = pos[t.to];
+    for (const id of t.inputs || []) {
+      const a = pos[id];
+      if (a && b) curve(a, b, 0, "edge feed", "sum > " + fmt(t.over, 3));
+    }
+  }
+  for (const s of sources) {
     const p = srcPos[s.id], q = pos[s.to];
     if (q) curve({ x: p.x - 30, y: p.y }, q, entries(s.to), "edge", "");
     svg.appendChild(el("rect", { x: p.x - 10, y: p.y - 12, width: 100, height: 24, rx: 12, class: "src" }));

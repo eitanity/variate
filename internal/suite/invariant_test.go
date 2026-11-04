@@ -176,8 +176,8 @@ func TestInvariantCompileOrDocumentedError(t *testing.T) {
 }
 
 // checkNumbers: the fields that are always numbers must not be NaN; Var
-// and its breakdowns may be NaN only with delays, a repair source or
-// above the pair budget, and are then NaN together; P(T = 0) only with a
+// and its breakdowns may be NaN only with delays, a repair source, a
+// trigger or above the pair budget, and are then NaN together; P(T = 0) only with a
 // repair source, or a mixture above its work cap, which needs more
 // period-scoped values than these graphs have.
 func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Expectation) {
@@ -210,7 +210,7 @@ func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Exp
 	for i, x := range e.MeanByCategory {
 		bad("MeanByCategory "+c.Categories()[i], x)
 	}
-	if !c.HasDelays() && !c.HasRepair() && math.IsNaN(e.Var) {
+	if !c.HasDelays() && !c.HasRepair() && !c.HasTriggers() && math.IsNaN(e.Var) {
 		t.Errorf("%s: Var is NaN without delays", what)
 	}
 	if c.HasRepair() && (!math.IsNaN(e.Var) || !math.IsNaN(e.PZero())) {

@@ -21,6 +21,9 @@ func (w *Workspace) evaluate(periods int64) (allMet bool, unmet []string) {
 			}
 			row.Observed = float64(hits)
 			row.Met = hits >= c.minHits
+		case critFires:
+			row.Observed = float64(r.Events[src.index])
+			row.Met = r.Events[src.index] >= c.minHits
 		case critContrib:
 			row.Observed = rse(&r.Contrib[src.index], w.delays)
 			row.Met = row.Observed <= c.contribRSE

@@ -37,6 +37,9 @@ func (m *Compiled) countLaws() error {
 	for k, s := range m.srcs {
 		d := m.pools[s.pool]
 		switch {
+		case s.trigger != noIndex:
+			// At most one firing a period: N(N − 1) is 0.
+			m.countMean[k] = d.Mean()
 		case s.chainEnd > s.chainStart:
 			m.countMean[k], _ = ChainFigures(m.chains[s.chainStart:s.chainEnd])
 			m.countN2[k] = math.NaN()

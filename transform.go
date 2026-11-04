@@ -110,22 +110,23 @@ func (m *Compiled) Transform(cfg TransformConfig) (*Transformed, error) {
 
 // transformer holds one Transform's working state.
 type transformer struct {
-	m        *Compiled
-	e        *Expectation
-	cfg      TransformConfig
-	tailP    float64
-	lam      []float64 // E[λ_k]
-	draws    []float64 // expected function draws per period, by function
-	unit     float64   // a value every constant function is a multiple of; 0 if none
-	quadN    int
-	passes   int
-	lastEps  float64 // the last quadrature's difference between its final two node counts
-	order    []int32 // nodes in the order the recursion computes them
-	uses     []int32 // outcomes and sources leading to each node
-	work     int64   // grid-point evaluations so far
-	grid     int     // the grid being evaluated
-	passWork int64   // evaluations of the last pass
-	passM    int     // its grid
+	m         *Compiled
+	e         *Expectation
+	cfg       TransformConfig
+	tailP     float64
+	lam       []float64 // E[λ_k]
+	draws     []float64 // expected function draws per period, by function
+	unit      float64   // a value every constant function is a multiple of; 0 if none
+	quadN     int
+	passes    int
+	lastEps   float64 // the last quadrature's difference between its final two node counts
+	order     []int32 // nodes in the order the recursion computes them
+	uses      []int32 // outcomes and sources leading to each node
+	work      int64   // grid-point evaluations so far
+	grid      int     // the grid being evaluated
+	passWork  int64   // evaluations of the last pass
+	passM     int     // its grid
+	totalOnly bool    // the total alone, without the categories and sources
 }
 
 func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
@@ -254,6 +255,9 @@ func (t *transformer) applicable() string {
 	if m.hasRepair {
 		return "the model has a source with repair or a reliability diagram"
 	}
+	if m.HasTriggers() {
+		return "a trigger fires on a period's sum, which the rest of the total depends on"
+	}
 	if m.cycle.over {
 		return "the schedules' combined cycle is longer than " + itoa(maxJointPeriods) + " periods or has more than " + itoa(maxJointPoints) + " distinct places"
 	}
@@ -330,12 +334,26 @@ func (t *transformer) run(out *Transformed) error {
 // their bounds are kept, the scratch, the root table and the FFT plan,
 // then the brackets as floats.
 func (t *transformer) passBytes(m int) int64 {
-	srcs := len(t.m.srcs)
-	if srcs > maxSourceBounds {
-		srcs = 0
+	srcs := 0
+	if t.sourceBounds() {
+		srcs = len(t.m.srcs)
 	}
-	grids := int64(1+len(t.m.categories)+srcs) + 8
-	return 2 * int64(m) * (bytesPerPoint*grids + 8*int64(2*(1+len(t.m.categories)+srcs)))
+	grids := int64(1+t.categories()+srcs) + 8
+	return 2 * int64(m) * (bytesPerPoint*grids + 8*int64(2*(1+t.categories()+srcs)))
+}
+
+// categories is the number of categories the transform brackets.
+func (t *transformer) categories() int {
+	if t.totalOnly {
+		return 0
+	}
+	return len(t.m.categories)
+}
+
+// sourceBounds reports whether the transform brackets each source: not
+// for the total alone, nor beyond maxSourceBounds sources.
+func (t *transformer) sourceBounds() bool {
+	return !t.totalOnly && len(t.m.srcs) <= maxSourceBounds
 }
 
 // bytesReason explains a refusal by the memory budget.

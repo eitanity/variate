@@ -16,6 +16,7 @@
   svg#flow .src { fill: #fbeedd; stroke: #e08a1e; }
   svg#flow .edge { fill: none; stroke: #1f6feb; opacity: 0.55; }
   svg#flow .hold { stroke-dasharray: 5 3; }
+  svg#flow .feed { stroke-dasharray: 1 4; stroke-linecap: round; }
   :root { --ink: #1c1c1c; --muted: #666; --line: #d8d8d8; --accent: #1f6feb; --bg: #fafafa; }
   body { margin: 0; font: 15px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--bg); }
   header { padding: 14px 24px; border-bottom: 1px solid var(--line); background: white; display: flex; gap: 16px; align-items: baseline; }
@@ -101,7 +102,7 @@
     <canvas id="counts"></canvas>
     <div id="seriesBlock" hidden><h2 style="margin-top:16px">Over the periods</h2><p class="about" id="seriesNote"></p><canvas id="series"></canvas></div>
     <h2 style="margin-top:16px">Flow</h2>
-    <p class="about">The graph as compiled: each edge's width is the events per period taking it and its label the share of the node's entries; a dashed edge holds the event for a while. A node shows its entries per period and the mean value it books per period.</p>
+    <p class="about">The graph as compiled: each edge's width is the events per period taking it and its label the share of the node's entries; a dashed edge holds the event for a while; a dotted edge feeds a trigger's sum, and the trigger's node is entered once in a period whose sum is above the level. A node shows its entries per period and the mean value it books per period.</p>
     <svg id="flow"></svg>
     <h2 style="margin-top:16px">Figures</h2>
     <table id="figures"></table>

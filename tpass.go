@@ -239,11 +239,11 @@ func maxAbsDiff(a, b []complex128) float64 {
 // whose value atom lies beyond the grid is dropped into β.
 func (p *pipeline) tensor() (*graphResult, string) {
 	m := p.t.m
-	out := &graphResult{total: make([]complex128, p.m), cats: make([][]complex128, len(m.categories))}
+	out := &graphResult{total: make([]complex128, p.m), cats: make([][]complex128, p.t.categories())}
 	for c := range out.cats {
 		out.cats[c] = make([]complex128, p.m)
 	}
-	if len(m.srcs) <= maxSourceBounds {
+	if p.t.sourceBounds() {
 		out.srcs = make([][]complex128, len(m.srcs))
 		for k := range out.srcs {
 			out.srcs[k] = make([]complex128, p.m)
@@ -263,7 +263,7 @@ func (p *pipeline) tensor() (*graphResult, string) {
 		if reason != "" {
 			return nil, reason
 		}
-		if work := int64(p.mix.passes()) * int64(max(1, p.t.quadN)) * int64(p.m) * int64(1+len(p.t.m.categories)); work > quadWorkCap {
+		if work := int64(p.mix.passes()) * int64(max(1, p.t.quadN)) * int64(p.m) * int64(1+p.t.categories()); work > quadWorkCap {
 			return nil, "period-scoped mixture of " + itoa(p.mix.passes()) + " passes with " + itoa(p.t.quadN) + " frequency quadrature nodes at " + itoa(p.m) + " grid points is above the work cap"
 		}
 		out.add(one, complex(w, 0))
@@ -315,7 +315,7 @@ func (p *pipeline) graphGiven() (*graphResult, string) {
 	out := &graphResult{}
 	// A source's own generating function is kept for its bounds when
 	// there are few sources; a register of many would hold a grid each.
-	if len(m.srcs) <= maxSourceBounds {
+	if p.t.sourceBounds() {
 		out.srcs = make([][]complex128, len(m.srcs))
 	}
 	total, reason := p.recurse(-1, out.srcs)
@@ -323,7 +323,7 @@ func (p *pipeline) graphGiven() (*graphResult, string) {
 		return nil, reason
 	}
 	out.total = total
-	for c := range m.categories {
+	for c := range p.t.categories() {
 		gc, reason := p.recurse(index(c), nil)
 		if reason != "" {
 			return nil, reason

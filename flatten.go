@@ -63,6 +63,7 @@ func (b *builder) flatten() (*Compiled, error) {
 	for name, i := range cats {
 		m.categories[i] = name
 	}
+	b.flattenTriggers(m)
 	m.topo = b.topoOrder()
 	for _, y := range b.g.Layers {
 		m.layers = append(m.layers, y.normalised())
@@ -78,7 +79,7 @@ func (b *builder) flatten() (*Compiled, error) {
 func (b *builder) flattenSources(m *Compiled, factorPool []int32) error {
 	for i, s := range b.g.Sources {
 		m.sourceIDs[i] = s.ID
-		src := csrc{to: b.nodeIndex[s.To], every: index(max(s.Every, 1)), repair: noIndex, factor: noIndex, schedule: noIndex}
+		src := csrc{to: b.nodeIndex[s.To], every: index(max(s.Every, 1)), repair: noIndex, factor: noIndex, schedule: noIndex, trigger: noIndex}
 		if s.Factor != "" {
 			src.factor = factorPool[b.factorIndex[s.Factor]]
 		}

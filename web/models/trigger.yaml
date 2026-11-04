@@ -1,0 +1,23 @@
+# A trigger: a pump fleet's failures in a year are counted, and a year
+# with more than the allowed number sets off a fleet-wide inspection,
+# which finds a design defect some of the time; a redesign follows.
+period: { days: 365 }
+graphs:
+  - id: fleet
+    sources:
+      - { id: failures, frequency: { gamma: { mean: {{rate}}, sd: 0.5 } }, to: failure }
+    nodes:
+      - id: failure
+        functions:
+          - { name: repair, category: repair, lognormal: { median: 4000, p90: 15000 } }
+      - id: inspection
+        trigger: { over: {{allowed}}, entries: [failure] }
+        functions:
+          - { name: inspect, category: inspection, pert: [20000, {{inspect}}, 90000] }
+        outcomes:
+          - { to: redesign, p: {{defect}} }
+          - { to: clear }
+      - id: redesign
+        functions:
+          - { name: redesign, category: redesign, pert: [100000, 250000, 600000] }
+      - id: clear

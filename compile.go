@@ -73,6 +73,7 @@ type csrc struct {
 	chainStart, chainEnd int32
 	factor               int32 // the shared factor's pool, or noIndex
 	schedule             int32 // the schedule's pool, or noIndex
+	trigger              int32 // the trigger this source stands for, or noIndex
 }
 
 // Compiled is a validated, flattened model.
@@ -118,6 +119,11 @@ type Compiled struct {
 	transformed                                  *Transformed
 	tailX                                        float64   // upper bound on the TailP quantile of T; 0 when unknown
 	tailThresholds                               []float64 // levels the tail shares are counted against
+	trigs                                        []ctrig   // the triggers, each also a source after the model's own
+	feedStart                                    []int32   // per function, its start in feeds; one more entry than functions
+	feeds                                        []int32   // the triggers each function's bookings add to
+	countStart                                   []int32   // per node, its start in counts; one more entry than nodes
+	counts                                       []int32   // the triggers each node's entries add to
 }
 
 // Compile validates the graph and flattens it; the warnings are the
@@ -132,7 +138,7 @@ func (g Graph) Compile(cfg Config) (*Compiled, []Warning, error) {
 		return nil, nil, err
 	}
 	m.expect = e
-	m.tailThresholds = tailLevels(e.Mean)
+	m.tailThresholds = tailLevels(m.sizingMean(e))
 	m.setWatch(cfg.Watch, b.nodeIndex)
 	m.maxPath = m.longestNodePath()
 	m.crit = criteriaFrom(cfg)
@@ -148,26 +154,25 @@ func (g Graph) Compile(cfg Config) (*Compiled, []Warning, error) {
 	return m, warnings, nil
 }
 
-// flattenChecked validates and flattens the graph and builds its reach
-// tables: the model as far as its means need it.
-func (g Graph) flattenChecked(cfg Config) (*Compiled, *builder, []Warning, error) {
-	b := &builder{g: g, cfg: cfg, nodeIndex: map[string]int32{}}
-	if err := b.validate(); err != nil {
-		return nil, nil, nil, err
+// sizingMean is the exact mean, or where a trigger's P(fire) is unknown,
+// the mean with its upper bound standing in: a scale for the tail levels.
+func (m *Compiled) sizingMean(e *Expectation) float64 {
+	if !math.IsNaN(e.Mean) {
+		return e.Mean
 	}
-	m, err := b.flatten()
+	s, _, _, _ := m.means()
+	return s.Mean
+}
+
+// flattenChecked validates and flattens the graph and builds its reach
+// tables and its triggers' P(fire): the model as far as its means need
+// it.
+func (g Graph) flattenChecked(cfg Config) (*Compiled, *builder, []Warning, error) {
+	m, b, err := g.flattenReached(cfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	m.cfg = cfg
-	m.phase = g.Phased
-	if err := reachCap(g.ID, len(m.srcs), len(m.nodes)); err != nil {
-		return nil, nil, nil, err
-	}
-	m.reach = m.reachTable()
-	if err := m.outageHolds(); err != nil {
-		return nil, nil, nil, err
-	}
+	m.fireProbabilities(g, cfg)
 	warnings := b.warnings
 	warnings = append(warnings, m.unreachableWarnings()...)
 	warnings = append(warnings, m.workWarning())
@@ -175,6 +180,30 @@ func (g Graph) flattenChecked(cfg Config) (*Compiled, *builder, []Warning, error
 		return nil, nil, nil, err
 	}
 	return m, b, warnings, nil
+}
+
+// flattenReached validates and flattens the graph and builds its reach
+// tables, with a trigger's count mean not yet set: as far as the model
+// of a trigger's sum, which has none, needs.
+func (g Graph) flattenReached(cfg Config) (*Compiled, *builder, error) {
+	b := &builder{g: g, cfg: cfg, nodeIndex: map[string]int32{}}
+	if err := b.validate(); err != nil {
+		return nil, nil, err
+	}
+	m, err := b.flatten()
+	if err != nil {
+		return nil, nil, err
+	}
+	m.cfg = cfg
+	m.phase = g.Phased
+	if err := reachCap(g.ID, len(m.srcs), len(m.nodes)); err != nil {
+		return nil, nil, err
+	}
+	m.reach = m.reachTable()
+	if err := m.outageHolds(); err != nil {
+		return nil, nil, err
+	}
+	return m, b, nil
 }
 
 // reachCap refuses a model whose reach tables, sources × nodes, would

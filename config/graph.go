@@ -125,7 +125,35 @@ func (l *loader) parseGraphs(x node) error {
 		}
 		jobs = append(jobs, more...)
 	}
-	return l.expand(jobs)
+	if err := l.expand(jobs); err != nil {
+		return err
+	}
+	splitInputs(&l.model.Graph)
+	return nil
+}
+
+// splitInputs resolves each trigger input, read whole into Node: a node's
+// ID names the node alone, and otherwise the part after the last dot
+// names one of its functions. IDs carry dots from graph and instance
+// prefixes, so the split waits until every node is known.
+func splitInputs(g *variate.Graph) {
+	ids := map[string]bool{}
+	for _, n := range g.Nodes {
+		ids[n.ID] = true
+	}
+	for _, n := range g.Nodes {
+		if n.Trigger == nil {
+			continue
+		}
+		for i, in := range n.Trigger.Inputs {
+			if ids[in.Node] {
+				continue
+			}
+			if dot := strings.LastIndexByte(in.Node, '.'); dot > 0 {
+				n.Trigger.Inputs[i] = variate.TriggerInput{Node: in.Node[:dot], Function: in.Node[dot+1:]}
+			}
+		}
+	}
 }
 
 // parseGraph reads one graph's sources, nodes and instances.
@@ -276,7 +304,7 @@ func (l *loader) parseNodes(x node, nm naming) error {
 }
 
 func (l *loader) parseNode(it node, nm naming) (variate.Node, error) {
-	m, err := it.mapping("id", "description", "functions", "mode", "outcomes", "next", keyNextHolding, "threshold")
+	m, err := it.mapping("id", "description", "functions", "mode", "outcomes", "next", keyNextHolding, "threshold", "trigger")
 	if err != nil {
 		return variate.Node{}, err
 	}
@@ -309,12 +337,85 @@ func (l *loader) parseNode(it node, nm naming) (variate.Node, error) {
 			return n, err
 		}
 	}
-	if th, ok := m["threshold"]; ok {
-		if n.Threshold, err = parseThreshold(th, n, nm); err != nil {
-			return n, err
-		}
+	if err := parseCondition(m, &n, nm); err != nil {
+		return n, err
 	}
 	return l.parseNext(n, m, nm)
+}
+
+// parseCondition reads a node's threshold and trigger.
+func parseCondition(m map[string]node, n *variate.Node, nm naming) error {
+	var err error
+	if th, ok := m["threshold"]; ok {
+		if n.Threshold, err = parseThreshold(th, *n, nm); err != nil {
+			return err
+		}
+	}
+	if tr, ok := m["trigger"]; ok {
+		if n.Trigger, err = parseTrigger(tr, nm); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// parseTrigger reads { over, inputs } or { over, entries }: each input a
+// node or node.function, split once every node is known, and each entry
+// a node.
+func parseTrigger(x node, nm naming) (*variate.Trigger, error) {
+	m, err := x.mapping("over", "inputs", "entries")
+	if err != nil {
+		return nil, err
+	}
+	tr := &variate.Trigger{}
+	over, ok := m["over"]
+	if !ok {
+		return nil, x.errorf("trigger needs over")
+	}
+	if tr.Over, err = over.float(); err != nil {
+		return nil, err
+	}
+	_, hasIn := m["inputs"]
+	_, hasEntries := m["entries"]
+	if !hasIn && !hasEntries {
+		return nil, x.errorf("trigger needs inputs or entries")
+	}
+	ins, err := refs(m, "inputs", nm)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ins {
+		tr.Inputs = append(tr.Inputs, variate.TriggerInput{Node: id})
+	}
+	if tr.Entries, err = refs(m, "entries", nm); err != nil {
+		return nil, err
+	}
+	return tr, nil
+}
+
+// refs reads an optional list of node references under key.
+func refs(m map[string]node, key string, nm naming) ([]string, error) {
+	x, ok := m[key]
+	if !ok {
+		return nil, nil
+	}
+	items, err := x.items()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, it := range items {
+		ref, err := it.str()
+		if err != nil {
+			return nil, err
+		}
+		id, err := nm.resolve(it, ref)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, nil
 }
 
 // parseThreshold reads { function, over, above, below }; function may be

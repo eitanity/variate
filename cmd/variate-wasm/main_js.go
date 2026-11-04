@@ -263,7 +263,14 @@ func structureJSON(st variate.Structure) string {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		fmt.Fprintf(&buf, "{\"id\":%s,\"to\":%s}", strconv.Quote(src.ID), strconv.Quote(src.To))
+		fmt.Fprintf(&buf, "{\"id\":%s,\"to\":%s,\"trigger\":%v,\"over\":%s,\"inputs\":[", strconv.Quote(src.ID), strconv.Quote(src.To), src.Trigger, num(src.Over))
+		for j, in := range src.Inputs {
+			if j > 0 {
+				buf.WriteByte(',')
+			}
+			buf.WriteString(strconv.Quote(in))
+		}
+		buf.WriteString("]}")
 	}
 	buf.WriteString("]}")
 	return buf.String()

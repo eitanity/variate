@@ -64,6 +64,7 @@ type Node struct {
 	NextScope       Scope
 	NextRange       *InputRange // how uncertain NextHolding is; nil = not swept
 	Threshold       *Threshold  // a branch on one function's value, in place of Outcomes and Next; nil = none
+	Trigger         *Trigger    // the node is entered once at a period's end when the period's sum of its inputs is above a level; nil = none
 }
 
 // Threshold sends a round one way when the value a node's function
@@ -74,6 +75,25 @@ type Threshold struct {
 	Function     string  // the name of the node's OnEntry function whose value is tested
 	Over         float64 // above is strictly greater than Over
 	Above, Below string  // the next node on each side
+}
+
+// Trigger enters its node once, at the end of a period, when the sum
+// of the values booked at its inputs by that period's events, or the
+// count of that period's entries into its Entries nodes, is above Over.
+// A booking counts toward the period its event arrived in, whatever
+// period a holding time lands it in, and the walk the trigger starts
+// books in that same period. No outcome leads into a trigger's node: it
+// is entered only by firing.
+type Trigger struct {
+	Over    float64        // fires when the sum is strictly greater
+	Inputs  []TriggerInput // the values the sum adds up
+	Entries []string       // or the nodes whose entries it counts, booking nothing
+}
+
+// TriggerInput is one term of a trigger's sum: one function of a node,
+// or every function of it when Function is empty.
+type TriggerInput struct {
+	Node, Function string
 }
 
 // Source is an initiating event flow.

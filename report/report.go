@@ -388,6 +388,14 @@ func (rep *Report) writeAnalyticTable(w *bufio.Writer) {
 	for i, name := range rep.C.NodeIDs() {
 		fmt.Fprintf(w, "  entries %-21s %.6g\n", name, e.EntriesPer[i])
 	}
+	srcs := rep.C.SourceIDs()
+	for _, f := range e.Firing {
+		if f.Exact() {
+			fmt.Fprintf(w, "  trigger %-21s P(fire) in [%.6g, %.6g]\n", srcs[f.Source], f.Lo, f.Hi)
+		} else {
+			fmt.Fprintf(w, "  trigger %-21s P(fire) unknown: %s\n", srcs[f.Source], f.Reason)
+		}
+	}
 	if rep.Tr == nil {
 		return
 	}
@@ -684,6 +692,25 @@ func (rep *Report) jsonExceedance(j *jw) {
 	j.closeC(']')
 }
 
+// jsonFirings writes each trigger's P(fire) bracket, by its source.
+func (rep *Report) jsonFirings(j *jw) {
+	if len(rep.E.Firing) == 0 {
+		return
+	}
+	j.key("triggers")
+	j.open('{')
+	srcs := rep.C.SourceIDs()
+	for _, f := range rep.E.Firing {
+		j.key(srcs[f.Source])
+		j.open('{')
+		j.field("fire_lower", f.Lo)
+		j.field("fire_upper", f.Hi)
+		j.fieldStr("reason", f.Reason)
+		j.closeC('}')
+	}
+	j.closeC('}')
+}
+
 func (rep *Report) jsonAnalytic(j *jw) {
 	e := rep.E
 	j.key("analytic")
@@ -710,6 +737,7 @@ func (rep *Report) jsonAnalytic(j *jw) {
 		j.field(name, e.EntriesPer[i])
 	}
 	j.closeC('}')
+	rep.jsonFirings(j)
 	if rep.Tr != nil {
 		j.key("transform")
 		j.open('{')
@@ -777,6 +805,9 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 		}
 		for i, name := range rep.C.SourceIDs() {
 			fmt.Fprintf(w, "analytic source,%s,,%s,,,,,,,,,,,\n", CSVField(name), csvNum(e.MeanBySource[i]))
+		}
+		for _, f := range e.Firing {
+			fmt.Fprintf(w, "analytic fire,%s,,%s,,,,,,,,,,,\n", CSVField(rep.C.SourceIDs()[f.Source]), csvNum((f.Lo+f.Hi)/2))
 		}
 	}
 }

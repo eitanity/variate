@@ -47,6 +47,7 @@ func (w *Workspace) drawPeriod(wk *worker, p int64) {
 	for _, sc := range m.schedules {
 		wk.period[m.poolPeriod[sc.pool]] = sc.at(p)
 	}
+	clear(wk.sums)
 }
 
 // draw returns a pool's value for this round: the period's draw for a
@@ -62,6 +63,10 @@ func (w *Workspace) draw(wk *worker, pool int32) float64 {
 func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p, first int64) {
 	m := w.m
 	src := m.srcs[k]
+	if src.trigger != noIndex {
+		w.runTrigger(wk, sl, k, p, first)
+		return
+	}
 	// The times a source carries are from the period's start; they move
 	// to the next period's start by one exact subtraction.
 	if src.chainEnd > src.chainStart {
@@ -113,6 +118,7 @@ func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p, first i
 			return
 		}
 		row[w.l.entry(v)]++
+		w.count(wk, v)
 		n := m.nodes[v]
 		booked := w.bookEntry(wk, row, k, v, n)
 		if w.stream && wk.live {
@@ -197,11 +203,13 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode) fl
 	for f := n.fnStart; f < n.fnEnd; f++ {
 		x := w.draw(wk, m.fns[f].pool)
 		w.book(row, k, v, m.fns[f].category, x)
+		w.feed(wk, f, x)
 		booked += x
 	}
 	if n.thresh != noIndex {
 		x := w.draw(wk, m.fns[n.thresh].pool)
 		w.book(row, k, v, m.fns[n.thresh].category, x)
+		w.feed(wk, n.thresh, x)
 		booked += x
 		wk.tested = x
 	}
@@ -254,6 +262,7 @@ func (w *Workspace) bookRate(wk *worker, sl *slot, k, v int32, n cnode, a, b flo
 			hi := math.Min(b, q+1)
 			x := rate * (hi - lo)
 			w.book(row, k, v, m.fns[f].category, x)
+			w.feed(wk, f, x)
 			total += x
 		}
 	}

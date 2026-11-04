@@ -33,6 +33,9 @@ func (b *builder) validate() error {
 	if err := b.checkAcyclic(); err != nil {
 		return err
 	}
+	if err := b.checkTriggers(); err != nil {
+		return err
+	}
 	if len(b.g.Sources) == 0 {
 		return modelError("graph", b.g.ID, "no sources")
 	}
@@ -268,6 +271,164 @@ func (b *builder) checkThreshold(n Node) error {
 		return modelError("node", n.ID, "threshold function "+th.Function+" not found")
 	}
 	return nil
+}
+
+// checkTriggers: a trigger has a finite level that is not negative and
+// inputs that exist, each named once; its node is entered only by
+// firing; and its inputs are booked by the sources' events alone, so no
+// input is reached from a trigger's node.
+func (b *builder) checkTriggers() error {
+	entered := b.enteredNodes()
+	for i, n := range b.g.Nodes {
+		if n.Trigger == nil {
+			continue
+		}
+		if entered[i] {
+			return modelError("node", n.ID, "a trigger node is entered only by firing: no source or outcome may lead into it")
+		}
+		if err := b.checkTriggerInputs(n); err != nil {
+			return err
+		}
+	}
+	from := b.triggerReach()
+	for _, n := range b.g.Nodes {
+		if n.Trigger == nil {
+			continue
+		}
+		for _, id := range triggerNodes(n.Trigger) {
+			if t := from[b.nodeIndex[id]]; t != noIndex {
+				return modelError("node", n.ID, "trigger input "+id+" is reached from trigger node "+b.g.Nodes[t].ID+": a trigger's sum counts the sources' events, and chained triggers are not supported")
+			}
+		}
+	}
+	return nil
+}
+
+// enteredNodes marks the nodes a source or an outcome leads into.
+func (b *builder) enteredNodes() []bool {
+	entered := make([]bool, len(b.g.Nodes))
+	for _, n := range b.g.Nodes {
+		for _, to := range b.targets(n) {
+			entered[to] = true
+		}
+	}
+	for _, s := range b.g.Sources {
+		entered[b.nodeIndex[s.To]] = true
+	}
+	return entered
+}
+
+// triggerReach gives, per node, a trigger whose walk reaches it, or
+// noIndex.
+func (b *builder) triggerReach() []int32 {
+	from := make([]int32, len(b.g.Nodes))
+	for v := range from {
+		from[v] = noIndex
+	}
+	for i, n := range b.g.Nodes {
+		if n.Trigger == nil {
+			continue
+		}
+		for v, ok := range b.reachedFrom(index(i)) {
+			if ok {
+				from[v] = index(i)
+			}
+		}
+	}
+	return from
+}
+
+// checkTriggerInputs: the level and each input of one trigger.
+func (b *builder) checkTriggerInputs(n Node) error {
+	tr := n.Trigger
+	if !(tr.Over >= 0) || math.IsInf(tr.Over, 1) {
+		return modelError("node", n.ID, "trigger over must be finite and not negative")
+	}
+	switch {
+	case len(tr.Inputs) > 0 && len(tr.Entries) > 0:
+		return modelError("node", n.ID, "a trigger sums inputs or counts entries, not both")
+	case len(tr.Inputs) == 0 && len(tr.Entries) == 0:
+		return modelError("node", n.ID, "trigger needs inputs or entries")
+	}
+	seen := map[string]bool{}
+	for _, id := range tr.Entries {
+		if _, ok := b.nodeIndex[id]; !ok {
+			return modelError("node", n.ID, "trigger entries node "+id+" not found")
+		}
+		if seen[id] {
+			return modelError("node", n.ID, "trigger entries node "+id+" is named twice")
+		}
+		seen[id] = true
+	}
+	for _, in := range tr.Inputs {
+		if err := b.checkInput(n, in, seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkInput: an input's node and function exist, and none of the
+// functions it names was named before.
+func (b *builder) checkInput(n Node, in TriggerInput, seen map[string]bool) error {
+	v, ok := b.nodeIndex[in.Node]
+	if !ok {
+		return modelError("node", n.ID, "trigger input node "+in.Node+" not found")
+	}
+	fns := []string{in.Function}
+	if in.Function == "" {
+		fns = fns[:0]
+		for _, f := range b.g.Nodes[v].Functions {
+			fns = append(fns, f.Name)
+		}
+	} else if !hasFunction(b.g.Nodes[v], in.Function) {
+		return modelError("node", n.ID, "trigger input function "+in.Node+"."+in.Function+" not found")
+	}
+	for _, f := range fns {
+		if seen[in.Node+"."+f] {
+			return modelError("node", n.ID, "trigger input "+in.Node+"."+f+" is named twice")
+		}
+		seen[in.Node+"."+f] = true
+	}
+	return nil
+}
+
+// triggerNodes lists the nodes a trigger's sum reads.
+func triggerNodes(tr *Trigger) []string {
+	out := append([]string(nil), tr.Entries...)
+	for _, in := range tr.Inputs {
+		out = append(out, in.Node)
+	}
+	return out
+}
+
+// hasFunction reports whether the node has a function of that name.
+func hasFunction(n Node, name string) bool {
+	for _, f := range n.Functions {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// reachedFrom marks the nodes a walk from v can reach, v included.
+func (b *builder) reachedFrom(v int32) []bool {
+	seen := make([]bool, len(b.g.Nodes))
+	seen[v] = true
+	stack := []int32{v}
+	// bound: each node is pushed once
+	for len(stack) > 0 {
+		u := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for _, to := range b.targets(b.g.Nodes[u]) {
+			if !seen[to] {
+				seen[to] = true
+				stack = append(stack, to)
+			}
+		}
+	}
+	return seen
 }
 
 func (b *builder) checkOutcomes(n Node) error {

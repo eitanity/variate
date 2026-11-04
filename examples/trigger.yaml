@@ -1,0 +1,31 @@
+# A trigger: a pump fleet whose failures in a year are counted, and a
+# year with more than three of them sets off a fleet-wide inspection,
+# once, at the year's end. The inspection finds a design defect three
+# times in ten, and a redesign follows. The count adds nothing to the
+# total (`entries`); a trigger can sum booked values instead (`inputs`,
+# naming a node or node.function). A failure counts toward the year it
+# happened in, whatever its holding times. The exact P(fire) is the
+# transform of the year's count, so the inspection's and the redesign's
+# means are exact; the variance and the total's distribution, which
+# depend on how the firing moves with the failures' costs, come from
+# the run.
+period: { days: 365 }
+graphs:
+  - id: fleet
+    sources:
+      - { id: failures, frequency: { gamma: { mean: 2, sd: 0.5 } }, to: failure }
+    nodes:
+      - id: failure
+        functions:
+          - { name: repair, category: repair, lognormal: { median: 4000, p90: 15000 } }
+      - id: inspection
+        trigger: { over: 3, entries: [failure] }
+        functions:
+          - { name: inspect, category: inspection, pert: [20000, 40000, 90000] }
+        outcomes:
+          - { to: redesign, p: 0.3 }
+          - { to: clear }
+      - id: redesign
+        functions:
+          - { name: redesign, category: redesign, pert: [100000, 250000, 600000] }
+      - id: clear

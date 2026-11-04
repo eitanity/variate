@@ -170,7 +170,7 @@ func (w *Workspace) startPool(nw, pool int) {
 	res := w.histRes()
 	// bound: workers or slots, fixed at construction
 	for i := 0; i < nw; i++ {
-		wk := &worker{ss: dist.NewSamplerSet(m.pools, pool), period: make([]float64, m.periodSlots)}
+		wk := &worker{ss: dist.NewSamplerSet(m.pools, pool), period: make([]float64, m.periodSlots), sums: make([]float64, len(m.trigs))}
 		if m.renewal {
 			wk.phase = make([]int32, len(m.srcs))
 			wk.downUntil = make([]float64, len(m.srcs))

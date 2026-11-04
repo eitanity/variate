@@ -27,6 +27,7 @@ type worker struct {
 	chainT    []float64           // per source, the time its chains are simulated to, from the period's start
 	outage    float64             // the current round's outage, when its block fired it
 	tested    float64             // the value the current node's threshold tests
+	sums      []float64           // per trigger, the period's sum of its inputs so far
 	hists     [2][]*stats.LogHist // by batch parity
 	// Round stream scratch: the round being walked, the period's matching
 	// records, and the sort scratch.

@@ -25,8 +25,9 @@ type Expectation struct {
 	VarBySource         []float64
 	ContribVar          []float64 // [node]
 	StepsPerPeriod      float64
-	ArrivalsPerPeriod   float64 // arrivals the renewal and chain sources draw beyond their rounds: the stream's events, the units' failures and repairs
-	RoundsPerPeriod     float64 // Σ_k E[λ_k]
+	ArrivalsPerPeriod   float64  // arrivals the renewal and chain sources draw beyond their rounds: the stream's events, the units' failures and repairs
+	RoundsPerPeriod     float64  // Σ_k E[λ_k]
+	Firing              []Firing // per trigger, P(fire)
 	pzero               float64
 }
 
@@ -182,6 +183,8 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 		m.breakdownVariances(e, lam, m1, m2)
 	}
 	e.pzero = m.zeroProbability()
+	e.Firing = m.Firings()
+	m.maskFirings(e)
 	return e, nil
 }
 
@@ -283,7 +286,7 @@ func (m *Compiled) breakdownVariances(e *Expectation, lam, m1, m2 []float64) {
 			passes++
 		}
 	}
-	if m.hasDelays || m.hasRepair || m.pairCost()*float64(passes) > pairBudget {
+	if m.hasDelays || m.hasRepair || m.HasTriggers() || m.pairCost()*float64(passes) > pairBudget {
 		m.unknownBreakdownVariances(e)
 		return
 	}
@@ -345,9 +348,10 @@ func (m *Compiled) meanUnder(filt valueFilter, entries []float64) float64 {
 }
 
 // variance is Var[T] for a model without delays: E[Var[T|Θ]] + Var[E[T|Θ]].
-// NaN with delays or above the pair budget; +Inf when any term is.
+// NaN with delays, with a trigger, whose firing depends on the rest of
+// the total, or above the pair budget; +Inf when any term is.
 func (m *Compiled) variance(filt valueFilter, lam, m1, m2 []float64, mean float64) float64 {
-	if m.hasDelays || m.hasRepair || m.pairCost() > pairBudget {
+	if m.hasDelays || m.hasRepair || m.HasTriggers() || m.pairCost() > pairBudget {
 		return math.NaN()
 	}
 	within := 0.0

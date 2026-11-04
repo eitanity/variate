@@ -190,9 +190,13 @@ type StructureEdge struct {
 	Holding        bool
 }
 
-// StructureSource is a source and the node it enters.
+// StructureSource is a source and the node it enters. A trigger is a
+// source with the nodes whose bookings its sum adds up, and its level.
 type StructureSource struct {
-	ID, To string
+	ID, To  string
+	Trigger bool
+	Inputs  []string
+	Over    float64
 }
 
 // Structure returns the graph's drawing description.
@@ -214,7 +218,12 @@ func (m *Compiled) Structure() Structure {
 		s.Outcomes = append(s.Outcomes, StructureEdge{Name: m.outcomeNames[j], From: m.nodeIDs[m.outcomeNode[j]], To: m.nodeIDs[o.to], Holding: o.hold != noIndex})
 	}
 	for k, src := range m.srcs {
-		s.Sources = append(s.Sources, StructureSource{ID: m.sourceIDs[k], To: m.nodeIDs[src.to]})
+		ss := StructureSource{ID: m.sourceIDs[k], To: m.nodeIDs[src.to]}
+		if src.trigger != noIndex {
+			ss.Trigger, ss.Over = true, m.trigs[src.trigger].over
+			ss.Inputs = m.triggerInputs(src.trigger)
+		}
+		s.Sources = append(s.Sources, ss)
 	}
 	return s
 }

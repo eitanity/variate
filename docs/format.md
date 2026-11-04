@@ -100,10 +100,11 @@ the event goes next.
 | `outcomes` | where the event goes next, one of several (below). |
 | `next` | a single next node with no selection; `next_holding` is the holding time before it, a distribution or `outage`. |
 | `threshold` | where the event goes next by one of the node's values: above a level one way, at or below it the other (below). |
+| `trigger` | the node is entered once at a period's end when a sum over the period is above a level, and by nothing else (below). |
 | `mode` | `absolute` (default): each outcome's `p` is its share and at most one outcome may omit `p` to take the remainder. `sequential`: the outcomes are tried in order, each with its own probability, the last taking what is left. |
 
 A node with no `outcomes`, `next` or `threshold` is a leaf, where the
-event ends. The graph must be acyclic.
+event ends; a trigger's node is no different. The graph must be acyclic.
 
 ### Functions
 
@@ -155,6 +156,51 @@ selection: the node has no `outcomes`, `next` or `mode`, its branches no
 holding time and so no `per_time` function, and the tested value is
 drawn per event, not with `scope: period`. The outcomes are reported as
 `<node>→<above>` and `<node>→<below>`. See `examples/threshold.yaml`.
+
+### Triggers
+
+A trigger enters its node once, at the end of a period, when what the
+period's events booked at some nodes, or how often they entered them,
+adds up to more than a level: a year with more than three pump
+failures sets off a fleet-wide inspection.
+
+```yaml
+- id: inspection
+  trigger: { over: 3, entries: [failure] }
+  functions:
+    - { name: inspect, category: inspection, pert: [20000, 40000, 90000] }
+  outcomes:
+    - { to: redesign, p: 0.3 }
+    - { to: clear }
+```
+
+| key | meaning |
+|---|---|
+| `over` | the level, finite and not negative. The trigger fires when the sum is strictly greater. |
+| `entries` | the nodes whose entries it counts. The count books nothing, so the total stays in its own unit. |
+| `inputs` | or the values it sums: a node for every function of it, or `node.function` for one. |
+
+A trigger has `entries` or `inputs`, not both. It fires at most once a
+period, after every source's events of the period, and its round
+books in that period. A booking counts toward the period its event
+arrived in, whatever period a holding time lands it in. No source or
+outcome may lead into a trigger's node; otherwise the node is
+ordinary: its functions book and its outcomes walk on. Its inputs are
+booked by the sources' events alone, so neither its own walk nor
+another trigger's may reach them. Several triggers on the same inputs
+with different levels give a tiered response, each firing once.
+
+The report counts a trigger as a source named after its node: its
+events are the firings, and its rows break down what the walk books.
+P(fire) is exact, a bracket from the transform of the period's sum,
+and the means its walk books are exact with it. Where that transform
+does not apply (a source with repair or a reliability block, a sum of
+`per_time` values with holding times), P(fire) and those means are
+unknown and the run measures them. The variance, the breakdowns'
+variances and the total's transform are unknown with a trigger, since
+the firing moves with the rest of the total; P(T = 0) stays exact. The
+plan counts the firings toward the minimum hits. See
+`examples/trigger.yaml`.
 
 ## Distributions
 

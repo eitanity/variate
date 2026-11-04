@@ -656,6 +656,46 @@
   ]
  },
  {
+  "id": "trigger",
+  "title": "A trigger: too many failures in a year set off an inspection",
+  "file": "trigger.yaml",
+  "about": "Pump failures across a fleet, each with a repair cost. A year with more failures than allowed sets off one fleet-wide inspection at its end, which finds a design defect some of the time, and a redesign follows. The failures are counted without adding to the total. The exact P(fire) comes from the transform of the year's count, so the inspection's and the redesign's means are exact; the variance and the total's distribution come from the run, since the firing moves with the failures' costs. Lower the allowance to see the inspection most years.",
+  "knobs": [
+   {
+    "key": "rate",
+    "label": "Failures per year, mean",
+    "min": 0.2,
+    "max": 8,
+    "step": 0.1,
+    "value": 2
+   },
+   {
+    "key": "allowed",
+    "label": "Failures allowed in a year before an inspection",
+    "min": 0,
+    "max": 10,
+    "step": 1,
+    "value": 3
+   },
+   {
+    "key": "inspect",
+    "label": "Inspection cost, most likely",
+    "min": 25000,
+    "max": 85000,
+    "step": 5000,
+    "value": 40000
+   },
+   {
+    "key": "defect",
+    "label": "Chance the inspection finds a defect",
+    "min": 0,
+    "max": 1,
+    "step": 0.05,
+    "value": 0.3
+   }
+  ]
+ },
+ {
   "id": "shift",
   "title": "An eight-hour shift as the period",
   "file": "shift.yaml",

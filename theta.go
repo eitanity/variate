@@ -254,6 +254,9 @@ func (m *Compiled) zeroProbability() float64 {
 	}
 	rules := make([]quadRule, len(m.srcs))
 	for k, s := range m.srcs {
+		if s.trigger != noIndex {
+			continue
+		}
 		if _, ok := m.pools[s.pool].Laplace(0); !ok {
 			rules[k] = rateRule(m.pools[s.pool])
 		}
@@ -354,6 +357,11 @@ func (m *Compiled) zeroComponents(qs []thetaQuantity) []zeroComp {
 	byRoot := map[int]*zeroComp{}
 	var order []int
 	for k := range m.srcs {
+		if m.srcs[k].trigger != noIndex {
+			// A trigger fires only on a sum above a level that is not
+			// negative, so never in a period whose total is 0.
+			continue
+		}
 		r := find(k)
 		c, ok := byRoot[r]
 		if !ok {
@@ -384,6 +392,9 @@ func (m *Compiled) quantitySources(q thetaQuantity) []int {
 	v := m.quantityNode(q)
 	for k := range m.srcs {
 		s := m.srcs[k]
+		if s.trigger != noIndex {
+			continue
+		}
 		if (q.cycle != nil && s.schedule != noIndex) || (q.factor && q.cycle == nil && s.factor == q.pool) || (!q.factor && m.reach[k][v] > 0) {
 			out = append(out, k)
 		}
