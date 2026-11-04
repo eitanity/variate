@@ -286,3 +286,29 @@ func TestTriggerChain(t *testing.T) {
 		}
 	}
 }
+
+// TestTriggerZero: a trigger counting entries into a node that books
+// nothing fires in periods whose sources booked nothing, so P(T = 0) is
+// NaN rather than the sources' own 1; counting a node that
+// always books keeps it exact, and a run agrees with it.
+func TestTriggerZero(t *testing.T) {
+	g := variate.Graph{
+		Sources: []variate.Source{{ID: "s", Frequency: C(1), To: "alarm"}},
+		Nodes: []variate.Node{
+			{ID: "alarm"},
+			{ID: "inspect", Functions: []variate.Function{Fn("fee", "cost", C(100))}, Trigger: &variate.Trigger{Entries: []string{"alarm"}}},
+		},
+	}
+	c, r := run(t, g, variate.Config{Periods: 100000, Workers: 2}, 3)
+	e, _ := c.Analytic()
+	if !math.IsNaN(e.PZero()) {
+		t.Errorf("P(T = 0) %g, want NaN: the run's zero share is %g", e.PZero(), 1-r.Total.Hist.Exceedance(1e-9))
+	}
+	g.Nodes[0].Functions = []variate.Function{Fn("call", "cost", Pert(10, 20, 40))}
+	c, r = run(t, g, variate.Config{Periods: 100000, Workers: 2}, 3)
+	e, _ = c.Analytic()
+	zero := 1 - r.Total.Hist.Exceedance(1e-9)
+	if want := math.Exp(-1); !near(e.PZero(), want, 1e-9) || math.Abs(zero-want) > 5*math.Sqrt(want*(1-want)/1e5) {
+		t.Errorf("P(T = 0) %g, run %g, want %g", e.PZero(), zero, want)
+	}
+}

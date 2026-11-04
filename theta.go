@@ -240,8 +240,14 @@ func probNodes(d dist.Distribution, x, w []float64) bool {
 // components is exact. A component whose mixture would exceed zeroWork
 // keeps its last settled value, or else takes its probabilities at their
 // means, and PZero is then an approximation for that component; when even
-// that is above zeroWork, PZero is NaN.
+// that is above zeroWork, PZero is NaN, as it is when a trigger can fire
+// on a zero total.
 func (m *Compiled) zeroProbability() float64 {
+	if m.fireOnZero() {
+		// The trigger's walk may book in a period whose sources booked
+		// nothing, with a probability the sources' mixture does not give.
+		return math.NaN()
+	}
 	qs := m.periodQuantities()
 	for i := range qs {
 		if qs[i].fn == noIndex {
@@ -359,7 +365,8 @@ func (m *Compiled) zeroComponents(qs []thetaQuantity) []zeroComp {
 	for k := range m.srcs {
 		if m.srcs[k].trigger != noIndex {
 			// A trigger fires only on a sum above a level that is not
-			// negative, so never in a period whose total is 0.
+			// negative, so never in a period whose total is 0, unless it
+			// counts entries that book nothing, which is NaN above.
 			continue
 		}
 		r := find(k)

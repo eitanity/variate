@@ -233,8 +233,9 @@ func (m *Compiled) means() (e *Expectation, lam, m1, m2 []float64) {
 }
 
 // PZero is the exact probability of a zero period total; NaN with a
-// repair source, or when its mixture is above the work cap even with the
-// probabilities at their means.
+// repair source, with a trigger that counts entries booking nothing, or
+// when its mixture is above the work cap even with the probabilities at
+// their means.
 func (e *Expectation) PZero() float64 { return e.pzero }
 
 // quadRule is a fixed quadrature rule over a rate: nodes and weights.

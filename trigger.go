@@ -419,6 +419,56 @@ func (m *Compiled) feedsInto(f, i int32) bool {
 	return false
 }
 
+// fireOnZero reports whether a trigger can fire in a period whose
+// total is otherwise 0: it counts entries into a node that may book
+// nothing, or the firings of such a trigger. A trigger on booked values
+// fires only on a positive sum.
+func (m *Compiled) fireOnZero() bool {
+	trigOf := map[int32]int{}
+	zero := make([]bool, len(m.trigs))
+	for i, tr := range m.trigs {
+		trigOf[tr.node] = i
+		for _, v := range m.countedBy(index(i)) {
+			if j, ok := trigOf[v]; ok {
+				zero[i] = zero[i] || zero[j]
+			} else {
+				zero[i] = zero[i] || !m.alwaysBooks(v)
+			}
+		}
+		if zero[i] {
+			return true
+		}
+	}
+	return false
+}
+
+// alwaysBooks reports whether an entry into node v books a positive
+// value for certain: one of its OnEntry values is never 0.
+func (m *Compiled) alwaysBooks(v int32) bool {
+	n := m.nodes[v]
+	// bound: functions of one node
+	for f := n.fnStart; f < n.fnEnd; f++ {
+		if m.pools[m.fns[f].pool].CDF(0) == 0 {
+			return true
+		}
+	}
+	return n.thresh != noIndex && m.pools[m.fns[n.thresh].pool].CDF(0) == 0
+}
+
+// countedBy lists the nodes whose entries trigger i counts.
+func (m *Compiled) countedBy(i int32) []int32 {
+	var out []int32
+	for v := range m.nodes {
+		// bound: the triggers one node's entries feed
+		for j := m.countStart[v]; j < m.countStart[v+1]; j++ {
+			if m.counts[j] == i {
+				out = append(out, index(v))
+			}
+		}
+	}
+	return out
+}
+
 // HasTriggers reports whether the model has a trigger, whose firing
 // moves with the rest of the total and leaves the variance without a
 // closed form.

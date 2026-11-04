@@ -197,7 +197,7 @@ func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Exp
 	bad("StepsPerPeriod", e.StepsPerPeriod)
 	bad("RoundsPerPeriod", e.RoundsPerPeriod)
 	bad("DrawsMean", e.DrawsMean)
-	if !c.HasRepair() {
+	if !c.HasRepair() && !c.HasTriggers() {
 		bad("PZero", e.PZero())
 	}
 	for v, x := range e.EntriesPer {
@@ -222,7 +222,7 @@ func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Exp
 	if c.HasRepair() && (!math.IsNaN(e.Var) || !math.IsNaN(e.PZero())) {
 		t.Errorf("%s: a repair source cannot claim Var %g or PZero %g", what, e.Var, e.PZero())
 	}
-	if !c.HasRepair() && (e.PZero() < 0 || e.PZero() > 1+1e-12) {
+	if !c.HasRepair() && !math.IsNaN(e.PZero()) && (e.PZero() < 0 || e.PZero() > 1+1e-12) {
 		t.Errorf("%s: PZero %g outside [0, 1]", what, e.PZero())
 	}
 }

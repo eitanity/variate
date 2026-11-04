@@ -210,7 +210,9 @@ does not apply (a source with repair or a reliability block, a sum of
 `per_time` values with holding times), P(fire) and those means are
 unknown and the run measures them. The variance, the breakdowns'
 variances and the total's transform are unknown with a trigger, since
-the firing moves with the rest of the total; P(T = 0) stays exact. The
+the firing moves with the rest of the total. P(T = 0) stays exact,
+unless a trigger counts entries into a node that may book nothing,
+which can fire in a period whose events booked nothing. The
 plan counts the firings toward the minimum hits. See
 `examples/trigger.yaml`.
 
