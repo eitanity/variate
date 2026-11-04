@@ -343,7 +343,7 @@ func (w *Workspace) allocResult() error {
 	r.Contrib = make([]Accum, len(m.nodes))
 	w.hasFn = make([]bool, len(m.nodes))
 	for v := range m.nodes {
-		w.hasFn[v] = m.nodes[v].fnStart != m.nodes[v].rateEnd
+		w.hasFn[v] = m.nodes[v].hasFunctions()
 		w.means[w.l.entry(index(v))] = e.EntriesPer[v]
 		w.means[w.l.contrib(index(v))] = e.Contrib[v]
 		if w.cfg.NodeHist {

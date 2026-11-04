@@ -1,0 +1,19 @@
+# A threshold: a repair whose parts cost more than the insurance excess
+# goes on to a claim, with its handling and an audit; one at or below
+# the excess ends there.
+period: { days: 365 }
+graphs:
+  - id: plant
+    sources:
+      - { id: breakdown, frequency: {{rate}}, to: repair }
+    nodes:
+      - id: repair
+        functions:
+          - { name: callout, category: labour, pert: [500, 1200, 4000] }
+          - { name: parts,   category: parts,  lognormal: { median: {{parts_median}}, p90: 30000 } }
+        threshold: { function: parts, over: {{excess}}, above: claim, below: done }
+      - id: claim
+        functions:
+          - { name: handling, category: admin, pert: [500, 1000, 3000] }
+          - { name: audit,    category: admin, pert: [2000, {{audit}}, 15000] }
+      - id: done

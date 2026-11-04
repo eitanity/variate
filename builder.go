@@ -200,7 +200,12 @@ func (b *builder) checkNode(n Node) error {
 	if len(n.Outcomes) > 0 && n.Next != "" {
 		return modelError("node", n.ID, "has both outcomes and next")
 	}
-	leaf := len(n.Outcomes) == 0 && n.Next == ""
+	if n.Threshold != nil {
+		if err := b.checkThreshold(n); err != nil {
+			return err
+		}
+	}
+	leaf := len(n.Outcomes) == 0 && n.Next == "" && n.Threshold == nil
 	for _, f := range n.Functions {
 		if err := checkSlot("function", n.ID+"."+f.Name, f.Model, 0, math.Inf(1), false); err != nil {
 			return err
@@ -208,6 +213,9 @@ func (b *builder) checkNode(n Node) error {
 		if f.Basis == PerTime && leaf {
 			return modelError("function", n.ID+"."+f.Name, "per-time function on a leaf: nothing holds it")
 		}
+	}
+	if n.Threshold != nil {
+		return nil
 	}
 	if n.Next != "" {
 		if _, ok := b.nodeIndex[n.Next]; !ok {
@@ -222,6 +230,44 @@ func (b *builder) checkNode(n Node) error {
 		return checkSequential(n)
 	}
 	return checkAbsolute(n)
+}
+
+// checkThreshold: a threshold stands in for the node's selection, tests
+// one of its OnEntry functions with a value drawn per event, and names
+// two nodes that exist.
+func (b *builder) checkThreshold(n Node) error {
+	th := n.Threshold
+	if len(n.Outcomes) > 0 || n.Next != "" {
+		return modelError("node", n.ID, "has a threshold and outcomes or next: the threshold is its selection")
+	}
+	if n.Mode == Sequential {
+		return modelError("node", n.ID, "a threshold is not a sequential selection")
+	}
+	if math.IsNaN(th.Over) || math.IsInf(th.Over, 0) {
+		return modelError("node", n.ID, "threshold over must be finite")
+	}
+	for _, to := range []string{th.Above, th.Below} {
+		if _, ok := b.nodeIndex[to]; !ok {
+			return modelError("node", n.ID, "threshold node "+to+" not found")
+		}
+	}
+	found := false
+	for _, f := range n.Functions {
+		if f.Basis == PerTime {
+			return modelError("function", n.ID+"."+f.Name, "per-time function on a threshold node: its branches have no holding time")
+		}
+		if f.Name != th.Function {
+			continue
+		}
+		found = true
+		if f.Scope == PerPeriod {
+			return modelError("function", n.ID+"."+f.Name, "a threshold tests a value drawn per event, not once per period")
+		}
+	}
+	if !found {
+		return modelError("node", n.ID, "threshold function "+th.Function+" not found")
+	}
+	return nil
 }
 
 func (b *builder) checkOutcomes(n Node) error {
@@ -408,6 +454,9 @@ func (b *builder) targets(n Node) []int32 {
 	}
 	if n.Next != "" {
 		out = append(out, b.nodeIndex[n.Next])
+	}
+	if n.Threshold != nil {
+		out = append(out, b.nodeIndex[n.Threshold.Above], b.nodeIndex[n.Threshold.Below])
 	}
 	return out
 }

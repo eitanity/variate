@@ -404,6 +404,24 @@ func (m *Compiled) quantityNode(q thetaQuantity) int32 {
 	return 0
 }
 
+// zeroMix is the probability that the rest of the round from node v
+// books nothing, over its outcomes: a threshold's branch also needs its
+// half of the tested value to be 0.
+func (m *Compiled) zeroMix(v int32, n cnode, drawn, z []float64) float64 {
+	mix := 0.0
+	// bound: outcomes of one node
+	for j := n.outStart; j < n.outEnd; j++ {
+		zero := 1.0
+		if f := m.outs[j].fn; f != noIndex {
+			zero = m.pools[m.fns[f].pool].CDF(0)
+		}
+		mix += m.outcomeProbWith(v, j, drawn) * zero * z[m.outs[j].to]
+	}
+	// A sequential node's outcome probabilities can sum to just above 1,
+	// and then e^(f·(z−1)·λ) overflows over a heavy frequency's far nodes.
+	return math.Min(mix, 1)
+}
+
 // zeroGiven is P(T = 0 | Θ) with the period draws in drawn; z is scratch
 // for P(C(v) = 0 | Θ).
 func (m *Compiled) zeroGiven(drawn, z []float64, rules []quadRule, srcs []int) float64 {
@@ -422,15 +440,7 @@ func (m *Compiled) zeroGiven(drawn, z []float64, rules []quadRule, srcs []int) f
 			}
 		}
 		if n.outStart != n.outEnd {
-			mix := 0.0
-			// bound: outcomes of one node
-			for j := n.outStart; j < n.outEnd; j++ {
-				mix += m.outcomeProbWith(v, j, drawn) * z[m.outs[j].to]
-			}
-			// A sequential node's outcome probabilities can sum to just
-			// above 1, and then e^(f·(z−1)·λ) overflows over a heavy
-			// frequency's far nodes.
-			pz *= math.Min(mix, 1)
+			pz *= m.zeroMix(v, n, drawn, z)
 		}
 		z[v] = pz
 	}

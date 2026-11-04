@@ -30,6 +30,10 @@ func TestLoaderErrorPaths(t *testing.T) {
 		{"not a map for mapping", "graphs:\n  - id: g\n    nodes: [ { id: a, functions: [ { name: f, category: k, lognormal: 3 } ] } ]\n", "expected a map"},
 		{"wrong count", funcModel("uniform: [1]"), "expected 2 numbers"},
 		{"list of non-numbers", funcModel("pert: [a, b, c]"), "is not a number"},
+		{"threshold without function", "graphs:\n  - id: g\n    sources: [ { id: s, frequency: 1, to: a } ]\n    nodes:\n      - { id: a, functions: [ { name: f, category: k, constant: 1 }, { name: g, category: k, constant: 2 } ], threshold: { over: 1, above: b, below: b } }\n      - { id: b }\n", "threshold needs function"},
+		{"threshold without over", "graphs:\n  - id: g\n    sources: [ { id: s, frequency: 1, to: a } ]\n    nodes:\n      - { id: a, functions: [ { name: f, category: k, constant: 1 }, { name: g, category: k, constant: 2 } ], threshold: { function: f, above: b, below: b } }\n      - { id: b }\n", "threshold needs over"},
+		{"threshold without below", "graphs:\n  - id: g\n    sources: [ { id: s, frequency: 1, to: a } ]\n    nodes:\n      - { id: a, functions: [ { name: f, category: k, constant: 1 }, { name: g, category: k, constant: 2 } ], threshold: { function: f, over: 1, above: b } }\n      - { id: b }\n", "missing below"},
+		{"threshold unknown key", "graphs:\n  - id: g\n    sources: [ { id: s, frequency: 1, to: a } ]\n    nodes:\n      - { id: a, functions: [ { name: f, category: k, constant: 1 }, { name: g, category: k, constant: 2 } ], threshold: { function: f, over: 1, above: b, below: b, at: 2 } }\n      - { id: b }\n", "unknown key \"at\""},
 		// load.go
 		{"period not positive", "period: { days: 0 }\n" + minimal, "must be positive"},
 		{"period not a number", "period: { days: x }\n" + minimal, "is not a number"},

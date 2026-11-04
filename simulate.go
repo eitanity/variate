@@ -138,6 +138,26 @@ func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p, first i
 	}
 }
 
+// chooseSequential tries the outcomes in order, each with its own
+// probability and a fresh uniform after the first, u; the last takes
+// what is left.
+func (w *Workspace) chooseSequential(wk *worker, n cnode, u float64) int32 {
+	m := w.m
+	last := n.outEnd - 1
+	// bound: outcomes of one node
+	for j := n.outStart; j < last; j++ {
+		q := m.outs[j].fixed
+		if m.outs[j].probPool != noIndex {
+			q = wk.period[m.poolPeriod[m.outs[j].probPool]]
+		}
+		if u < q {
+			return j
+		}
+		u = wk.ss.Control().Float64()
+	}
+	return last
+}
+
 // hop is the outcome taken out of a node and its target.
 type hop struct{ out, to int32 }
 
@@ -178,6 +198,12 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode) fl
 		x := w.draw(wk, m.fns[f].pool)
 		w.book(row, k, v, m.fns[f].category, x)
 		booked += x
+	}
+	if n.thresh != noIndex {
+		x := w.draw(wk, m.fns[n.thresh].pool)
+		w.book(row, k, v, m.fns[n.thresh].category, x)
+		booked += x
+		wk.tested = x
 	}
 	return booked
 }
@@ -237,22 +263,17 @@ func (w *Workspace) bookRate(wk *worker, sl *slot, k, v int32, n cnode, a, b flo
 // choose selects an outcome of node v by its selection mode.
 func (w *Workspace) choose(wk *worker, v int32, n cnode) int32 {
 	m := w.m
+	if n.thresh != noIndex {
+		// Above, the first outcome, when the value is greater.
+		if wk.tested > n.over {
+			return n.outStart
+		}
+		return n.outStart + 1
+	}
 	u := wk.ss.Control().Float64()
 	switch {
 	case n.mode == Sequential:
-		last := n.outEnd - 1
-		// bound: outcomes of one node
-		for j := n.outStart; j < last; j++ {
-			q := m.outs[j].fixed
-			if m.outs[j].probPool != noIndex {
-				q = wk.period[m.poolPeriod[m.outs[j].probPool]]
-			}
-			if u < q {
-				return j
-			}
-			u = wk.ss.Control().Float64()
-		}
-		return last
+		return w.chooseSequential(wk, n, u)
 	case n.twoWay:
 		if u < wk.period[m.poolPeriod[m.outs[n.outStart].probPool]] {
 			return n.outStart

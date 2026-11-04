@@ -54,7 +54,8 @@ func (m *Compiled) crossPair(u, w int32, filt valueFilter, m1 []float64, t *pair
 	for j := n.outStart; j < n.outEnd; j++ {
 		o := m.outs[j]
 		tau, _, _ := m.holdMoments(o)
-		q += weighted(m.outcomeMeanProb(u, j), nm.rho*tau*m1[w]+t.at(o.to, w))
+		x, _ := m.outcomeFn(j, filt)
+		q += weighted(m.outcomeMeanProb(u, j), (x+nm.rho*tau)*m1[w]+t.at(o.to, w))
 	}
 	return q
 }
@@ -69,21 +70,23 @@ func (m *Compiled) selfPair(u int32, filt valueFilter, m1 []float64, t *pairTabl
 	for j := n.outStart; j < n.outEnd; j++ {
 		o := m.outs[j]
 		tau, _, _ := m.holdMoments(o)
-		sumPB += m.outcomeMeanProb(u, j) * (nm.rho*tau + m1[o.to])
+		x, _ := m.outcomeFn(j, filt)
+		sumPB += m.outcomeMeanProb(u, j) * (x + nm.rho*tau + m1[o.to])
 	}
 	q += 2 * nm.a * sumPB
 	// bound: outcomes of one node
 	for i := n.outStart; i < n.outEnd; i++ {
 		// bound: outcomes of one node
 		for j := n.outStart; j < n.outEnd; j++ {
-			q += weighted(m.probPair(u, i, j), m.bPair(nm, i, j, m1, t))
+			q += weighted(m.probPair(u, i, j), m.bPair(nm, i, j, filt, m1, t))
 		}
 	}
 	return q
 }
 
-// bPair is E[B_i B_j] with B_j = ρ·τ_j + m₁(child_j|Θ).
-func (m *Compiled) bPair(nm nodeMoments, i, j int32, m1 []float64, t *pairTable) float64 {
+// bPair is E[B_i B_j] with B_j = x_j + ρ·τ_j + m₁(child_j|Θ), x_j the
+// mean of the threshold half outcome j books, drawn per event.
+func (m *Compiled) bPair(nm nodeMoments, i, j int32, filt valueFilter, m1 []float64, t *pairTable) float64 {
 	oi, oj := m.outs[i], m.outs[j]
 	ti, ti2, periodI := m.holdMoments(oi)
 	tj, _, _ := m.holdMoments(oj)
@@ -94,7 +97,10 @@ func (m *Compiled) bPair(nm nodeMoments, i, j int32, m1 []float64, t *pairTable)
 	default:
 		tauPair = ti * tj
 	}
-	return rateSecond(nm.rho2T, tauPair) + nm.rho*ti*m1[oj.to] + nm.rho*tj*m1[oi.to] + t.at(oi.to, oj.to)
+	xi, _ := m.outcomeFn(i, filt)
+	xj, _ := m.outcomeFn(j, filt)
+	rest := rateSecond(nm.rho2T, tauPair) + nm.rho*ti*m1[oj.to] + nm.rho*tj*m1[oi.to] + t.at(oi.to, oj.to)
+	return rest + xi*xj + xi*(nm.rho*tj+m1[oj.to]) + xj*(nm.rho*ti+m1[oi.to])
 }
 
 // probPair is E[π_i π_j] for two outcomes of one node.

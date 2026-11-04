@@ -153,6 +153,18 @@ func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
 	for f := range m.fns {
 		t.draws[f] = t.e.EntriesPer[m.fnNode[f]]
 	}
+	// A threshold's tested value is drawn whole only by the walk; each
+	// half is drawn on its own branch.
+	for _, n := range m.nodes {
+		if n.thresh != noIndex {
+			t.draws[n.thresh] = 0
+		}
+	}
+	for j, o := range m.outs {
+		if o.fn != noIndex {
+			t.draws[o.fn] = t.e.OutcomeRate[j]
+		}
+	}
 	t.unit = m.atomUnit()
 	t.order, t.uses = m.transformOrder()
 	return t

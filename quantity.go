@@ -204,6 +204,10 @@ func (m *Compiled) Structure() Structure {
 		for f := n.fnStart; f < n.rateEnd; f++ {
 			sn.Functions = append(sn.Functions, StructureFunction{Name: m.fnNames[f], Category: m.categories[m.fns[f].category], PerTime: m.fnPerTime[f]})
 		}
+		if n.thresh != noIndex {
+			f := n.thresh
+			sn.Functions = append(sn.Functions, StructureFunction{Name: m.fnNames[f], Category: m.categories[m.fns[f].category]})
+		}
 		s.Nodes = append(s.Nodes, sn)
 	}
 	for j, o := range m.outs {

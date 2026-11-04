@@ -359,7 +359,7 @@ func (p *pipeline) recurse(cat int32, srcs [][]complex128) ([]complex128, string
 		}
 		p.nodeFunctions(gv, n, cat)
 		if n.outStart != n.outEnd {
-			p.nodeMix(gv, v, n, g, uses)
+			p.nodeMix(gv, v, n, cat, g, uses)
 		}
 		g[v] = gv
 		if reason := p.compoundAt(v, cat, gv, total, scratch, srcs, uses); reason != "" {
@@ -477,16 +477,27 @@ func (p *pipeline) nodeFunctions(gv []complex128, n cnode, cat int32) {
 }
 
 // nodeMix multiplies in the mixture over the node's outcomes, releasing
-// a child's generating function with its last use.
-func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, g [][]complex128, uses []int32) {
+// a child's generating function with its last use. A threshold's
+// branch carries its half of the tested value, multiplied in with the
+// child's function on that branch only.
+func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, cat int32, g [][]complex128, uses []int32) {
 	m := p.t.m
 	mix := p.mixBuf
 	clear(mix)
+	var branch []complex128
 	// bound: outcomes of one node
 	for j := n.outStart; j < n.outEnd; j++ {
 		pj := complex(m.outcomeProbWith(v, j, p.mix.drawn), 0)
 		to := m.outs[j].to
 		child := g[to]
+		if f := m.outs[j].fn; f != noIndex && (cat == -1 || m.fns[f].category == cat) {
+			if branch == nil {
+				branch = p.grid()
+			}
+			copy(branch, child)
+			p.multiplyFunction(branch, f, cat == -1 && !p.accounted)
+			child = branch
+		}
 		for i := range mix {
 			mix[i] += pj * child[i]
 		}
@@ -494,6 +505,9 @@ func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, g [][]complex128, 
 		if uses[to] == 0 {
 			p.release(g, to)
 		}
+	}
+	if branch != nil {
+		p.free = append(p.free, branch)
 	}
 	for i := range gv {
 		gv[i] *= mix[i]

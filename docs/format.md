@@ -99,10 +99,11 @@ the event goes next.
 | `functions` | values booked at this node (below). |
 | `outcomes` | where the event goes next, one of several (below). |
 | `next` | a single next node with no selection; `next_holding` is the holding time before it, a distribution or `outage`. |
+| `threshold` | where the event goes next by one of the node's values: above a level one way, at or below it the other (below). |
 | `mode` | `absolute` (default): each outcome's `p` is its share and at most one outcome may omit `p` to take the remainder. `sequential`: the outcomes are tried in order, each with its own probability, the last taking what is left. |
 
-A node with no `outcomes` and no `next` is a leaf, where the event
-ends. The graph must be acyclic.
+A node with no `outcomes`, `next` or `threshold` is a leaf, where the
+event ends. The graph must be acyclic.
 
 ### Functions
 
@@ -122,6 +123,38 @@ ends. The graph must be acyclic.
 | `to` | the next node. |
 | `p` | the probability: a number, or a distribution on [0, 1] (a `beta` for an uncertain share) drawn once per period. Omitted on at most one outcome, which takes the remainder. |
 | `holding` | how long the event stays at this node before moving on: a distribution with a time `unit`, or the word `outage` for the time the reliability block that fired the event stays down (the node must be reached by exactly one source, a block with a repair). Values booked by `per_time` functions accrue over it, and a value may land in a later period than the event. |
+
+### Thresholds
+
+A threshold sends the event one way when a value the node draws is
+above a level and the other way when it is at or below it: a repair
+whose cost is above the insurance excess goes on to a claim, the rest
+end there.
+
+```yaml
+- id: repair
+  functions:
+    - { name: callout, category: labour, pert: [500, 1200, 4000] }
+    - { name: parts,   category: parts,  lognormal: { median: 8000, p90: 30000 } }
+  threshold: { function: parts, over: 25000, above: claim, below: done }
+```
+
+| key | meaning |
+|---|---|
+| `function` | the name of the node's function whose value is tested; may be left out when the node has one function. |
+| `over` | the level. Above is strictly greater, so a value exactly at it (a cap at the level, say) goes below. |
+| `above`, `below` | the next node on each side. |
+
+The value is drawn once and booked as usual, and the event branches on
+it, so the branch and the value go together: the claims are exactly
+the costly repairs. The exact mean, variance, P(T = 0) and distribution
+split the value at the level into its two sides, P(value > level) with
+the value given that it is above and the rest with the value given that
+it is at or below, so they stay exact. A threshold is the node's
+selection: the node has no `outcomes`, `next` or `mode`, its branches no
+holding time and so no `per_time` function, and the tested value is
+drawn per event, not with `scope: period`. The outcomes are reported as
+`<node>→<above>` and `<node>→<below>`. See `examples/threshold.yaml`.
 
 ## Distributions
 

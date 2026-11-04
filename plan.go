@@ -87,7 +87,7 @@ func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
 		}})
 	}
 	for v := range m.nodes {
-		if !c.breakdown || m.nodes[v].fnStart == m.nodes[v].rateEnd || e.Contrib[v] <= 0 {
+		if !c.breakdown || !m.nodes[v].hasFunctions() || e.Contrib[v] <= 0 {
 			continue
 		}
 		need := e.ContribVar[v] / (c.contribRSE * c.contribRSE * e.Contrib[v] * e.Contrib[v])

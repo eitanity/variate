@@ -1,0 +1,24 @@
+# A threshold: a repair whose parts cost more than the insurance excess
+# of 25,000 goes on to a claim, which books its handling and an audit;
+# one at or below the excess ends there. The run draws the cost once,
+# books it and branches on it, so the claims are exactly the costly
+# repairs. The exact figures split the cost at the excess: the claim
+# branch with probability P(cost > 25,000) and the cost given that it
+# is above, the other with the rest, so the claims' audits and the
+# costs that caused them stay together in the variance and the tail.
+period: { days: 365 }
+graphs:
+  - id: plant
+    sources:
+      - { id: breakdown, frequency: 6, to: repair }
+    nodes:
+      - id: repair
+        functions:
+          - { name: callout, category: labour, pert: [500, 1200, 4000] }
+          - { name: parts,   category: parts,  lognormal: { median: 8000, p90: 30000 } }
+        threshold: { function: parts, over: 25000, above: claim, below: done }
+      - id: claim
+        functions:
+          - { name: handling, category: admin, pert: [500, 1000, 3000] }
+          - { name: audit,    category: admin, pert: [2000, 5000, 15000] }
+      - id: done

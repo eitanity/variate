@@ -616,6 +616,46 @@
   ]
  },
  {
+  "id": "threshold",
+  "title": "A threshold: costly repairs go on to a claim",
+  "file": "threshold.yaml",
+  "about": "Breakdowns a year, each with a callout and a parts cost. A repair whose parts cost more than the insurance excess goes on to a claim, which books its handling and an audit; the rest end there. The run draws each cost once and branches on it, so the claims are exactly the costly repairs and the audits come with them in the tail. The exact mean, variance and distribution split each cost at the excess into its two sides. Raise the excess to see fewer claims, each on a dearer repair.",
+  "knobs": [
+   {
+    "key": "rate",
+    "label": "Breakdowns per year",
+    "min": 0,
+    "max": 20,
+    "step": 0.5,
+    "value": 6
+   },
+   {
+    "key": "parts_median",
+    "label": "Parts cost, median",
+    "min": 2000,
+    "max": 25000,
+    "step": 500,
+    "value": 8000
+   },
+   {
+    "key": "excess",
+    "label": "Insurance excess: a repair above it goes to a claim",
+    "min": 5000,
+    "max": 100000,
+    "step": 1000,
+    "value": 25000
+   },
+   {
+    "key": "audit",
+    "label": "Audit cost, most likely",
+    "min": 2500,
+    "max": 14000,
+    "step": 500,
+    "value": 5000
+   }
+  ]
+ },
+ {
   "id": "shift",
   "title": "An eight-hour shift as the period",
   "file": "shift.yaml",

@@ -34,9 +34,14 @@ type cnode struct {
 	fnStart, fnEnd     int32 // OnEntry functions
 	rateStart, rateEnd int32 // PerTime functions
 	mode               Mode
-	twoWay             bool  // absolute mode with one uncertain probability and a remainder
-	alias              int32 // alias table start, or noIndex
+	twoWay             bool    // absolute mode with one uncertain probability and a remainder
+	alias              int32   // alias table start, or noIndex
+	thresh             int32   // the function a threshold tests, outside the ranges above, or noIndex
+	over               float64 // the threshold: above when the value is greater
 }
+
+// hasFunctions reports whether the node books any value.
+func (n cnode) hasFunctions() bool { return n.fnStart != n.rateEnd || n.thresh != noIndex }
 
 // cout is a compiled outcome. For a fixed probability, cum is the
 // cumulative threshold and probPool is noIndex; otherwise probPool is the
@@ -49,6 +54,7 @@ type cout struct {
 	probPool int32
 	hold     int32 // holding-time pool, or noIndex
 	outage   bool  // the holding is the firing block's own down time; hold then carries its bound
+	fn       int32 // a threshold's half of the tested value, booked at the node on this branch, or noIndex
 }
 
 // cfn is a compiled function.

@@ -276,7 +276,7 @@ func (l *loader) parseNodes(x node, nm naming) error {
 }
 
 func (l *loader) parseNode(it node, nm naming) (variate.Node, error) {
-	m, err := it.mapping("id", "description", "functions", "mode", "outcomes", "next", keyNextHolding)
+	m, err := it.mapping("id", "description", "functions", "mode", "outcomes", "next", keyNextHolding, "threshold")
 	if err != nil {
 		return variate.Node{}, err
 	}
@@ -309,7 +309,51 @@ func (l *loader) parseNode(it node, nm naming) (variate.Node, error) {
 			return n, err
 		}
 	}
+	if th, ok := m["threshold"]; ok {
+		if n.Threshold, err = parseThreshold(th, n, nm); err != nil {
+			return n, err
+		}
+	}
 	return l.parseNext(n, m, nm)
+}
+
+// parseThreshold reads { function, over, above, below }; function may be
+// left out when the node has one function.
+func parseThreshold(x node, n variate.Node, nm naming) (*variate.Threshold, error) {
+	m, err := x.mapping("function", "over", "above", "below")
+	if err != nil {
+		return nil, err
+	}
+	th := &variate.Threshold{}
+	if f, ok := m["function"]; ok {
+		if th.Function, err = f.str(); err != nil {
+			return nil, err
+		}
+	} else if len(n.Functions) == 1 {
+		th.Function = n.Functions[0].Name
+	} else {
+		return nil, x.errorf("threshold needs function: the node has %d functions", len(n.Functions))
+	}
+	over, ok := m["over"]
+	if !ok {
+		return nil, x.errorf("threshold needs over")
+	}
+	if th.Over, err = over.float(); err != nil {
+		return nil, err
+	}
+	for _, side := range []struct {
+		key string
+		to  *string
+	}{{"above", &th.Above}, {"below", &th.Below}} {
+		ref, err := required(x, m, side.key)
+		if err != nil {
+			return nil, err
+		}
+		if *side.to, err = nm.resolve(m[side.key], ref); err != nil {
+			return nil, err
+		}
+	}
+	return th, nil
 }
 
 // parseNext reads next and next_holding.

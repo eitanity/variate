@@ -100,6 +100,17 @@ func (m *Compiled) nodeMomentsFor(v int32, filt valueFilter) nodeMoments {
 	return nm
 }
 
+// outcomeFn returns E[X] and E[X²] under the filter of the half of a
+// threshold's value that outcome j books at its node; 0 without one.
+func (m *Compiled) outcomeFn(j int32, filt valueFilter) (mean, second float64) {
+	f := m.outs[j].fn
+	if f == noIndex {
+		return 0, 0
+	}
+	mean, second, _ = m.fnMoments(f, filt)
+	return mean, second
+}
+
 // holdMoments returns E[τ], E[τ²] and whether τ is period-scoped for an
 // outcome; 0 without a holding time.
 func (m *Compiled) holdMoments(o cout) (mean, second float64, period bool) {
@@ -126,10 +137,12 @@ func (m *Compiled) valueToGo(filt valueFilter) (m1, m2 []float64) {
 			o := m.outs[j]
 			p := m.outcomeMeanProb(v, j)
 			tau, tau2, _ := m.holdMoments(o)
+			x, x2 := m.outcomeFn(j, filt)
 			ey := nm.rho*tau + m1[o.to]
 			ey2 := rateSecond(nm.rho2, tau2) + m2[o.to] + 2*nm.rho*tau*m1[o.to]
-			sumPY += weighted(p, ey)
-			sumPY2 += weighted(p, ey2)
+			// The branch's half is independent of what follows given the branch.
+			sumPY += weighted(p, x+ey)
+			sumPY2 += weighted(p, x2+2*x*ey+ey2)
 		}
 		m1[v] = nm.a + sumPY
 		m2[v] = nm.a2 + 2*nm.a*sumPY + sumPY2
@@ -208,7 +221,7 @@ func (m *Compiled) means() (e *Expectation, lam, m1, m2 []float64) {
 	}
 	e.Contrib = make([]float64, len(m.nodes))
 	for v := range m.nodes {
-		if m.nodes[v].fnStart != m.nodes[v].rateEnd {
+		if m.nodes[v].hasFunctions() {
 			e.Contrib[v] = m.meanUnder(valueFilter{kind: filterNode, index: index(v)}, e.EntriesPer)
 		}
 	}
@@ -266,7 +279,7 @@ func (m *Compiled) breakdownVariances(e *Expectation, lam, m1, m2 []float64) {
 	e.ContribVar = make([]float64, len(m.nodes))
 	passes := 1 + len(m.categories)
 	for v := range m.nodes {
-		if m.nodes[v].fnStart != m.nodes[v].rateEnd {
+		if m.nodes[v].hasFunctions() {
 			passes++
 		}
 	}
@@ -284,7 +297,7 @@ func (m *Compiled) breakdownVariances(e *Expectation, lam, m1, m2 []float64) {
 		e.VarByCategory[c] = m.variance(f, lam, c1, c2, e.MeanByCategory[c])
 	}
 	for v := range m.nodes {
-		if m.nodes[v].fnStart == m.nodes[v].rateEnd {
+		if !m.nodes[v].hasFunctions() {
 			continue
 		}
 		f := valueFilter{kind: filterNode, index: index(v)}
@@ -316,14 +329,17 @@ func (m *Compiled) meanUnder(filt valueFilter, entries []float64) float64 {
 	total := 0.0
 	for v := range m.nodes {
 		nm := m.nodeMomentsFor(index(v), filt)
-		held := 0.0
+		held, own := 0.0, 0.0
 		n := m.nodes[v]
 		// bound: outcomes of one node
 		for j := n.outStart; j < n.outEnd; j++ {
 			tau, _, _ := m.holdMoments(m.outs[j])
-			held += m.outcomeMeanProb(index(v), j) * tau
+			x, _ := m.outcomeFn(j, filt)
+			p := m.outcomeMeanProb(index(v), j)
+			held += p * tau
+			own += weighted(p, x)
 		}
-		total += entries[v] * (nm.a + nm.rho*held)
+		total += entries[v] * (nm.a + own + nm.rho*held)
 	}
 	return total
 }

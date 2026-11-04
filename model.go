@@ -63,6 +63,17 @@ type Node struct {
 	NextHolding     dist.Continuous // holding time on Next; nil = 0
 	NextScope       Scope
 	NextRange       *InputRange // how uncertain NextHolding is; nil = not swept
+	Threshold       *Threshold  // a branch on one function's value, in place of Outcomes and Next; nil = none
+}
+
+// Threshold sends a round one way when the value a node's function
+// draws is above Over and the other way when it is at or below it. The
+// value is drawn once and booked as usual; the round branches on it, so
+// the branch and the value are as dependent as they are in the world.
+type Threshold struct {
+	Function     string  // the name of the node's OnEntry function whose value is tested
+	Over         float64 // above is strictly greater than Over
+	Above, Below string  // the next node on each side
 }
 
 // Source is an initiating event flow.

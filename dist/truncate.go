@@ -14,6 +14,7 @@ type Truncated struct {
 	pr             probRange
 	mass           float64
 	upperForm      bool // the range lies above the median: use survival units
+	closed         bool // the range includes lo, and an atom there: (lo, hi] otherwise
 	mean, variance float64
 }
 
@@ -36,7 +37,7 @@ func (d Truncated) Var() float64 { return d.variance }
 func (d Truncated) Support() (lo, hi float64) { return d.lo, d.hi }
 
 func (d Truncated) CDF(x float64) float64 {
-	if x <= d.lo {
+	if x < d.lo || x == d.lo && !d.closed {
 		return 0
 	}
 	if x >= d.hi {
@@ -49,7 +50,10 @@ func (d Truncated) CDF(x float64) float64 {
 }
 
 func (d Truncated) Survival(x float64) float64 {
-	if x <= d.lo {
+	if x < d.lo {
+		return 1
+	}
+	if x == d.lo && !d.closed {
 		return 1
 	}
 	if x >= d.hi {

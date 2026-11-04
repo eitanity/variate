@@ -37,7 +37,7 @@ func (b *builder) flatten() (*Compiled, error) {
 	}
 	for i, n := range b.g.Nodes {
 		m.nodeIDs[i] = n.ID
-		cn := cnode{mode: n.Mode, alias: noIndex}
+		cn := cnode{mode: n.Mode, alias: noIndex, thresh: noIndex}
 		cn.fnStart = index(len(m.fns))
 		b.flattenFunctions(m, index(i), n, OnEntry, cats)
 		cn.fnEnd = index(len(m.fns))
@@ -45,7 +45,13 @@ func (b *builder) flatten() (*Compiled, error) {
 		b.flattenFunctions(m, index(i), n, PerTime, cats)
 		cn.rateEnd = index(len(m.fns))
 		cn.outStart = index(len(m.outs))
-		b.flattenOutcomes(m, index(i), n, &cn)
+		if n.Threshold != nil {
+			if err := b.flattenThreshold(m, index(i), n, &cn, cats); err != nil {
+				return nil, err
+			}
+		} else {
+			b.flattenOutcomes(m, index(i), n, &cn)
+		}
 		cn.outEnd = index(len(m.outs))
 		m.nodes = append(m.nodes, cn)
 	}
@@ -121,19 +127,71 @@ func (m *Compiled) addPool(d dist.Distribution, scope Scope) int32 {
 
 func (b *builder) flattenFunctions(m *Compiled, node int32, n Node, basis Basis, cats map[string]int32) {
 	for _, f := range n.Functions {
-		if f.Basis != basis {
+		if f.Basis != basis || n.Threshold != nil && f.Name == n.Threshold.Function {
 			continue
 		}
-		c, ok := cats[f.Category]
-		if !ok {
-			c = index(len(cats))
-			cats[f.Category] = c
-		}
-		m.fns = append(m.fns, cfn{pool: m.addPool(f.Model, f.Scope), category: c})
-		m.fnNames = append(m.fnNames, n.ID+":"+f.Name)
-		m.fnNode = append(m.fnNode, node)
-		m.fnPerTime = append(m.fnPerTime, basis == PerTime)
+		m.addFunction(node, n.ID+":"+f.Name, f.Model, f.Scope, basis, categoryOf(cats, f.Category))
 	}
+}
+
+// categoryOf returns a category's index, adding it when new.
+func categoryOf(cats map[string]int32, name string) int32 {
+	c, ok := cats[name]
+	if !ok {
+		c = index(len(cats))
+		cats[name] = c
+	}
+	return c
+}
+
+func (m *Compiled) addFunction(node int32, name string, d dist.Distribution, scope Scope, basis Basis, cat int32) int32 {
+	f := index(len(m.fns))
+	m.fns = append(m.fns, cfn{pool: m.addPool(d, scope), category: cat})
+	m.fnNames = append(m.fnNames, name)
+	m.fnNode = append(m.fnNode, node)
+	m.fnPerTime = append(m.fnPerTime, basis == PerTime)
+	return f
+}
+
+// flattenThreshold compiles a threshold as a two-way fixed selection,
+// above then below, with probabilities P(X > t) and P(X ≤ t). The walk
+// draws the tested value from its own law, outside the node's function
+// ranges, and takes the branch its value falls on. Each outcome carries
+// the value's half on its side, which the analytics book at the node on
+// that branch: the halves mix back to the value's law, and each goes
+// with the branch it decides. An empty half has no function.
+func (b *builder) flattenThreshold(m *Compiled, node int32, n Node, cn *cnode, cats map[string]int32) error {
+	th := n.Threshold
+	var fn Function
+	for _, f := range n.Functions {
+		if f.Name == th.Function {
+			fn = f
+		}
+	}
+	cat := categoryOf(cats, fn.Category)
+	name := n.ID + ":" + fn.Name
+	cn.thresh = m.addFunction(node, name, fn.Model, fn.Scope, OnEntry, cat)
+	cn.over = th.Over
+	cum := 0.0
+	for i, side := range []string{th.Above, th.Below} {
+		half, mass, err := dist.NewSplit(fn.Model, th.Over, i == 0)
+		if err != nil {
+			return modelError("function", n.ID+"."+fn.Name, err.Error())
+		}
+		co := cout{to: b.nodeIndex[side], probPool: noIndex, hold: noIndex, fn: noIndex, fixed: mass}
+		if mass > 0 {
+			co.fn = m.addFunction(node, name, half, PerEvent, OnEntry, cat)
+		}
+		cum += mass
+		co.cum = cum
+		dupe := 0
+		if i == 1 && th.Above == th.Below {
+			dupe = 2
+		}
+		m.appendOutcome(m.outcomeName(n.ID, side, dupe), node, co)
+	}
+	m.outs[len(m.outs)-1].cum = 1
+	return nil
 }
 
 // flattenOutcomes compiles a node's selection. Next becomes a one-outcome
@@ -141,7 +199,7 @@ func (b *builder) flattenFunctions(m *Compiled, node int32, n Node, basis Basis,
 // with cumulative thresholds; the remainder of a two-way node goes second.
 func (b *builder) flattenOutcomes(m *Compiled, node int32, n Node, cn *cnode) {
 	if n.Next != "" {
-		m.appendOutcome(m.outcomeName(n.ID, n.Next, 0), node, cout{to: b.nodeIndex[n.Next], cum: 1, fixed: 1, probPool: noIndex, hold: m.holdPool(n.NextHolding, n.NextScope), outage: n.NextOutage})
+		m.appendOutcome(m.outcomeName(n.ID, n.Next, 0), node, cout{to: b.nodeIndex[n.Next], cum: 1, fixed: 1, probPool: noIndex, fn: noIndex, hold: m.holdPool(n.NextHolding, n.NextScope), outage: n.NextOutage})
 		return
 	}
 	order := make([]int, len(n.Outcomes))
@@ -173,7 +231,7 @@ func (b *builder) flattenOutcomes(m *Compiled, node int32, n Node, cn *cnode) {
 	dupes := map[string]int{}
 	for _, i := range order {
 		o := n.Outcomes[i]
-		co := cout{to: b.nodeIndex[o.To], probPool: noIndex, hold: m.holdPool(o.Holding, o.HoldingScope), outage: o.OutageHolding}
+		co := cout{to: b.nodeIndex[o.To], probPool: noIndex, fn: noIndex, hold: m.holdPool(o.Holding, o.HoldingScope), outage: o.OutageHolding}
 		switch {
 		case n.Mode == Sequential && o.P == nil:
 			co.fixed = 1
