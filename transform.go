@@ -7,7 +7,7 @@ import (
 // TransformConfig controls the FFT transform.
 type TransformConfig struct {
 	MaxGrid  int     // default 1<<22 points
-	Tol      float64 // default 1e-3: max of (Upper − Lower)/Upper over x up to x*
+	Tol      float64 // default 1e-3: at each x up to x*, (Upper − Lower)/Upper, or the quantile bracket's (hi − lo)/hi
 	TailP    float64 // default from the compile criteria
 	MaxWork  int64   // default 1<<34 grid-point evaluations (a rate quadrature's nodes × points, a function's or closed-form rate's points) over the whole transform
 	MaxBytes int64   // default 2<<30: the grids a pass holds at once

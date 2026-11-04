@@ -285,12 +285,9 @@ func TestSweepTransformRange(t *testing.T) {
 				t.Fatalf("%s: transform did not return in 60 s", what)
 			}
 			if !tr.Applicable {
-				// A rate of 1000 draws per period needs more than 2^16 points
-				// at a quarter tolerance; every other case must apply, the
-				// rate of 1e-3 included (its tail quantile sits at zero).
-				if rate < 1e3 {
-					t.Errorf("%s: refused: %s", what, tr.Reason)
-				}
+				// Every case must apply, the rate of 1e-3 included (its
+				// tail quantile sits at zero).
+				t.Errorf("%s: refused: %s", what, tr.Reason)
 				continue
 			}
 			b := tr.Total

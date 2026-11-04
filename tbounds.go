@@ -117,14 +117,35 @@ func (r *passResult) upperAt(b brackets, k int) float64 {
 	return math.Min(1, b.up[k]+r.rho[k]+r.alias+r.beta)
 }
 
-// withinTol reports whether the total's bracket is within tol up to x*.
+// withinTol reports whether the total's bracket is within tol up to x*:
+// at every lattice point, either P(T ≥ x) is within tol, or the quantiles
+// whose bracket ends there are. A quantile's bracket [lo, hi] is within
+// tol when hi − lo ≤ tol·max(hi, h); where the distribution is steep its
+// probability bracket stays wide while the quantile is already fixed to a
+// few lattice steps.
 func (r *passResult) withinTol(xStar, tol, tailP float64) bool {
 	kStar := min(int(math.Ceil(xStar/r.h)), r.m-1)
+	// upMin is the upper curve's minimum before k; the levels just below
+	// it are the quantiles whose upper end is k, and their widest bracket
+	// starts at j, where the lower curve first falls below upMin.
+	upMin := math.Inf(1)
+	j, lowMin := 0, r.lowerAt(r.total, 0)
 	// bound: grid points up to x*
 	for k := 0; k <= kStar; k++ {
-		if !resolved(r.lowerAt(r.total, k), r.upperAt(r.total, k), tol, tailP) {
+		lo, up := r.lowerAt(r.total, k), r.upperAt(r.total, k)
+		if up >= upMin {
+			// No quantile ends here; the ones spanning k end later.
+			continue
+		}
+		// bound: grid points up to k
+		for lowMin >= upMin && j < k {
+			j++
+			lowMin = math.Min(lowMin, r.lowerAt(r.total, j))
+		}
+		if !resolved(lo, up, tol, tailP) && float64(k-j) > tol*float64(max(k, 1)) {
 			return false
 		}
+		upMin = up
 	}
 	return true
 }
@@ -146,7 +167,7 @@ func (r *passResult) dominant(xStar float64) string {
 	}
 	switch {
 	case gap >= rho && gap >= r.alias:
-		return "the discretisation gap stays above Tol at MaxGrid: the range is too wide for a linear grid"
+		return "the discretisation gap keeps P(T ≥ x) and its quantiles wider than Tol at MaxGrid: the range is too wide for a linear grid"
 	case r.alias >= rho:
 		return "the wrap-around bound stays above Tol at MaxGrid: the tail is too heavy for this method"
 	default:

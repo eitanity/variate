@@ -2,6 +2,7 @@ package suite
 
 import (
 	"math"
+	"strconv"
 	"testing"
 
 	"code.eitanity.com/variate"
@@ -78,6 +79,109 @@ func TestTransformPanjer(t *testing.T) {
 			// lower bound plus the round-off allowance.
 			if curve := lo + tr.Total.Roundoff[x]; float64(k) <= q99 && lo > 0 && math.Abs(curve-ec) > 1e-10 {
 				t.Errorf("%s: P(T ≥ %d) FFT %.12g Panjer %.12g", tc.name, k, curve, ec)
+			}
+		}
+	}
+}
+
+// fleet is Poisson(rate) failures each costing a lognormal repair with
+// p90 1.5 times its median, and with branch a 2% chance of a major loss
+// on top: a steep distribution over a range set by the rare loss.
+func fleet(rate float64, repair, major dist.Lognormal, branch bool) variate.Graph {
+	fail := variate.Node{ID: "fail", Functions: []variate.Function{Fn("repair", "k", repair)}}
+	g := variate.Graph{Sources: []variate.Source{{ID: "s", Frequency: C(rate), To: "fail"}}}
+	if branch {
+		fail.Outcomes = []variate.Outcome{{To: "major", P: C(0.02)}, {To: "ok", P: C(0.98)}}
+		g.Nodes = append(g.Nodes, variate.Node{ID: "major", Functions: []variate.Function{Fn("loss", "k", major)}}, variate.Node{ID: "ok"})
+	}
+	g.Nodes = append(g.Nodes, fail)
+	return g
+}
+
+// rounded is a lognormal's masses on the lattice of step h up to n,
+// rounded down (the mass of [kh, (k+1)h) at k) or up (of ((k−1)h, kh] at
+// k), with the mass beyond n at n: exact for P(X ≥ x) up to nh.
+func rounded(d dist.Lognormal, h float64, n int, up bool) []float64 {
+	f := make([]float64, n+1)
+	shift := 1.0
+	if up {
+		shift = 0
+	}
+	for k := range n {
+		f[k] = d.CDF((float64(k)+shift)*h) - d.CDF((float64(k)+shift-1)*h)
+	}
+	f[n] = d.Survival((float64(n) + shift - 1) * h)
+	return f
+}
+
+// lattice quantile: the smallest k·h with P(T ≥ k·h) ≤ 1 − p.
+func latticeQuantile(g []float64, h, p float64) float64 {
+	cdf := 0.0
+	for k := range g {
+		if 1-cdf <= 1-p {
+			return float64(k) * h
+		}
+		cdf += g[k]
+	}
+	return float64(len(g)) * h
+}
+
+// TestTransformQuantileTol: a steep total over a wide range, which a
+// tolerance on P(T ≥ x) alone refuses at every grid, applies with every
+// quantile from P50 to P99.9 within Tol, and each bracket overlaps the
+// one Panjer gives with the repair and the loss rounded down and up on a
+// lattice of its own.
+func TestTransformQuantileTol(t *testing.T) {
+	repair, _ := dist.NewLognormalFromMedianP90(2e3, 3e3)
+	major, _ := dist.NewLognormalFromMedianP90(2e5, 3e5)
+	ps := []float64{0.5, 0.9, 0.99, 0.999}
+	for _, tc := range []struct {
+		rate   float64
+		branch bool
+	}{{30, false}, {100, false}, {10, true}} {
+		what := "rate " + strconv.FormatFloat(tc.rate, 'g', -1, 64) + " branch " + strconv.FormatBool(tc.branch)
+		cfg := variate.TransformConfig{}
+		_, tr := transformOf(t, fleet(tc.rate, repair, major, tc.branch), cfg)
+		if !tr.Applicable {
+			t.Errorf("%s: refused: %s", what, tr.Reason)
+			continue
+		}
+		_, top := tr.Total.Quantile(0.999)
+		n := 20000
+		h := 1.2 * top / float64(n)
+		var q [2][]float64
+		for i, up := range []bool{false, true} {
+			f := rounded(repair, h, n, up)
+			if tc.branch {
+				m := rounded(major, h, n, up)
+				sum := make([]float64, n+1)
+				for a := range f {
+					sum[a] += 0.98 * f[a]
+					for b := 0; a+b <= n; b++ {
+						sum[min(a+b, n)] += 0.02 * f[a] * m[b]
+					}
+				}
+				// The pairs beyond n land at n.
+				left := 1.0
+				for k := range n {
+					left -= sum[k]
+				}
+				sum[n] = left
+				f = sum
+			}
+			g := panjer(0, tc.rate, math.Exp(-tc.rate*(1-f[0])), f, n)
+			for _, p := range ps {
+				q[i] = append(q[i], latticeQuantile(g, h, p))
+			}
+		}
+		for i, p := range ps {
+			lo, hi := tr.Total.Quantile(p)
+			if hi-lo > 1e-3*math.Max(hi, tr.H) {
+				t.Errorf("%s: P%g bracket [%g, %g] wider than Tol", what, 100*p, lo, hi)
+			}
+			// The true quantile lies in [lo − H, hi] and in [down − h, up].
+			if lo-tr.H > q[1][i] || hi < q[0][i]-h {
+				t.Errorf("%s: P%g transform [%g, %g] misses Panjer [%g, %g]", what, 100*p, lo, hi, q[0][i], q[1][i])
 			}
 		}
 	}
