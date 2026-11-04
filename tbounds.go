@@ -214,13 +214,14 @@ func tighten(lower, upper []float64) {
 }
 
 // selfCheck: the computed means and total masses agree with the exact
-// lattice values up to the wrapped mass and round-off; the zero mass of
-// the upper pipeline is the exact P(T = 0).
-func (r *passResult) selfCheck(t *transformer, meanUp, meanDown, dropMean float64) string {
+// lattice values, of the quantity inverted with the given exact mean and
+// variance, up to the wrapped mass and round-off; the zero mass of the
+// upper pipeline is the exact P(T = 0).
+func (r *passResult) selfCheck(t *transformer, meanUp, meanDown, dropMean, exact, variance float64) string {
 	e := t.e
 	top := r.rho[r.m-1] * float64(r.m) * r.h
-	if !math.IsInf(e.Var, 0) && !math.IsNaN(e.Var) {
-		second := e.Var + e.Mean*e.Mean
+	if !math.IsInf(variance, 0) && !math.IsNaN(variance) {
+		second := variance + exact*exact
 		wrap := math.Sqrt(second * r.alias / math.Exp(-r.theta*float64(r.m)*r.h))
 		for _, c := range []struct {
 			b    brackets
@@ -231,8 +232,8 @@ func (r *passResult) selfCheck(t *transformer, meanUp, meanDown, dropMean float6
 				return "self-check: the computed upper mean " + ftoa(got) + " does not agree with the lattice mean " + ftoa(c.want)
 			}
 		}
-		if meanDown > e.Mean+1e-9*e.Mean || meanUp+dropMean < e.Mean-1e-9*e.Mean {
-			return "self-check: the lattice means " + ftoa(meanDown) + ", " + ftoa(meanUp) + " do not bracket the exact mean " + ftoa(e.Mean)
+		if meanDown > exact+1e-9*exact || meanUp+dropMean < exact-1e-9*exact {
+			return "self-check: the lattice means " + ftoa(meanDown) + ", " + ftoa(meanUp) + " do not bracket the exact mean " + ftoa(exact)
 		}
 	}
 	if r.pzero > e.PZero()+r.rho[0]+r.alias+1e-12 || r.pzero < e.PZero()-r.rho[0]-1e-12 {

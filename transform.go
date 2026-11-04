@@ -127,6 +127,7 @@ type transformer struct {
 	passWork  int64   // evaluations of the last pass
 	passM     int     // its grid
 	totalOnly bool    // the total alone, without the categories and sources
+	walkFn    []bool  // with a trigger summing the whole total, the functions only its walk draws; nil otherwise
 }
 
 func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
@@ -165,6 +166,15 @@ func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
 		if o.fn != noIndex {
 			t.draws[o.fn] = t.e.OutcomeRate[j]
 		}
+	}
+	if m.whole != nil && m.expect != nil {
+		// The total is the sum and the walk: its brackets only, sized
+		// by the upper end of its variance.
+		e := *m.expect
+		e.Var = m.whole.varHi
+		t.e = &e
+		t.totalOnly = true
+		t.walkFn = m.walkFunctions()
 	}
 	t.unit = m.atomUnit()
 	t.order, t.uses = m.transformOrder()
@@ -255,8 +265,8 @@ func (t *transformer) applicable() string {
 	if m.hasRepair {
 		return "the model has a source with repair or a reliability diagram"
 	}
-	if m.HasTriggers() {
-		return "a trigger fires on a period's sum, which the rest of the total depends on"
+	if m.HasTriggers() && m.whole == nil {
+		return "a trigger fires on a period's sum, which the rest of the total depends on, unless it is the only trigger and sums every value the sources book"
 	}
 	if m.cycle.over {
 		return "the schedules' combined cycle is longer than " + itoa(maxJointPeriods) + " periods or has more than " + itoa(maxJointPoints) + " distinct places"
@@ -339,6 +349,9 @@ func (t *transformer) passBytes(m int) int64 {
 		srcs = len(t.m.srcs)
 	}
 	grids := int64(1+t.categories()+srcs) + 8
+	if t.walkFn != nil {
+		grids += 1 + 6 // the walk, and the convolution's three grids of twice the size
+	}
 	return 2 * int64(m) * (bytesPerPoint*grids + 8*int64(2*(1+t.categories()+srcs)))
 }
 

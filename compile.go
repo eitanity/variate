@@ -122,6 +122,7 @@ type Compiled struct {
 	trigs                                        []ctrig   // the triggers, each also a source after the model's own
 	feedStart                                    []int32   // per function, its start in feeds; one more entry than functions
 	feeds                                        []int32   // the triggers each function's bookings add to
+	whole                                        *wholeSum // the trigger summing the whole total, or nil
 	countStart                                   []int32   // per node, its start in counts; one more entry than nodes
 	counts                                       []int32   // the triggers each node's entries add to
 }

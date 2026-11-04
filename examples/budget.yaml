@@ -1,0 +1,26 @@
+# A trigger on the whole total: a plant's breakdowns cost a callout and
+# parts, and a year whose spend is above the maintenance budget of
+# 150,000 sets off an escalation at its end, a review and emergency
+# funding at a premium. The trigger's inputs are every value the
+# breakdowns book, so the year's total is the spend plus the
+# escalation when the spend is above the budget; the escalation's walk
+# is independent of the spend. The variance and the total's exact
+# distribution then follow from the transform of the spend: split at
+# the budget, the part above convolved with the escalation's law. Name
+# part of the spend (repair.parts, say), or add a second trigger, and
+# they are left to the run.
+period: { days: 365 }
+graphs:
+  - id: plant
+    sources:
+      - { id: breakdown, frequency: 6, to: repair }
+    nodes:
+      - id: repair
+        functions:
+          - { name: callout, category: labour, pert: [500, 1200, 4000] }
+          - { name: parts,   category: parts,  lognormal: { median: 8000, p90: 30000 } }
+      - id: escalation
+        trigger: { over: 150000, inputs: [repair] }
+        functions:
+          - { name: review,  category: admin,   pert: [5000, 10000, 30000] }
+          - { name: premium, category: funding, pert: [10000, 25000, 80000] }

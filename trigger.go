@@ -136,10 +136,13 @@ func (m *Compiled) fireProbabilities(g Graph, cfg Config) {
 			f, atoms[i] = m.gateFiring(i, trigOf, atoms)
 		} else {
 			atoms[i] = m.sumAtoms(index(i))
-			var mean float64
-			f, mean = fireOf(g, m.nodeIDs[tr.node], tr.over, cfg)
+			sf := fireOf(g, m.nodeIDs[tr.node], tr.over, cfg)
+			f = sf.f
 			if !f.Exact() && tr.over > 0 {
-				p = math.Min(1, mean/tr.over)
+				p = math.Min(1, sf.mean/tr.over)
+			}
+			if f.Exact() && m.sumsWholeTotal(i) {
+				m.whole = &wholeSum{trig: i, figures: sf}
 			}
 		}
 		if f.Exact() {
@@ -300,22 +303,28 @@ func binomialTail(p []float64, over float64) float64 {
 	return tail
 }
 
-// fireOf brackets P(S > over) for the trigger on node id, with the mean
-// of S. The transform resolves the sum up to its TailP quantile; when
-// the level lies beyond that, the tail level is raised until the
-// quantile passes the level or P(S > over) is bounded to 0.
-func fireOf(g Graph, id string, over float64, cfg Config) (Firing, float64) {
+// fireOf brackets P(S > over) for the trigger on node id, with the
+// sum's mean and variance and a bracket on the integral of P(S ≥ x) up
+// to the level, from which a sum of the whole total has its variance.
+// The transform resolves the sum up to its TailP quantile; when the
+// level lies beyond that, the tail level is raised until the quantile
+// passes the level or P(S > over) is bounded to 0.
+func fireOf(g Graph, id string, over float64, cfg Config) sumFigures {
 	nan := math.NaN()
+	out := sumFigures{f: Firing{Lo: nan, Hi: nan}, mean: nan, variance: nan, belowLo: nan, belowHi: nan}
 	fg := fireGraph(g, id)
 	sub := Config{NoBreakdown: true, TailP: cfg.TailP}
 	dm, _, err := fg.flattenReached(sub)
 	if err != nil {
-		return Firing{Lo: nan, Hi: nan, Reason: "the sum's model: " + err.Error()}, nan
+		out.f.Reason = "the sum's model: " + err.Error()
+		return out
 	}
 	e, err := dm.Analytic()
 	if err != nil {
-		return Firing{Lo: nan, Hi: nan, Reason: "the sum's model: " + err.Error()}, nan
+		out.f.Reason = "the sum's model: " + err.Error()
+		return out
 	}
+	out.mean, out.variance, out.drawsVar = e.Mean, e.Var, e.DrawsVar
 	dm.expect = e
 	dm.crit = criteriaFrom(sub)
 	tail := dm.crit.tailP
@@ -323,20 +332,28 @@ func fireOf(g Graph, id string, over float64, cfg Config) (Firing, float64) {
 	for range fireTails {
 		t := newTransformer(dm, TransformConfig{TailP: tail, MaxGrid: cfg.TransformGrid, Tol: cfg.TransformTol, MaxWork: cfg.TransformWork, MaxBytes: cfg.TransformBytes})
 		t.totalOnly = true
-		out := &Transformed{}
+		tr := &Transformed{}
 		if reason := t.applicable(); reason != "" {
-			return Firing{Lo: nan, Hi: nan, Reason: "the transform of the sum does not apply: " + reason}, e.Mean
+			out.f.Reason = "the transform of the sum does not apply: " + reason
+			return out
 		}
-		if err := t.run(out); err != nil {
-			return Firing{Lo: nan, Hi: nan, Reason: "the transform of the sum: " + err.Error()}, e.Mean
+		if err := t.run(tr); err != nil {
+			out.f.Reason = "the transform of the sum: " + err.Error()
+			return out
 		}
-		if !out.Applicable {
-			return Firing{Lo: nan, Hi: nan, Reason: "the transform of the sum does not apply: " + out.Reason}, e.Mean
+		if !tr.Applicable {
+			out.f.Reason = "the transform of the sum does not apply: " + tr.Reason
+			return out
 		}
-		lo, hi := exceedsBracket(out.Total, over)
-		_, resolved := out.Total.Quantile(tail)
+		lo, hi := exceedsBracket(tr.Total, over)
+		_, resolved := tr.Total.Quantile(tail)
 		if over < resolved || hi == 0 || tail >= fireTailMax {
-			return Firing{Lo: lo, Hi: hi}, e.Mean
+			out.f = Firing{Lo: lo, Hi: hi}
+			out.belowLo, out.belowHi = 0, 0
+			if over > 0 {
+				out.belowLo, out.belowHi = tr.Total.LayerMean(Layer{Limit: over})
+			}
+			return out
 		}
 		share := lo
 		if share == 0 {
@@ -344,7 +361,18 @@ func fireOf(g Graph, id string, over float64, cfg Config) (Firing, float64) {
 		}
 		tail = math.Min(fireTailMax, 1-fireTail*share)
 	}
-	return Firing{Lo: nan, Hi: nan, Reason: "the sum's tail above the level was not resolved"}, e.Mean
+	out.f.Reason = "the sum's tail above the level was not resolved"
+	return out
+}
+
+// sumFigures is what the transform of a trigger's sum gives: P(fire),
+// the sum's mean and variance, and ∫₀^over P(S ≥ x) dx within
+// [belowLo, belowHi].
+type sumFigures struct {
+	f                Firing
+	mean, variance   float64
+	drawsVar         float64
+	belowLo, belowHi float64
 }
 
 // exceedsBracket brackets P(S > x) from a bracket on P(S ≥ kh): rounded

@@ -214,7 +214,13 @@ does not apply (a source with repair or a reliability block, a sum of
 `per_time` values with holding times), P(fire) and those means are
 unknown and the run measures them. The variance, the breakdowns'
 variances and the total's transform are unknown with a trigger, since
-the firing moves with the rest of the total. P(T = 0) stays exact,
+the firing moves with the rest of the total, with one exception: a
+model's only trigger whose `inputs` are every value the sources book
+(a budget on the whole spend), in a model without holding times. The
+total is then the spend plus the trigger's walk when the spend is over
+the level, and its variance (within the transform's tolerance) and
+exact distribution follow from the spend's transform, split at the
+level. See `examples/budget.yaml`. P(T = 0) stays exact,
 unless a trigger counts entries into a node that may book nothing,
 which can fire in a period whose events booked nothing. The
 plan counts the firings toward the minimum hits. See

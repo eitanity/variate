@@ -728,6 +728,46 @@
   ]
  },
  {
+  "id": "budget",
+  "title": "A trigger on the whole total: spend above the budget",
+  "file": "budget.yaml",
+  "about": "Breakdowns a year, each with a callout and a parts cost. A year whose spend is above the maintenance budget sets off one escalation at its end: a review and emergency funding at a premium. The trigger sums the whole total, so the total is the spend plus the escalation when the spend is over, and the exact variance and distribution follow from the spend's own: split at the budget, the part above convolved with the escalation's cost. Lower the budget to see the escalation most years and the distribution shift up by its cost.",
+  "knobs": [
+   {
+    "key": "rate",
+    "label": "Breakdowns per year",
+    "min": 0.5,
+    "max": 20,
+    "step": 0.5,
+    "value": 6
+   },
+   {
+    "key": "parts_median",
+    "label": "Parts cost, median",
+    "min": 2000,
+    "max": 25000,
+    "step": 500,
+    "value": 8000
+   },
+   {
+    "key": "budget",
+    "label": "Maintenance budget a year",
+    "min": 20000,
+    "max": 500000,
+    "step": 10000,
+    "value": 150000
+   },
+   {
+    "key": "premium",
+    "label": "Emergency funding premium, most likely",
+    "min": 12000,
+    "max": 75000,
+    "step": 1000,
+    "value": 25000
+   }
+  ]
+ },
+ {
   "id": "shift",
   "title": "An eight-hour shift as the period",
   "file": "shift.yaml",

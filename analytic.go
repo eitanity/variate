@@ -184,6 +184,10 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 	}
 	e.pzero = m.zeroProbability()
 	e.Firing = m.Firings()
+	if m.whole != nil {
+		_, _, m1, m2 := m.means()
+		m.wholeVariance(e, m1, m2)
+	}
 	m.maskFirings(e)
 	return e, nil
 }

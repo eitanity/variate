@@ -1,0 +1,18 @@
+# A trigger on the whole total: a year whose maintenance spend is above
+# the budget sets off an escalation, a review and emergency funding at a
+# premium, booked in that year.
+period: { days: 365 }
+graphs:
+  - id: plant
+    sources:
+      - { id: breakdown, frequency: {{rate}}, to: repair }
+    nodes:
+      - id: repair
+        functions:
+          - { name: callout, category: labour, pert: [500, 1200, 4000] }
+          - { name: parts,   category: parts,  lognormal: { median: {{parts_median}}, p90: 30000 } }
+      - id: escalation
+        trigger: { over: {{budget}}, inputs: [repair] }
+        functions:
+          - { name: review,  category: admin,   pert: [5000, 10000, 30000] }
+          - { name: premium, category: funding, pert: [10000, {{premium}}, 80000] }

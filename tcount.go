@@ -51,6 +51,10 @@ func (m *Compiled) TransformEntries(cfg TransformConfig) (*Counts, error) {
 		out.Reason = reason
 		return out, nil
 	}
+	if m.HasTriggers() {
+		out.Reason = "a trigger's count is not Poisson"
+		return out, nil
+	}
 	c := &counter{t: t, reach: make([][]float64, len(m.srcs))}
 	for k := range c.reach {
 		c.reach[k] = make([]float64, len(m.nodes))

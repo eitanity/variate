@@ -49,6 +49,11 @@ type pipeline struct {
 	dropMean  float64        // bound on the mean the dropped tails carry
 	eps       float64        // quadrature error
 	pzero     float64        // mass at 0 of the last inverted total
+	// A trigger summing the whole total: its walk's generating function,
+	// and the parts of the lattice mean, its dropped tails' mean and the
+	// dropped mass that its walk's functions carry.
+	walk                         []complex128
+	walkMean, walkDrop, walkBeta float64
 }
 
 // graphResult holds the tilted generating functions of the quantities.
@@ -56,6 +61,7 @@ type graphResult struct {
 	total []complex128
 	cats  [][]complex128
 	srcs  [][]complex128
+	walk  []complex128 // the whole-total trigger's walk, or nil
 }
 
 // pass evaluates both pipelines at (h, M) with the tilt chosen for the
@@ -100,8 +106,20 @@ func (t *transformer) pass(h float64, m int, xStar float64) (*passResult, string
 	res.alias = t.aliasBound(h, m, theta)
 	eps := math.Max(down.eps, up.eps)
 	res.rho = t.roundoff(h, m, theta, eps)
-	if reason := res.selfCheck(t, up.mean, down.mean, up.dropMean); reason != "" {
+	mean, variance := t.e.Mean, t.e.Var
+	if t.walkFn != nil {
+		// The total inverted so far is the sum alone.
+		w := t.m.whole
+		mean, variance = w.figures.mean, w.figures.variance
+		up.mean -= up.walkMean
+		down.mean -= down.walkMean
+		up.dropMean -= up.walkDrop
+	}
+	if reason := res.selfCheck(t, up.mean, down.mean, up.dropMean, mean, variance); reason != "" {
 		return nil, reason
+	}
+	if t.walkFn != nil {
+		res.addWalk(t, down, up, gDown.walk, gUp.walk)
 	}
 	return res, ""
 }
@@ -172,6 +190,9 @@ func (p *pipeline) valueAtoms(q *thetaQuantity, cap int) bool {
 		}
 	}
 	p.mean += p.t.draws[q.fn] * lmean
+	if p.t.walkFn != nil && p.t.walkFn[q.fn] {
+		p.walkMean += p.t.draws[q.fn] * lmean
+	}
 	return true
 }
 
@@ -218,6 +239,9 @@ func (p *pipeline) graph() (*graphResult, string) {
 // maxDiff is the largest pointwise difference between two results.
 func (g *graphResult) maxDiff(o *graphResult) float64 {
 	d := maxAbsDiff(g.total, o.total)
+	if g.walk != nil {
+		d = math.Max(d, maxAbsDiff(g.walk, o.walk))
+	}
 	for c := range g.cats {
 		d = math.Max(d, maxAbsDiff(g.cats[c], o.cats[c]))
 	}
@@ -248,6 +272,9 @@ func (p *pipeline) tensor() (*graphResult, string) {
 		for k := range out.srcs {
 			out.srcs[k] = make([]complex128, p.m)
 		}
+	}
+	if p.t.walkFn != nil {
+		out.walk = make([]complex128, p.m)
 	}
 	if p.mix.passes() > 1 && p.fnG == nil {
 		p.fnG = make([][]complex128, len(m.fns))
@@ -296,6 +323,9 @@ func (g *graphResult) add(o *graphResult, w complex128) {
 	for j := range g.total {
 		g.total[j] += w * o.total[j]
 	}
+	for j := range g.walk {
+		g.walk[j] += w * o.walk[j]
+	}
 	for c := range g.cats {
 		for j := range g.cats[c] {
 			g.cats[c][j] += w * o.cats[c][j]
@@ -323,6 +353,7 @@ func (p *pipeline) graphGiven() (*graphResult, string) {
 		return nil, reason
 	}
 	out.total = total
+	out.walk = p.walk
 	for c := range p.t.categories() {
 		gc, reason := p.recurse(index(c), nil)
 		if reason != "" {
@@ -386,6 +417,13 @@ func (p *pipeline) compoundAt(v, cat int32, gv, total, scratch []complex128, src
 			continue
 		}
 		uses[v]--
+		if s.trigger != noIndex {
+			// Only a trigger summing the whole total reaches the
+			// transform: its walk is kept whole, not compounded, and
+			// joins the total above the level once the sum is inverted.
+			p.walk = append(p.walk[:0], gv...)
+			continue
+		}
 		// A source that books nothing in the category has the
 		// generating function 1 there, and compounds to 1.
 		if cat != -1 && allOne(gv) {
@@ -514,6 +552,27 @@ func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, cat int32, g [][]c
 	}
 }
 
+// accountDrop adds a bound on the mean a dropped tail carries, and to
+// the walk's part when the function is the walk's alone.
+func (p *pipeline) accountDrop(f int32, drop float64) {
+	p.dropMean += drop
+	if p.t.walkFn != nil && p.t.walkFn[f] {
+		p.walkDrop += drop
+	}
+}
+
+// accountFunction adds a function's dropped mass and lattice mean, per
+// period by its draws, and to the walk's parts when the function is the
+// walk's alone.
+func (p *pipeline) accountFunction(f int32, dropped, lmean float64) {
+	p.beta += p.t.draws[f] * dropped
+	p.mean += p.t.draws[f] * lmean
+	if p.t.walkFn != nil && p.t.walkFn[f] {
+		p.walkBeta += p.t.draws[f] * dropped
+		p.walkMean += p.t.draws[f] * lmean
+	}
+}
+
 // multiplyAtom multiplies gv by the tilted generating function of a
 // single atom at lattice index k: r^k·z_j^k, with z_j^k read from the
 // root table at (j·k) mod M. The index advances by k mod M per point, so
@@ -576,15 +635,14 @@ func (p *pipeline) multiplyFunction(gv []complex128, f int32, account bool) {
 			// the grid, so the exceedance still counts it; only the lattice
 			// mean misses it, by at most √(E[X²]·P(X ≥ cut)).
 			if account {
-				p.dropMean += p.t.draws[f] * math.Sqrt((d.Var()+d.Mean()*d.Mean())*dropped)
+				p.accountDrop(f, p.t.draws[f]*math.Sqrt((d.Var()+d.Mean()*d.Mean())*dropped))
 			}
 			dropped = 0
 			break
 		}
 	}
 	if account {
-		p.beta += p.t.draws[f] * dropped
-		p.mean += p.t.draws[f] * lmean
+		p.accountFunction(f, dropped, lmean)
 	}
 	gf := p.fft.Coefficients(p.gf, tilted)
 	p.t.work += int64(p.m)
