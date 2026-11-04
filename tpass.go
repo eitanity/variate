@@ -605,7 +605,8 @@ func (p *pipeline) invert(g []complex128) []float64 {
 		cdf += mk
 		rk *= p.r
 	}
-	p.pzero = real(masses[0]) / float64(p.m)
+	// Round-off can leave a mass of zero slightly negative.
+	p.pzero = math.Min(1, math.Max(0, real(masses[0])/float64(p.m)))
 	return ec
 }
 
