@@ -1,0 +1,37 @@
+# A bow-tie as chained triggers: three cooling pumps, two of which must
+# run. Each pump's failures in a year are counted by a trigger over 0
+# that marks it failed in that year; a top trigger over 1 on those
+# marks fires when two or more failed in the same year: the loss of
+# cooling, the bow-tie's top event, whose walk is the consequence side.
+# This is the fault tree's two-out-of-three gate per period: "failed in
+# the same year", not "down at the same time", which is exact for a
+# mission of one period without repair and an upper bound otherwise;
+# coincident down time belongs to a reliability block. OR is a top
+# trigger over 0, AND over n − 1. The triggers fire in the order their
+# sums depend on each other, and a cycle is refused. The first-level
+# P(fire) is exact; the top's is measured by the run.
+period: { days: 365 }
+graphs:
+  - id: cooling
+    sources:
+      - { id: pump_a_fails, frequency: 0.3, to: pump_a }
+      - { id: pump_b_fails, frequency: 0.3, to: pump_b }
+      - { id: pump_c_fails, frequency: 0.3, to: pump_c }
+    nodes:
+      - { id: pump_a, functions: [ { name: repair, category: repair, lognormal: { median: 3000, p90: 9000 } } ] }
+      - { id: pump_b, functions: [ { name: repair, category: repair, lognormal: { median: 3000, p90: 9000 } } ] }
+      - { id: pump_c, functions: [ { name: repair, category: repair, lognormal: { median: 3000, p90: 9000 } } ] }
+      - { id: a_failed, trigger: { over: 0, entries: [pump_a] } }
+      - { id: b_failed, trigger: { over: 0, entries: [pump_b] } }
+      - { id: c_failed, trigger: { over: 0, entries: [pump_c] } }
+      - id: loss_of_cooling
+        trigger: { over: 1, entries: [a_failed, b_failed, c_failed] }
+        functions:
+          - { name: shutdown, category: outage, pert: [50000, 120000, 400000] }
+        outcomes:
+          - { to: overheating, p: 0.1 }
+          - { to: controlled }
+      - id: overheating
+        functions:
+          - { name: damage, category: damage, lognormal: { median: 1000000, p90: 4000000 } }
+      - id: controlled

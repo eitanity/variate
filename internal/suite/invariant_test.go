@@ -175,15 +175,21 @@ func TestInvariantCompileOrDocumentedError(t *testing.T) {
 	}
 }
 
-// checkNumbers: the fields that are always numbers must not be NaN; Var
+// checkNumbers: the fields that are always numbers must not be NaN,
+// unless a trigger's P(fire) is unknown, which leaves the means its walk
+// reaches NaN (TestTriggerUnknown checks which); Var
 // and its breakdowns may be NaN only with delays, a repair source, a
 // trigger or above the pair budget, and are then NaN together; P(T = 0) only with a
 // repair source, or a mixture above its work cap, which needs more
 // period-scoped values than these graphs have.
 func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Expectation) {
 	t.Helper()
+	known := true
+	for _, f := range e.Firing {
+		known = known && f.Exact()
+	}
 	bad := func(name string, x float64) {
-		if math.IsNaN(x) {
+		if known && math.IsNaN(x) {
 			t.Errorf("%s: %s is NaN", what, name)
 		}
 	}

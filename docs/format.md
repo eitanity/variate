@@ -185,15 +185,27 @@ period, after every source's events of the period, and its round
 books in that period. A booking counts toward the period its event
 arrived in, whatever period a holding time lands it in. No source or
 outcome may lead into a trigger's node; otherwise the node is
-ordinary: its functions book and its outcomes walk on. Its inputs are
-booked by the sources' events alone, so neither its own walk nor
-another trigger's may reach them. Several triggers on the same inputs
-with different levels give a tiered response, each firing once.
+ordinary: its functions book and its outcomes walk on. Several
+triggers on the same inputs with different levels give a tiered
+response, each firing once.
+
+Triggers chain: an input may be another trigger's node, or a node its
+walk reaches, and that trigger then fires first in the period, so its
+bookings count. A trigger whose own firing feeds its sum, directly or
+through others, is refused with the cycle named. Counting the entries
+of trigger nodes gives a fault tree's gates per period: OR is a top
+trigger over 0 on the basic events' marks, AND over n − 1, k out of n
+over k − 1, each mark a trigger over 0 on one basic event. The meaning
+is "happened in the same period", not "down at the same time": exact
+for a mission of one period without repair; coincident down time
+belongs to a reliability block. The top trigger's walk is a bow-tie's
+consequence side. See `examples/bowtie.yaml`.
 
 The report counts a trigger as a source named after its node: its
 events are the firings, and its rows break down what the walk books.
 P(fire) is exact, a bracket from the transform of the period's sum,
-and the means its walk books are exact with it. Where that transform
+and the means its walk books are exact with it; a chained trigger's is
+measured by the run. Where that transform
 does not apply (a source with repair or a reliability block, a sum of
 `per_time` values with holding times), P(fire) and those means are
 unknown and the run measures them. The variance, the breakdowns'

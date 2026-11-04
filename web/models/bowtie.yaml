@@ -1,0 +1,28 @@
+# A bow-tie as chained triggers: three cooling pumps, of which enough
+# must run; the top trigger fires when more than the gate's number
+# failed in the same year, and its walk is the consequence side.
+period: { days: 365 }
+graphs:
+  - id: cooling
+    sources:
+      - { id: pump_a_fails, frequency: {{rate}}, to: pump_a }
+      - { id: pump_b_fails, frequency: {{rate}}, to: pump_b }
+      - { id: pump_c_fails, frequency: {{rate}}, to: pump_c }
+    nodes:
+      - { id: pump_a, functions: [ { name: repair, category: repair, lognormal: { median: 3000, p90: 9000 } } ] }
+      - { id: pump_b, functions: [ { name: repair, category: repair, lognormal: { median: 3000, p90: 9000 } } ] }
+      - { id: pump_c, functions: [ { name: repair, category: repair, lognormal: { median: 3000, p90: 9000 } } ] }
+      - { id: a_failed, trigger: { over: 0, entries: [pump_a] } }
+      - { id: b_failed, trigger: { over: 0, entries: [pump_b] } }
+      - { id: c_failed, trigger: { over: 0, entries: [pump_c] } }
+      - id: loss_of_cooling
+        trigger: { over: {{gate}}, entries: [a_failed, b_failed, c_failed] }
+        functions:
+          - { name: shutdown, category: outage, pert: [50000, 120000, 400000] }
+        outcomes:
+          - { to: overheating, p: {{overheat}} }
+          - { to: controlled }
+      - id: overheating
+        functions:
+          - { name: damage, category: damage, lognormal: { median: 1000000, p90: 4000000 } }
+      - id: controlled

@@ -14,6 +14,8 @@ type builder struct {
 	cfg           Config
 	nodeIndex     map[string]int32
 	warnings      []Warning
+	trigOrder     []int32          // the trigger nodes in the order they are evaluated
+	trigUp        map[int32]string // a trigger node that one depends on, by node
 }
 
 func (b *builder) validate() error {
@@ -275,8 +277,9 @@ func (b *builder) checkThreshold(n Node) error {
 
 // checkTriggers: a trigger has a finite level that is not negative and
 // inputs that exist, each named once; its node is entered only by
-// firing; and its inputs are booked by the sources' events alone, so no
-// input is reached from a trigger's node.
+// firing; and the triggers can be evaluated in order at a period's end,
+// so none depends on itself. A trigger depends on another when that
+// one's walk reaches any of its inputs.
 func (b *builder) checkTriggers() error {
 	entered := b.enteredNodes()
 	for i, n := range b.g.Nodes {
@@ -290,18 +293,7 @@ func (b *builder) checkTriggers() error {
 			return err
 		}
 	}
-	from := b.triggerReach()
-	for _, n := range b.g.Nodes {
-		if n.Trigger == nil {
-			continue
-		}
-		for _, id := range triggerNodes(n.Trigger) {
-			if t := from[b.nodeIndex[id]]; t != noIndex {
-				return modelError("node", n.ID, "trigger input "+id+" is reached from trigger node "+b.g.Nodes[t].ID+": a trigger's sum counts the sources' events, and chained triggers are not supported")
-			}
-		}
-	}
-	return nil
+	return b.orderTriggers()
 }
 
 // enteredNodes marks the nodes a source or an outcome leads into.
@@ -318,24 +310,124 @@ func (b *builder) enteredNodes() []bool {
 	return entered
 }
 
-// triggerReach gives, per node, a trigger whose walk reaches it, or
-// noIndex.
-func (b *builder) triggerReach() []int32 {
-	from := make([]int32, len(b.g.Nodes))
-	for v := range from {
-		from[v] = noIndex
-	}
+// orderTriggers sets the order the triggers are evaluated in, each after
+// those it depends on, by Kahn's algorithm over the dependencies; a
+// trigger that depends on itself, directly or through others, is an
+// error naming the cycle.
+func (b *builder) orderTriggers() error {
+	var trigs []int32
 	for i, n := range b.g.Nodes {
-		if n.Trigger == nil {
-			continue
+		if n.Trigger != nil {
+			trigs = append(trigs, index(i))
 		}
-		for v, ok := range b.reachedFrom(index(i)) {
-			if ok {
-				from[v] = index(i)
+	}
+	deps := b.triggerDeps(trigs)
+	b.trigUp = map[int32]string{}
+	for i, d := range deps {
+		if len(d) > 0 {
+			b.trigUp[trigs[i]] = b.g.Nodes[trigs[d[0]]].ID
+		}
+	}
+	order, indeg := kahn(deps)
+	b.trigOrder = b.trigOrder[:0]
+	for _, u := range order {
+		b.trigOrder = append(b.trigOrder, trigs[u])
+	}
+	if len(b.trigOrder) == len(trigs) {
+		return nil
+	}
+	return modelError("node", b.g.Nodes[trigs[firstLeft(indeg)]].ID, "trigger cycle: "+b.triggerCycle(trigs, deps, indeg))
+}
+
+// kahn orders the items of deps, each after those it lists, and returns
+// with the order the count of unmet dependencies left on each item: all
+// 0 unless there is a cycle.
+func kahn(deps [][]int) (order, indeg []int) {
+	indeg = make([]int, len(deps))
+	users := make([][]int, len(deps))
+	for i, d := range deps {
+		indeg[i] = len(d)
+		for _, u := range d {
+			users[u] = append(users[u], i)
+		}
+	}
+	for i := range deps {
+		if indeg[i] == 0 {
+			order = append(order, i)
+		}
+	}
+	// bound: each item is appended once
+	for q := 0; q < len(order); q++ {
+		for _, i := range users[order[q]] {
+			indeg[i]--
+			if indeg[i] == 0 {
+				order = append(order, i)
 			}
 		}
 	}
-	return from
+	return order, indeg
+}
+
+// triggerDeps lists, per trigger, the triggers whose walk reaches one
+// of its inputs, itself included.
+func (b *builder) triggerDeps(trigs []int32) [][]int {
+	deps := make([][]int, len(trigs))
+	for j, t := range trigs {
+		reached := b.reachedFrom(t)
+		for i, u := range trigs {
+			for _, id := range triggerNodes(b.g.Nodes[u].Trigger) {
+				if reached[b.nodeIndex[id]] {
+					deps[i] = append(deps[i], j)
+					break
+				}
+			}
+		}
+	}
+	return deps
+}
+
+// firstLeft is the first index with a positive count.
+func firstLeft(indeg []int) int {
+	for i, d := range indeg {
+		if d > 0 {
+			return i
+		}
+	}
+	return 0
+}
+
+// triggerCycle names a cycle among the triggers Kahn's algorithm left,
+// following dependencies until one repeats.
+func (b *builder) triggerCycle(trigs []int32, deps [][]int, indeg []int) string {
+	seen := make([]bool, len(trigs))
+	path := []int{}
+	u := firstLeft(indeg)
+	// bound: a trigger repeats within len(trigs) steps
+	for range len(trigs) + 1 {
+		if seen[u] {
+			break
+		}
+		seen[u] = true
+		path = append(path, u)
+		for _, d := range deps[u] {
+			if indeg[d] > 0 {
+				u = d
+				break
+			}
+		}
+	}
+	// The cycle starts where the walk first met u.
+	start := 0
+	for i, p := range path {
+		if p == u {
+			start = i
+		}
+	}
+	out := ""
+	for _, p := range path[start:] {
+		out += b.g.Nodes[trigs[p]].ID + " <- "
+	}
+	return out + b.g.Nodes[trigs[u]].ID
 }
 
 // checkTriggerInputs: the level and each input of one trigger.

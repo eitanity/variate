@@ -29,10 +29,11 @@ const (
 
 // ctrig is a compiled trigger.
 type ctrig struct {
-	node   int32
-	src    int32 // the source the trigger stands as
-	over   float64
-	firing Firing
+	node     int32
+	src      int32 // the source the trigger stands as
+	over     float64
+	upstream string // a trigger whose walk feeds this one's sum, or ""
+	firing   Firing
 }
 
 // Firing is P(fire) of a trigger: within [Lo, Hi] from the transform of
@@ -51,16 +52,16 @@ func (f Firing) Exact() bool { return !math.IsNaN(f.Lo) }
 // per function the triggers its bookings feed.
 func (b *builder) flattenTriggers(m *Compiled) {
 	var pairs, counted [][2]int32 // function or node, trigger
-	for i, n := range b.g.Nodes {
-		if n.Trigger == nil {
-			continue
-		}
+	// In evaluation order, so each trigger's source walks after those
+	// whose walks feed its sum.
+	for _, i := range b.trigOrder {
+		n := b.g.Nodes[i]
 		tr := index(len(m.trigs))
 		k := index(len(m.srcs))
 		pool := m.addPool(point(0), PerEvent)
-		m.srcs = append(m.srcs, csrc{to: index(i), pool: pool, every: 1, repair: noIndex, factor: noIndex, schedule: noIndex, trigger: tr, chainStart: index(len(m.chains)), chainEnd: index(len(m.chains))})
+		m.srcs = append(m.srcs, csrc{to: i, pool: pool, every: 1, repair: noIndex, factor: noIndex, schedule: noIndex, trigger: tr, chainStart: index(len(m.chains)), chainEnd: index(len(m.chains))})
 		m.sourceIDs = append(m.sourceIDs, n.ID)
-		m.trigs = append(m.trigs, ctrig{node: index(i), src: k, over: n.Trigger.Over})
+		m.trigs = append(m.trigs, ctrig{node: i, src: k, over: n.Trigger.Over, upstream: b.trigUp[i]})
 		for _, in := range n.Trigger.Inputs {
 			for _, f := range m.nodeFunctions(b.nodeIndex[in.Node], in.Node, in.Function) {
 				pairs = append(pairs, [2]int32{f, tr})
@@ -117,21 +118,28 @@ func (m *Compiled) nodeFunctions(v int32, id, name string) []int32 {
 // fireProbabilities sets each trigger's P(fire) from the transform of
 // its sum, and its source's count mean with it: the bracket's middle,
 // or where the transform does not apply, an upper bound by Markov's
-// inequality, which sizes the histograms while the figures it reaches
-// are NaN.
+// inequality, or 1 for a chained trigger, which sizes the histograms
+// while the figures it reaches are NaN.
 func (m *Compiled) fireProbabilities(g Graph, cfg Config) {
 	for i := range m.trigs {
 		tr := &m.trigs[i]
-		f, mean := fireOf(g, m.nodeIDs[tr.node], tr.over, cfg)
-		f.Source = int(tr.src)
-		tr.firing = f
-		p := (f.Lo + f.Hi) / 2
-		if !f.Exact() {
-			p = 1
-			if tr.over > 0 {
+		var f Firing
+		p := 1.0
+		if tr.upstream != "" {
+			// The sum's model leaves the triggers out, so it has no
+			// part of a chained trigger's sum.
+			f = Firing{Lo: math.NaN(), Hi: math.NaN(), Reason: "the sum takes in the walk of trigger " + tr.upstream + ", which the transform of the sum leaves out"}
+		} else {
+			var mean float64
+			f, mean = fireOf(g, m.nodeIDs[tr.node], tr.over, cfg)
+			if f.Exact() {
+				p = (f.Lo + f.Hi) / 2
+			} else if tr.over > 0 {
 				p = math.Min(1, mean/tr.over)
 			}
 		}
+		f.Source = int(tr.src)
+		tr.firing = f
 		k := tr.src
 		m.pools[m.srcs[k].pool] = point(p)
 		m.poolMean[m.srcs[k].pool] = p
@@ -337,8 +345,9 @@ func (m *Compiled) maskNode(e *Expectation, v int32) {
 const periodEnd = 1 - 0x1p-53
 
 // feed adds a booking of function f to the sums of the triggers it is
-// an input of. The inputs are reached by the sources' rounds alone, so
-// only their bookings arrive here.
+// an input of. A trigger's walk reaches only the inputs of triggers
+// evaluated after it, the order following the dependencies, so every
+// booking arrives before the sum it feeds is read.
 func (w *Workspace) feed(wk *worker, f int32, x float64) {
 	m := w.m
 	// bound: the triggers one function feeds
@@ -358,8 +367,9 @@ func (w *Workspace) count(wk *worker, v int32) {
 }
 
 // runTrigger walks source k's trigger once if its sum over period p is
-// above its level. The sources walk before the triggers, so the sum is
-// the period's whole.
+// above its level. The sources walk before the triggers, and each
+// trigger after those whose walks feed it, so the sum is the period's
+// whole.
 func (w *Workspace) runTrigger(wk *worker, sl *slot, k int32, p, first int64) {
 	tr := w.m.trigs[w.m.srcs[k].trigger]
 	if !(wk.sums[w.m.srcs[k].trigger] > tr.over) {

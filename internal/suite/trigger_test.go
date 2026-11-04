@@ -191,8 +191,7 @@ func TestTriggerUnknown(t *testing.T) {
 
 // TestTriggerErrors: a trigger entered by an outcome or a source, with
 // a negative level, no inputs, both inputs and entries, a missing input,
-// an input named twice or one its own or another trigger's walk reaches
-// is refused.
+// an input named twice or a cycle of triggers is refused.
 func TestTriggerErrors(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -214,7 +213,11 @@ func TestTriggerErrors(t *testing.T) {
 		{"twice", func(g *variate.Graph) {
 			g.Nodes[1].Trigger.Entries, g.Nodes[1].Trigger.Inputs = nil, []variate.TriggerInput{{Node: "failure"}, {Node: "failure", Function: "repair"}}
 		}, "named twice"},
-		{"own walk", func(g *variate.Graph) { g.Nodes[1].Trigger.Entries[0] = "redesign" }, "reached from trigger node inspection"},
+		{"own walk", func(g *variate.Graph) { g.Nodes[1].Trigger.Entries[0] = "redesign" }, "trigger cycle: inspection <- inspection"},
+		{"through another", func(g *variate.Graph) {
+			g.Nodes[1].Trigger.Entries[0] = "audit"
+			g.Nodes = append(g.Nodes, variate.Node{ID: "audit", Trigger: &variate.Trigger{Entries: []string{"redesign"}}})
+		}, "trigger cycle:"},
 	} {
 		g := triggered(4, 3)
 		tr := *g.Nodes[1].Trigger
@@ -224,6 +227,62 @@ func TestTriggerErrors(t *testing.T) {
 		_, _, err := g.Compile(variate.Config{})
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: error %v, want %q", tc.name, err, tc.want)
+		}
+	}
+}
+
+// pumps is three pumps failing independently at rate lam each, a
+// trigger per pump over 0 marking it failed in the period, and a top
+// trigger over k − 1 on their firings: k of the three failing in the
+// same period sets off a loss of cooling.
+func pumps(lam float64, k int) variate.Graph {
+	g := variate.Graph{}
+	down := make([]string, 0, 3)
+	for _, id := range []string{"a", "b", "c"} {
+		g.Sources = append(g.Sources, variate.Source{ID: id, Frequency: C(lam), To: id})
+		g.Nodes = append(g.Nodes,
+			variate.Node{ID: id, Functions: []variate.Function{Fn("repair", "repair", C(100))}},
+			variate.Node{ID: id + "_down", Trigger: &variate.Trigger{Entries: []string{id}}})
+		down = append(down, id+"_down")
+	}
+	g.Nodes = append(g.Nodes, variate.Node{ID: "loss", Functions: []variate.Function{Fn("shutdown", "loss", C(1e5))},
+		Trigger: &variate.Trigger{Over: float64(k - 1), Entries: down}})
+	return g
+}
+
+// TestTriggerChain: the gates of three independent pumps fire as their
+// laws say: OR (one of three), two of three and AND, each a run's share
+// of periods against 1 − (1 − p)³, the binomial tail and p³, with p the
+// exact first-level P(fire) = 1 − e^(−λ). A chained trigger's P(fire) is
+// NaN with the trigger it takes in named.
+func TestTriggerChain(t *testing.T) {
+	lam := 0.4
+	p := 1 - math.Exp(-lam)
+	for _, tc := range []struct {
+		k    int
+		want float64
+	}{{1, 1 - (1-p)*(1-p)*(1-p)}, {2, 3*p*p*(1-p) + p*p*p}, {3, p * p * p}} {
+		c, r := run(t, pumps(lam, tc.k), variate.Config{Periods: 200000, Workers: 4}, 9)
+		fs := c.Firings()
+		ids := c.SourceIDs()
+		for _, f := range fs {
+			if ids[f.Source] == "loss" {
+				if f.Exact() || !strings.Contains(f.Reason, "_down") {
+					t.Errorf("k %d: top firing %+v, want NaN naming a pump", tc.k, f)
+				}
+				continue
+			}
+			if !f.Exact() || f.Lo > p*(1+1e-9) || f.Hi < p*(1-1e-9) {
+				t.Errorf("k %d: %s P(fire) [%g, %g], want %g", tc.k, ids[f.Source], f.Lo, f.Hi, p)
+			}
+		}
+		n := float64(r.Periods)
+		top := float64(r.Events[len(ids)-1]) / n
+		if ids[len(ids)-1] != "loss" {
+			t.Fatalf("the top trigger is not last: %v", ids)
+		}
+		if se := math.Sqrt(tc.want * (1 - tc.want) / n); math.Abs(top-tc.want) > 5*se {
+			t.Errorf("k %d: top fires %g a period, want %g ± %g", tc.k, top, tc.want, se)
 		}
 	}
 }

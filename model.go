@@ -83,7 +83,9 @@ type Threshold struct {
 // A booking counts toward the period its event arrived in, whatever
 // period a holding time lands it in, and the walk the trigger starts
 // books in that same period. No outcome leads into a trigger's node: it
-// is entered only by firing.
+// is entered only by firing. Its inputs may be reached by other
+// triggers' walks, which then fire first in the period; a trigger whose
+// sum its own firing feeds, directly or through others, is a cycle.
 type Trigger struct {
 	Over    float64        // fires when the sum is strictly greater
 	Inputs  []TriggerInput // the values the sum adds up
