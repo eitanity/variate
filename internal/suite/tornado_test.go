@@ -149,11 +149,16 @@ func TestTornadoScaledProbabilities(t *testing.T) {
 // TestTornadoMeanRowsExact: on the corpus, screened, every mean row is
 // exact and is the analytic mean of the scaled model, the base row the
 // model's own; a model with many inputs has every 15th row checked so.
+// A model whose exact mean is unknown (a trigger's P(fire)) is left to
+// TestTornadoUnknownMeanNotExact.
 func TestTornadoMeanRowsExact(t *testing.T) {
 	for _, cm := range corpus(t) {
 		base, err := mustCompile(t, cm.g).Analytic()
 		if err != nil {
 			t.Fatalf("%s: %v", cm.name, err)
+		}
+		if math.IsNaN(base.Mean) {
+			continue
 		}
 		sw, err := cm.g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1})
 		if err != nil {
@@ -389,5 +394,26 @@ func TestTornadoRanges(t *testing.T) {
 	screen, err := g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1})
 	if err != nil || len(screen.Rows) != len(g.Inputs()) || screen.Rows[0].Low != 0.9 {
 		t.Errorf("screen: %v rows, %v", screen, err)
+	}
+}
+
+// TestTornadoUnknownMeanNotExact: where a trigger's P(fire) is unknown
+// the exact mean is NaN, and a sweep of the mean takes no exact row,
+// which the bound standing in for P(fire) would otherwise give.
+func TestTornadoUnknownMeanNotExact(t *testing.T) {
+	g := triggered(4, 5)
+	rate, _ := dist.NewConstant(4)
+	g.Sources[0] = variate.Source{ID: "s", Frequency: rate, Repair: Pert(0.01, 0.02, 0.05), To: "failure"}
+	sw, err := g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1, Inputs: []string{"node failure"}, Run: variate.Config{Periods: 4096, Seed: 3}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range sw.Rows {
+		if row.Method == variate.MethodExact {
+			t.Errorf("%s: exact row %v with P(fire) unknown", row.Input.Name, row.Base)
+		}
+	}
+	if len(sw.Rows) == 0 {
+		t.Error("no rows")
 	}
 }

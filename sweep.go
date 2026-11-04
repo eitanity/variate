@@ -354,6 +354,10 @@ func (s *sweeper) exact(g Graph, fig sweepFigure) (Range, error) {
 		return Range{}, err
 	}
 	e, _, _, _ := m.means()
+	// A trigger's unknown P(fire) has a bound standing in for it in the
+	// means, which sizes the histograms; the figures it reaches are not
+	// exact.
+	m.maskFirings(e)
 	v := math.NaN()
 	switch fig.kind {
 	case figMean:
