@@ -2,7 +2,9 @@ package suite
 
 import (
 	"math"
+	"math/bits"
 	"strconv"
+	"strings"
 	"testing"
 
 	"code.eitanity.com/variate"
@@ -143,6 +145,11 @@ func TestTransformQuantileTol(t *testing.T) {
 		cfg := variate.TransformConfig{}
 		_, tr := transformOf(t, fleet(tc.rate, repair, major, tc.branch), cfg)
 		if !tr.Applicable {
+			// With a 32-bit int the memory budget is 1.5 GB, and the case
+			// that needs 2^22 points is refused by it.
+			if bits.UintSize == 32 && strings.Contains(tr.Reason, "MB at") {
+				continue
+			}
 			t.Errorf("%s: refused: %s", what, tr.Reason)
 			continue
 		}

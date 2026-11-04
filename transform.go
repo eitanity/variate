@@ -2,6 +2,7 @@ package variate
 
 import (
 	"math"
+	"math/bits"
 )
 
 // TransformConfig controls the FFT transform.
@@ -10,7 +11,7 @@ type TransformConfig struct {
 	Tol      float64 // default 1e-3: at each x up to x*, (Upper − Lower)/Upper, or the quantile bracket's (hi − lo)/hi
 	TailP    float64 // default from the compile criteria
 	MaxWork  int64   // default 1<<34 grid-point evaluations (a rate quadrature's nodes × points, a function's or closed-form rate's points) over the whole transform
-	MaxBytes int64   // default 2<<30: the grids a pass holds at once
+	MaxBytes int64   // default 2<<30, 3<<29 with a 32-bit int: the grids a pass holds at once
 }
 
 // Transformed is the exact distribution of the period total inside a
@@ -41,10 +42,12 @@ type Bounds struct {
 }
 
 const (
-	defaultMaxGrid   = 1 << 22
-	defaultTol       = 1e-3
-	defaultMaxWork   = 1 << 34
-	defaultMaxBytes  = 2 << 30
+	defaultMaxGrid = 1 << 22
+	defaultTol     = 1e-3
+	defaultMaxWork = 1 << 34
+	// defaultMaxBytes is 1.5 GB with a 32-bit address space, where the
+	// collector's headroom over a 2 GB pass would exhaust it.
+	defaultMaxBytes  = 2<<30 - (1<<29)*(64/bits.UintSize-1)
 	bytesPerPoint    = 16 // a complex grid point
 	minGrid          = 1 << 16
 	maxFolds         = 64
