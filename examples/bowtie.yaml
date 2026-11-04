@@ -8,8 +8,11 @@
 # mission of one period without repair and an upper bound otherwise;
 # coincident down time belongs to a reliability block. OR is a top
 # trigger over 0, AND over n − 1. The triggers fire in the order their
-# sums depend on each other, and a cycle is refused. The first-level
-# P(fire) is exact; the top's is measured by the run.
+# sums depend on each other, and a cycle is refused. Every P(fire) is
+# exact: each pump's from the transform of its count, and the top's from
+# the Poisson-binomial law of the three marks, which share no source;
+# so the consequences' means are exact too. Two marks fed by one source
+# (a repeated event) would leave the top's P(fire) to the run.
 period: { days: 365 }
 graphs:
   - id: cooling

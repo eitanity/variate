@@ -251,10 +251,9 @@ func pumps(lam float64, k int) variate.Graph {
 }
 
 // TestTriggerChain: the gates of three independent pumps fire as their
-// laws say: OR (one of three), two of three and AND, each a run's share
-// of periods against 1 − (1 − p)³, the binomial tail and p³, with p the
-// exact first-level P(fire) = 1 − e^(−λ). A chained trigger's P(fire) is
-// NaN with the trigger it takes in named.
+// laws say: OR (one of three), two of three and AND, each with the exact
+// P(fire) 1 − (1 − p)³, the binomial tail and p³, with p the marks'
+// exact 1 − e^(−λ), and a run's share of periods agreeing.
 func TestTriggerChain(t *testing.T) {
 	lam := 0.4
 	p := 1 - math.Exp(-lam)
@@ -263,26 +262,86 @@ func TestTriggerChain(t *testing.T) {
 		want float64
 	}{{1, 1 - (1-p)*(1-p)*(1-p)}, {2, 3*p*p*(1-p) + p*p*p}, {3, p * p * p}} {
 		c, r := run(t, pumps(lam, tc.k), variate.Config{Periods: 200000, Workers: 4}, 9)
-		fs := c.Firings()
 		ids := c.SourceIDs()
-		for _, f := range fs {
+		if ids[len(ids)-1] != "loss" {
+			t.Fatalf("the top trigger is not last: %v", ids)
+		}
+		for _, f := range c.Firings() {
+			want := p
 			if ids[f.Source] == "loss" {
-				if f.Exact() || !strings.Contains(f.Reason, "_down") {
-					t.Errorf("k %d: top firing %+v, want NaN naming a pump", tc.k, f)
-				}
-				continue
+				want = tc.want
 			}
-			if !f.Exact() || f.Lo > p*(1+1e-9) || f.Hi < p*(1-1e-9) {
-				t.Errorf("k %d: %s P(fire) [%g, %g], want %g", tc.k, ids[f.Source], f.Lo, f.Hi, p)
+			if !f.Exact() || f.Lo > want*(1+1e-9) || f.Hi < want*(1-1e-9) || f.Hi-f.Lo > 1e-3*want {
+				t.Errorf("k %d: %s P(fire) [%g, %g] %q, want %g", tc.k, ids[f.Source], f.Lo, f.Hi, f.Reason, want)
 			}
 		}
 		n := float64(r.Periods)
 		top := float64(r.Events[len(ids)-1]) / n
-		if ids[len(ids)-1] != "loss" {
-			t.Fatalf("the top trigger is not last: %v", ids)
-		}
 		if se := math.Sqrt(tc.want * (1 - tc.want) / n); math.Abs(top-tc.want) > 5*se {
 			t.Errorf("k %d: top fires %g a period, want %g ± %g", tc.k, top, tc.want, se)
+		}
+		e, _ := c.Analytic()
+		if mean := 3*lam*100 + tc.want*1e5; !near(e.Mean, mean, 1e-9) {
+			t.Errorf("k %d: mean %g, want %g", tc.k, e.Mean, mean)
+		}
+	}
+}
+
+// TestTriggerNested: a gate over a gate, (a AND b) OR c, is exact as
+// 1 − (1 − p²)(1 − p).
+func TestTriggerNested(t *testing.T) {
+	lam := 0.4
+	p := 1 - math.Exp(-lam)
+	g := pumps(lam, 1)
+	g.Nodes[len(g.Nodes)-1].Trigger = &variate.Trigger{Entries: []string{"ab", "c_down"}}
+	g.Nodes = append(g.Nodes, variate.Node{ID: "ab", Trigger: &variate.Trigger{Over: 1, Entries: []string{"a_down", "b_down"}}})
+	c, _, err := g.Compile(variate.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 1 - (1-p*p)*(1-p)
+	for _, f := range c.Firings() {
+		if c.SourceIDs()[f.Source] == "loss" && (!f.Exact() || f.Lo > want*(1+1e-9) || f.Hi < want*(1-1e-9)) {
+			t.Errorf("P(fire) [%g, %g] %q, want %g", f.Lo, f.Hi, f.Reason, want)
+		}
+	}
+}
+
+// TestTriggerRepeated: a gate whose marks share a source (the repeated
+// event), a shared factor or a period-scoped value is not a product of
+// independent marks: its P(fire) is NaN naming what they share, and so
+// is one summing values another trigger's walk books.
+func TestTriggerRepeated(t *testing.T) {
+	gamma, _ := dist.NewGamma(2, 0.5)
+	for _, tc := range []struct {
+		name string
+		edit func(g *variate.Graph)
+		want string
+	}{
+		{"source", func(g *variate.Graph) { g.Nodes[0].Next = "b" }, "both depend on source a"},
+		{"factor", func(g *variate.Graph) {
+			g.Factors = []variate.Factor{{ID: "climate", Model: gamma}}
+			g.Sources[0].Factor, g.Sources[1].Factor = "climate", "climate"
+		}, "both depend on a shared factor"},
+		{"period value", func(g *variate.Graph) {
+			g.Nodes = append(g.Nodes, variate.Node{ID: "shared", Functions: []variate.Function{{Name: "w", Category: "repair", Model: Pert(1, 2, 3), Scope: variate.PerPeriod}}})
+			g.Nodes[0].Next, g.Nodes[2].Next = "shared", "shared"
+		}, "both depend on the period-scoped quantities of node shared"},
+		{"values", func(g *variate.Graph) {
+			g.Nodes[len(g.Nodes)-1].Trigger = &variate.Trigger{Inputs: []variate.TriggerInput{{Node: "a_down"}}}
+			g.Nodes[1].Functions = []variate.Function{Fn("log", "repair", C(1))}
+		}, "only when it counts other triggers' firings"},
+	} {
+		g := pumps(0.4, 2)
+		tc.edit(&g)
+		c, _, err := g.Compile(variate.Config{})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		for _, f := range c.Firings() {
+			if c.SourceIDs()[f.Source] == "loss" && (f.Exact() || !strings.Contains(f.Reason, tc.want)) {
+				t.Errorf("%s: P(fire) [%g, %g] %q, want NaN with %q", tc.name, f.Lo, f.Hi, f.Reason, tc.want)
+			}
 		}
 	}
 }

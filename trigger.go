@@ -1,7 +1,9 @@
 package variate
 
 import (
+	"maps"
 	"math"
+	"slices"
 
 	"code.eitanity.com/variate/dist"
 )
@@ -121,22 +123,27 @@ func (m *Compiled) nodeFunctions(v int32, id, name string) []int32 {
 // inequality, or 1 for a chained trigger, which sizes the histograms
 // while the figures it reaches are NaN.
 func (m *Compiled) fireProbabilities(g Graph, cfg Config) {
+	trigOf := map[int32]int{}
+	for i, tr := range m.trigs {
+		trigOf[tr.node] = i
+	}
+	atoms := make([]map[string]bool, len(m.trigs))
 	for i := range m.trigs {
 		tr := &m.trigs[i]
 		var f Firing
 		p := 1.0
 		if tr.upstream != "" {
-			// The sum's model leaves the triggers out, so it has no
-			// part of a chained trigger's sum.
-			f = Firing{Lo: math.NaN(), Hi: math.NaN(), Reason: "the sum takes in the walk of trigger " + tr.upstream + ", which the transform of the sum leaves out"}
+			f, atoms[i] = m.gateFiring(i, trigOf, atoms)
 		} else {
+			atoms[i] = m.sumAtoms(index(i))
 			var mean float64
 			f, mean = fireOf(g, m.nodeIDs[tr.node], tr.over, cfg)
-			if f.Exact() {
-				p = (f.Lo + f.Hi) / 2
-			} else if tr.over > 0 {
+			if !f.Exact() && tr.over > 0 {
 				p = math.Min(1, mean/tr.over)
 			}
+		}
+		if f.Exact() {
+			p = (f.Lo + f.Hi) / 2
 		}
 		f.Source = int(tr.src)
 		tr.firing = f
@@ -145,6 +152,152 @@ func (m *Compiled) fireProbabilities(g Graph, cfg Config) {
 		m.poolMean[m.srcs[k].pool] = p
 		m.countMean[k] = p
 	}
+}
+
+// sumAtoms names what a first-level trigger's sum depends on: the
+// sources whose rounds reach its inputs, their factors and the
+// schedules, and the period-scoped quantities on the nodes those rounds
+// reach. Two sums sharing none are independent.
+func (m *Compiled) sumAtoms(i int32) map[string]bool {
+	out := map[string]bool{}
+	inputs := m.inputNodes(i)
+	for k, s := range m.srcs {
+		if s.trigger != noIndex || !m.reachesAny(k, inputs) {
+			continue
+		}
+		out["source "+m.sourceIDs[k]] = true
+		if s.factor != noIndex {
+			out["a shared factor"] = true
+		}
+		if s.schedule != noIndex {
+			out["the schedules"] = true
+		}
+		for v, r := range m.reach[k] {
+			if r > 0 && m.periodScopedAt(index(v)) {
+				out["the period-scoped quantities of node "+m.nodeIDs[v]] = true
+			}
+		}
+	}
+	return out
+}
+
+// inputNodes lists the nodes whose functions or entries feed trigger i.
+func (m *Compiled) inputNodes(i int32) []int32 {
+	ids := m.triggerInputs(i)
+	out := make([]int32, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, index(slices.Index(m.nodeIDs, id)))
+	}
+	return out
+}
+
+// reachesAny reports whether source k's rounds reach any of the nodes.
+func (m *Compiled) reachesAny(k int, nodes []int32) bool {
+	for _, v := range nodes {
+		if m.reach[k][v] > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// periodScopedAt reports whether node v draws anything once a period: a
+// value, a probability or a holding time.
+func (m *Compiled) periodScopedAt(v int32) bool {
+	n := m.nodes[v]
+	// bound: functions of one node
+	for f := n.fnStart; f < n.rateEnd; f++ {
+		if m.poolPeriod[m.fns[f].pool] != noIndex {
+			return true
+		}
+	}
+	if n.thresh != noIndex && m.poolPeriod[m.fns[n.thresh].pool] != noIndex {
+		return true
+	}
+	// bound: outcomes of one node
+	for j := n.outStart; j < n.outEnd; j++ {
+		o := m.outs[j]
+		if o.probPool != noIndex || o.hold != noIndex && m.poolPeriod[o.hold] != noIndex {
+			return true
+		}
+	}
+	return false
+}
+
+// gateFiring brackets P(fire) of a chained trigger that counts the
+// firings of other triggers whose sums share nothing: the count is then
+// a sum of independent indicators, and P(count > Over) is the tail of
+// their Poisson-binomial law, which rises with each probability, so the
+// marks' lower and upper ends bound it. Otherwise P(fire) is NaN with
+// the reason, naming what two marks share in the repeated-event case.
+// The gate's own atoms, the union of its marks', come back with it.
+func (m *Compiled) gateFiring(i int, trigOf map[int32]int, atoms []map[string]bool) (Firing, map[string]bool) {
+	nan := math.NaN()
+	unknown := func(reason string) (Firing, map[string]bool) {
+		return Firing{Lo: nan, Hi: nan, Reason: reason}, nil
+	}
+	tr := m.trigs[i]
+	if inputs := m.inputNodes(index(i)); len(m.countedBy(index(i))) != len(inputs) {
+		return unknown("it sums values that other triggers' walks book; it is exact only when it counts other triggers' firings")
+	}
+	var lo, hi []float64
+	union := map[string]bool{}
+	owner := map[string]string{}
+	for _, v := range m.countedBy(index(i)) {
+		j, ok := trigOf[v]
+		if !ok {
+			return unknown("it counts entries into " + m.nodeIDs[v] + ", which is not a trigger node; it is exact only when it counts other triggers' firings")
+		}
+		mark := m.trigs[j]
+		if !mark.firing.Exact() || atoms[j] == nil {
+			return unknown("the P(fire) of trigger " + m.nodeIDs[v] + " is unknown")
+		}
+		// Sorted, so that the reason names the same atom on every run.
+		for _, a := range slices.Sorted(maps.Keys(atoms[j])) {
+			if o, dup := owner[a]; dup {
+				return unknown("triggers " + o + " and " + m.nodeIDs[v] + " both depend on " + a)
+			}
+			owner[a] = m.nodeIDs[v]
+			union[a] = true
+		}
+		lo = append(lo, mark.firing.Lo)
+		hi = append(hi, mark.firing.Hi)
+	}
+	return Firing{Lo: binomialTail(lo, tr.over), Hi: binomialTail(hi, tr.over)}, union
+}
+
+// countedBy lists the nodes whose entries trigger i counts.
+func (m *Compiled) countedBy(i int32) []int32 {
+	var out []int32
+	for v := range m.nodes {
+		// bound: the triggers one node's entries feed
+		for j := m.countStart[v]; j < m.countStart[v+1]; j++ {
+			if m.counts[j] == i {
+				out = append(out, index(v))
+			}
+		}
+	}
+	return out
+}
+
+// binomialTail is P(N > over) for N the number of independent events
+// with probabilities p, by the Poisson-binomial recursion.
+func binomialTail(p []float64, over float64) float64 {
+	dist := make([]float64, len(p)+1)
+	dist[0] = 1
+	for i, q := range p {
+		for s := i + 1; s > 0; s-- {
+			dist[s] = dist[s]*(1-q) + dist[s-1]*q
+		}
+		dist[0] *= 1 - q
+	}
+	tail := 0.0
+	for s, x := range dist {
+		if float64(s) > over {
+			tail += x
+		}
+	}
+	return tail
 }
 
 // fireOf brackets P(S > over) for the trigger on node id, with the mean
@@ -453,20 +606,6 @@ func (m *Compiled) alwaysBooks(v int32) bool {
 		}
 	}
 	return n.thresh != noIndex && m.pools[m.fns[n.thresh].pool].CDF(0) == 0
-}
-
-// countedBy lists the nodes whose entries trigger i counts.
-func (m *Compiled) countedBy(i int32) []int32 {
-	var out []int32
-	for v := range m.nodes {
-		// bound: the triggers one node's entries feed
-		for j := m.countStart[v]; j < m.countStart[v+1]; j++ {
-			if m.counts[j] == i {
-				out = append(out, index(v))
-			}
-		}
-	}
-	return out
 }
 
 // HasTriggers reports whether the model has a trigger, whose firing

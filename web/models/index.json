@@ -699,7 +699,7 @@
   "id": "bowtie",
   "title": "A bow-tie: two of three pumps failing in a year",
   "file": "bowtie.yaml",
-  "about": "Three cooling pumps fail independently. A trigger per pump marks it failed in the year, and a top trigger on those marks fires when more than the gate's number failed in the same year: 0 is an OR gate, 1 two out of three, 2 all three. The top event's walk is the consequence side: a shutdown, and sometimes overheating damage. The pumps' P(fire) is exact; the top's comes from the run, so its mean does too. Raise the failure rate to see the gate close the gap to a single pump.",
+  "about": "Three cooling pumps fail independently. A trigger per pump marks it failed in the year, and a top trigger on those marks fires when more than the gate's number failed in the same year: 0 is an OR gate, 1 two out of three, 2 all three. The top event's walk is the consequence side: a shutdown, and sometimes overheating damage. Every P(fire) is exact: the pumps' from their counts, the top's from the three independent marks, so the consequences' means are exact too. Raise the failure rate to see the gate close the gap to a single pump.",
   "knobs": [
    {
     "key": "rate",
