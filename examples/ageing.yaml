@@ -1,0 +1,35 @@
+# Ageing: a fleet of pumps whose failure rate rises with age, over a
+# twenty-year life with a yearly period. A repaired pump is as old as
+# before (minimal repair), so failures are a Poisson process whose rate
+# grows with age. With a power-law (Weibull, Crow-AMSAA) intensity of
+# shape k, the expected failures by age t are (t/η)^k, so year i has
+# (i^k − (i−1)^k)/η^k of them. Scaled to mean 1 over a life of L years
+# the schedule's value for year i is L·(i^k − (i−1)^k)/L^k; shape 2, a
+# typical wear-out, gives (2i − 1)/L, the values below, and the source's
+# frequency is the life's mean of 8 failures a year. The whole cycle is
+# a year drawn at random over the life; `--phase i` is year i, so
+# `--phase 20` is the last.
+#
+# A pump as good as new after each failure is a renewal process instead:
+# `every: n` with frequency n over the mean life gives gamma lifetimes
+# with a coefficient of variation of 1/√n, and Weibull shape 2 (0.52) is
+# close to n = 4.
+period: { days: 365 }
+schedules:
+  - { id: age, values: [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 1.05, 1.15, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 1.95] }
+graphs:
+  - id: fleet
+    sources:
+      - { id: wear, frequency: 8, schedule: age, to: failure }
+    nodes:
+      - id: failure
+        functions:
+          - { name: repair,   category: maintenance, lognormal: { median: 2000, p90: 8000 } }
+          - { name: downtime, category: production,  pert: [1000, 3000, 12000] }
+        outcomes:
+          - { to: major, p: 0.03 }
+          - { to: restored }
+      - id: major
+        functions:
+          - { name: rebuild, category: maintenance, lognormal: { median: 5e4, p90: 8e4 } }
+      - id: restored

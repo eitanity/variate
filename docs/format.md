@@ -214,6 +214,20 @@ graphs:
 A schedule's values are finite and not negative; a cycle of up to
 65536 values. A schedule with mean 1 leaves the mean rate unchanged.
 
+A rate that trends over a life, rather than repeating, is a schedule
+over the life with a period of a year. Equipment that ages under minimal
+repair (as old after a repair as before) fails as a Poisson process
+whose rate rises with age; with the power-law (Weibull, Crow-AMSAA)
+intensity of shape k the expected failures by age t are (t/η)^k, so over
+a life of L years the value for year i, scaled to mean 1, is
+L·(i^k − (i−1)^k)/L^k, and the source's frequency is the life's average
+rate. The counts in each year are then exactly Poisson with that year's
+mean. The whole cycle is a year drawn at random over the life and phase
+i is year i. Equipment that is as good as new after each failure is a
+renewal process instead: `every: n` with frequency n over the mean life
+gives gamma lifetimes with a coefficient of variation of 1/√n. See
+`examples/ageing.yaml`.
+
 To ask about one place in the cycle instead, a January rather than a
 month at random, give the top-level `phase: i` (or `--phase i` on the
 command line, which overrides it): every schedule is fixed at its value

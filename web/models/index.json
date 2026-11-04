@@ -568,6 +568,54 @@
   ]
  },
  {
+  "id": "ageing",
+  "title": "Ageing: a failure rate that rises with age",
+  "file": "ageing.yaml",
+  "about": "Yearly periods over a pump fleet's twenty-year life. A repaired pump is as old as before, so the failure rate climbs with age: a power law of shape 2 makes year i's multiplier (2i − 1)/20, from 0.05 in the first year to 1.95 in the last, and the rate is the life's average. Each failure costs a repair and downtime, and some need a rebuild. With the year at 0 the figures describe a year drawn at random over the life; set it to run one year instead, the first to see a new fleet, the twentieth to see a worn one: the exact mean, variance and distribution are then that year's.",
+  "knobs": [
+   {
+    "key": "rate",
+    "label": "Failures per year, averaged over the life",
+    "min": 0,
+    "max": 30,
+    "step": 0.5,
+    "value": 8
+   },
+   {
+    "key": "repair_median",
+    "label": "Repair, median",
+    "min": 500,
+    "max": 6000,
+    "step": 100,
+    "value": 2000
+   },
+   {
+    "key": "major_p",
+    "label": "Chance a failure needs a rebuild",
+    "min": 0,
+    "max": 0.2,
+    "step": 0.01,
+    "value": 0.03
+   },
+   {
+    "key": "rebuild_median",
+    "label": "Rebuild, median",
+    "min": 10000,
+    "max": 70000,
+    "step": 1000,
+    "value": 50000
+   },
+   {
+    "key": "phase",
+    "label": "Year of the life to run (0 = a year at random)",
+    "min": 0,
+    "max": 20,
+    "step": 1,
+    "value": 0
+   }
+  ]
+ },
+ {
   "id": "shift",
   "title": "An eight-hour shift as the period",
   "file": "shift.yaml",

@@ -1,0 +1,23 @@
+# Ageing: a pump fleet whose failure rate rises with age over a
+# twenty-year life, a yearly schedule of (2i − 1)/20 for year i: the
+# power law of shape 2 under minimal repair, scaled to mean 1.
+period: { days: 365 }
+phase: {{phase}}
+schedules:
+  - { id: age, values: [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 1.05, 1.15, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 1.95] }
+graphs:
+  - id: fleet
+    sources:
+      - { id: wear, frequency: {{rate}}, schedule: age, to: failure }
+    nodes:
+      - id: failure
+        functions:
+          - { name: repair,   category: maintenance, lognormal: { median: {{repair_median}}, p90: 8000 } }
+          - { name: downtime, category: production,  pert: [1000, 3000, 12000] }
+        outcomes:
+          - { to: major, p: {{major_p}} }
+          - { to: restored }
+      - id: major
+        functions:
+          - { name: rebuild, category: maintenance, lognormal: { median: {{rebuild_median}}, p90: 8e4 } }
+      - id: restored
