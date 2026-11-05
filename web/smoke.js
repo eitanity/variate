@@ -2,7 +2,8 @@
 // through variateRun and compare the report with the native CLI's JSON
 // written to the path given as the first argument (variate run -f
 // examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format
-// json --analytic --node-hist). The wasm report adds "histogram", "log_histogram"
+// json --analytic --node-hist --transform-tol 0.01, the browser's
+// tolerance). The wasm report adds "histogram", "log_histogram"
 // and "warnings"; everything else must be identical. The sweep of the
 // same model through variateSweep must equal the native sweep JSON given
 // as the second argument (variate sweep -f examples/compound.yaml

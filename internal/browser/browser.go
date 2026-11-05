@@ -10,6 +10,11 @@ const (
 	// say otherwise: the browser cannot interrupt a running transform,
 	// so it answers within a minute or so rather than hours.
 	TransformWork = 1 << 29
+	// TransformTol is the transform's tolerance unless the settings say
+	// otherwise. At the engine's 1e-3 a model with many sources or
+	// period-scoped draws needs a pass of 2^20 grid points, above
+	// TransformBytes; within 1% it closes grids earlier.
+	TransformTol = 0.01
 	// TransformBytes is the grids a transform pass may hold unless the
 	// settings say otherwise. TinyGo doubles the wasm memory each time
 	// the heap grows, after a collection leaving less than a third free,
@@ -23,12 +28,15 @@ const (
 )
 
 // Apply sets the browser's settings on cfg: one worker, the node
-// histograms the page draws, and the transform's budgets where unset.
+// histograms the page draws, and the transform's budgets and tolerance where unset.
 func Apply(cfg *variate.Config) {
 	cfg.Workers = 1
 	cfg.NodeHist = true
 	if cfg.TransformWork == 0 {
 		cfg.TransformWork = TransformWork
+	}
+	if cfg.TransformTol == 0 {
+		cfg.TransformTol = TransformTol
 	}
 	if cfg.TransformBytes == 0 {
 		cfg.TransformBytes = TransformBytes

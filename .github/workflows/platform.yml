@@ -62,7 +62,7 @@ jobs:
       - name: Build the wasm engine
         run: make wasm
       - name: Native report
-        run: go run ./cmd/variate run -f examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format json --analytic --node-hist > native.json
+        run: go run ./cmd/variate run -f examples/compound.yaml -n 2000 --seed 5 --block-periods 50 --format json --analytic --node-hist --transform-tol 0.01 > native.json
       - name: Native sweep
         run: go run ./cmd/variate sweep -f examples/compound.yaml --screen 0.1 --seed 1 --format json > native-sweep.json
       - name: Run the wasm engine under node and compare

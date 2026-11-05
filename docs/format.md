@@ -476,7 +476,7 @@ flag wins.
 | `tail`, `tail_hits` | the tail quantile to resolve (default 0.999) and the periods wanted beyond it (default 100). |
 | `max_periods`, `max_steps` | hard caps on an adaptive run. |
 | `allow_unconverged` | run to the caps when the plan exceeds them, instead of refusing. |
-| `transform` | also compute the exact distribution by FFT at compile, where the model allows it; `transform_grid`, `transform_tol`, `transform_work` and `transform_bytes` set its largest grid, tolerance, work budget and the memory a pass may allocate (640 MB in the browser). The tolerance is met at a point when either P(T ≥ x) or the quantiles there are bracketed within it, relatively. |
+| `transform` | also compute the exact distribution by FFT at compile, where the model allows it; `transform_grid`, `transform_tol`, `transform_work` and `transform_bytes` set its largest grid, tolerance, work budget and the memory a pass may allocate (in the browser, unless set, a tolerance of 0.01 and 640 MB). The tolerance is met at a point when either P(T ≥ x) or the quantiles there are bracketed within it, relatively. |
 | `block_periods` | periods per task; the default is 4096, or a thirty-second of `periods` in a fixed run. |
 | `batch`, `pool_size`, `spill`, `max_memory`, `round_scratch`, `record_buffer` | sizing of the run's buffers; the defaults suit nearly every model. |
 | `hist_res` | the relative width of the histogram bins the quantiles come from (default 0.001). |
