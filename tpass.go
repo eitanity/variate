@@ -294,8 +294,21 @@ func (p *pipeline) tensor() (*graphResult, string) {
 			return nil, "period-scoped mixture of " + itoa(p.mix.passes()) + " passes with " + itoa(p.t.quadN) + " frequency quadrature nodes at " + itoa(p.m) + " grid points is above the work cap"
 		}
 		out.add(one, complex(w, 0))
+		p.recycle(one)
 	}
 	return out, ""
+}
+
+// recycle returns a period draw's generating functions, summed into the
+// mixture, to the pool for the next draw; the walk's is the pipeline's.
+func (p *pipeline) recycle(g *graphResult) {
+	p.free = append(p.free, g.total)
+	p.free = append(p.free, g.cats...)
+	for _, s := range g.srcs {
+		if s != nil {
+			p.free = append(p.free, s)
+		}
+	}
 }
 
 // allOne reports whether a generating function is identically 1.
