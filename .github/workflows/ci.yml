@@ -45,4 +45,4 @@ jobs:
       - name: govulncheck
         run: make vuln
       - name: Coverage
-        run: go test -count=1 -coverprofile=cover.out ./... && go tool cover -func=cover.out | tail -1
+        run: make cover

@@ -22,3 +22,4 @@ web/variate.wasm
 web/wasm_exec.js
 web/native.json
 web/native-sweep.json
+cover.out

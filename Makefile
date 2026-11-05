@@ -9,7 +9,7 @@ BIN                   := $(abspath bin)
 PKGS                  := ./...
 HOTPATH               := internal/lint/hotpath.txt
 
-.PHONY: all ci weekly tools build test test32 race alloc lint fmt vet custom-lint tinygo tinygo-version wasm demo golden wasm-smoke wasm-test \
+.PHONY: all ci weekly tools build test test32 cover race alloc lint fmt vet custom-lint tinygo tinygo-version wasm demo golden wasm-smoke wasm-test \
         norecursion escapes fuzz fuzz-long stat bench vuln clean
 
 all: ci
@@ -117,7 +117,11 @@ escapes: $(BIN)/escapes
 # ---- tests ------------------------------------------------------------------
 
 test:
-	go test -count=1 $(PKGS)
+	go test -count=1 -timeout 60m $(PKGS)
+
+# The suite with coverage, which CI reports.
+cover:
+	go test -count=1 -timeout 60m -coverprofile=cover.out $(PKGS) && go tool cover -func=cover.out | tail -1
 
 # The suite with a 32-bit int, the width TinyGo's wasm target has, on
 # four workers so that the footprint fits a 32-bit address space.
