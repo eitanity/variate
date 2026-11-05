@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -26,8 +27,8 @@ type corpusModel struct {
 	cfg  variate.Config // the file's own settings, which the CLI applies too
 }
 
-// corpus is every example model, every demo model at its default knobs,
-// and three random DAGs.
+// corpus is every example model, every demo model at its default knobs
+// that is not an example's model, and three random DAGs.
 func corpus(t *testing.T) []corpusModel {
 	t.Helper()
 	var out []corpusModel
@@ -84,7 +85,25 @@ func demoModels(t *testing.T) []corpusModel {
 		if err != nil {
 			t.Fatalf("%s: %v", dm.ID, err)
 		}
+		// A demo whose model is an example's, but for comments, would
+		// have every corpus test run it twice.
+		example, err := os.ReadFile(filepath.Join("../../examples", dm.File)) //nolint:gosec // repository file
+		if err == nil && slices.Equal(modelLines(yaml), modelLines(string(example))) {
+			continue
+		}
 		out = append(out, corpusModel{name: "demo " + dm.ID, g: m.Graph, path: path, cfg: m.Config})
+	}
+	return out
+}
+
+// modelLines is a model file's lines without blank and comment lines.
+func modelLines(text string) []string {
+	var out []string
+	for line := range strings.Lines(text) {
+		line = strings.TrimRight(line, " \t\r\n")
+		if trimmed := strings.TrimSpace(line); trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			out = append(out, line)
+		}
 	}
 	return out
 }

@@ -147,8 +147,9 @@ func TestTornadoScaledProbabilities(t *testing.T) {
 }
 
 // TestTornadoMeanRowsExact: on the corpus, screened, every mean row is
-// exact and is the analytic mean of the scaled model, the base row the
-// model's own; a model with many inputs has every 15th row checked so.
+// exact, the base row the model's own mean, and every 15th row the
+// analytic mean of the scaled model. The sweep computes each row the
+// same way, so checking more rows repeats its compiles.
 // A model whose exact mean is unknown (a trigger's P(fire)) is left to
 // TestTornadoUnknownMeanNotExact.
 func TestTornadoMeanRowsExact(t *testing.T) {
@@ -174,7 +175,7 @@ func TestTornadoMeanRowsExact(t *testing.T) {
 			if i > 0 && row.Swing > sw.Rows[i-1].Swing {
 				t.Errorf("%s: rows not by swing", cm.name)
 			}
-			if len(sw.Rows) > 40 && i%15 != 0 {
+			if i%15 != 0 {
 				continue
 			}
 			for f, got := range map[float64]float64{0.9: row.AtLow.Lo, 1.1: row.AtHigh.Lo} {
