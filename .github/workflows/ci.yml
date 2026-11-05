@@ -38,8 +38,6 @@ jobs:
         run: make escapes
       - name: Tests under the race detector
         run: make race
-      - name: Allocation and churn tests
-        run: make alloc
       - name: Tests with a 32-bit int
         run: make test32
       - name: govulncheck

@@ -14,7 +14,7 @@ HOTPATH               := internal/lint/hotpath.txt
 
 all: ci
 
-ci: verify fmt vet lint custom-lint escapes race alloc test32 tinygo vuln
+ci: verify fmt vet lint custom-lint escapes race alloc test32 cover tinygo vuln
 
 weekly: stat fuzz-long bench
 
