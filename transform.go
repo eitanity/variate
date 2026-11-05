@@ -3,6 +3,9 @@ package variate
 import (
 	"math"
 	"math/bits"
+	"runtime"
+
+	"gonum.org/v1/gonum/dsp/fourier"
 )
 
 // TransformConfig controls the FFT transform.
@@ -26,6 +29,7 @@ type Transformed struct {
 	QuadNodes  int
 	Passes     int
 	Work       int64 // grid-point evaluations spent
+	Bytes      int64 // the most one pass allocated, the figure MaxBytes bounds
 	Total      Bounds
 	ByCategory []Bounds
 	BySource   []Bounds // nil when the model has more than maxSourceBounds sources
@@ -45,9 +49,10 @@ const (
 	defaultMaxGrid = 1 << 22
 	defaultTol     = 1e-3
 	defaultMaxWork = 1 << 34
-	// defaultMaxBytes is 1.5 GB with a 32-bit address space, where the
-	// collector's headroom over a 2 GB pass would exhaust it.
-	defaultMaxBytes  = 2<<30 - (1<<29)*(64/bits.UintSize-1)
+	// defaultMaxBytes is what a pass may allocate: 3 GB, or 1.5 GB with
+	// a 32-bit address space, which the collector's headroom over more
+	// would exhaust.
+	defaultMaxBytes  = (3 << 29) << (bits.UintSize/32 - 1)
 	bytesPerPoint    = 16 // a complex grid point
 	minGrid          = 1 << 16
 	maxFolds         = 64
@@ -104,7 +109,7 @@ func (m *Compiled) Transform(cfg TransformConfig) (*Transformed, error) {
 	if err := t.run(out); err != nil {
 		return nil, err
 	}
-	out.Work = t.work
+	out.Work, out.Bytes = t.work, t.peakAlloc
 	return out, nil
 }
 
@@ -130,10 +135,20 @@ type transformer struct {
 	walkFn    []bool  // with a trigger summing the whole total, the functions only its walk draws; nil otherwise
 	// A trigger's sum is resolved at its level alone: the bracket on
 	// P(S > level) and, with below, on the integral of P(S ≥ x) up to it.
-	atLevel bool
-	level   float64
-	below   bool
-	probing bool // the first pass of a level's: any pass that holds the draws
+	atLevel   bool
+	level     float64
+	below     bool
+	probing   bool  // the first pass of a level's: any pass that holds the draws
+	passAlloc int64 // bytes the last pass allocated
+	allocM    int   // its grid
+	peakAlloc int64 // the most one pass allocated
+	// The frequency quadrature's buffers, kept across its calls.
+	quadPrev     []complex128
+	quadX, quadW []float64
+	// The FFT plan and roots of unity of the last grid size.
+	planM int
+	plan  *fourier.CmplxFFT
+	roots []complex128
 }
 
 func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
@@ -348,6 +363,30 @@ func (t *transformer) run(out *Transformed) error {
 	return nil
 }
 
+// nextBytes is what a pass at m points is expected to allocate: the
+// last pass's measured allocation scaled by the grid, as for the work
+// budget, or before any pass the estimate of its grids.
+func (t *transformer) nextBytes(m int) int64 {
+	if t.allocM > 0 {
+		return t.passAlloc * int64(m) / int64(t.allocM)
+	}
+	return t.passBytes(m)
+}
+
+// measuredPass runs a pass and records what it allocated. How much a
+// pass allocates depends on the model's shape, its recursion, mixture
+// and quadrature, more than an estimate can follow; the measure is what
+// the next pass is judged by.
+func (t *transformer) measuredPass(h float64, m int, xStar float64) (*passResult, string) {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	r, reason := t.pass(h, m, xStar)
+	runtime.ReadMemStats(&after)
+	t.passAlloc, t.allocM = int64(after.TotalAlloc-before.TotalAlloc), m //nolint:gosec // a pass allocates far below 2^63 bytes
+	t.peakAlloc = max(t.peakAlloc, t.passAlloc)
+	return r, reason
+}
+
 // passBytes estimates the grids a pass holds at m points: per
 // pipeline the total, a grid per category, a grid per source when
 // their bounds are kept, the scratch, the root table and the FFT plan,
@@ -380,7 +419,7 @@ func (t *transformer) sourceBounds() bool {
 
 // bytesReason explains a refusal by the memory budget.
 func (t *transformer) bytesReason(m int, b int64) string {
-	return "the transform would hold " + itoa(int(b>>20)) + " MB at " + itoa(m) + " grid points, above " + itoa(int(t.cfg.MaxBytes>>20)) + " MB"
+	return "the transform would allocate " + itoa(int(b>>20)) + " MB at " + itoa(m) + " grid points, above " + itoa(int(t.cfg.MaxBytes>>20)) + " MB"
 }
 
 // budgetReason explains a refusal by the work budget.
@@ -501,10 +540,10 @@ func (t *transformer) converge(start int, span func(m int) (float64, bool), xSta
 			// The next pass costs the last one's work scaled by the grid.
 			return nil, t.budgetReason(m)
 		}
-		if b := t.passBytes(m); b > t.cfg.MaxBytes {
+		if b := t.nextBytes(m); b > t.cfg.MaxBytes {
 			return nil, t.bytesReason(m, b)
 		}
-		r, err := t.pass(h, m, xStar)
+		r, err := t.measuredPass(h, m, xStar)
 		if err != "" {
 			return nil, err
 		}

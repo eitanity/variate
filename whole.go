@@ -145,8 +145,9 @@ func (r *passResult) addWalk(t *transformer, down, up *pipeline, walkDown, walkU
 	tighten(wLo, wHi)
 	over := t.m.trigs[w.trig].over
 	plan := fourier.NewCmplxFFT(2 * r.m)
-	lower := r.withWalk(t, plan, sLo, wLo, over, -1)
-	upper := r.withWalk(t, plan, sHi, wHi, over, 1)
+	a, b := make([]complex128, 2*r.m), make([]complex128, 2*r.m)
+	lower := r.withWalk(t, plan, a, b, sLo, wLo, over, -1)
+	upper := r.withWalk(t, plan, a, b, sHi, wHi, over, 1)
 	r.total = brackets{down: lower, up: upper}
 	// The curves are bounds now: no term is left to add.
 	r.rho = make([]float64, r.m)
@@ -155,11 +156,12 @@ func (r *passResult) addWalk(t *transformer, down, up *pipeline, walkDown, walkU
 
 // withWalk is P(T ≥ kh) for a lattice sum with exceedance ecS and a walk
 // with exceedance ecW, independent, the walk added when the sum is above
-// over; side −1 takes the round-off bound off, +1 adds it.
-func (r *passResult) withWalk(t *transformer, plan *fourier.CmplxFFT, ecS, ecW []float64, over float64, side float64) []float64 {
+// over; side −1 takes the round-off bound off, +1 adds it. a and b are
+// its two grids of 2M points, transformed in place.
+func (r *passResult) withWalk(t *transformer, plan *fourier.CmplxFFT, a, b []complex128, ecS, ecW []float64, over float64, side float64) []float64 {
 	n := 2 * r.m
-	a := make([]complex128, n)
-	b := make([]complex128, n)
+	clear(a)
+	clear(b)
 	first := int(math.Floor(over/r.h)) + 1
 	normA, normB := 0.0, 0.0
 	// bound: grid points
@@ -173,12 +175,12 @@ func (r *passResult) withWalk(t *transformer, plan *fourier.CmplxFFT, ecS, ecW [
 		b[k] = complex(ecW[k], 0)
 		normB += ecW[k] * ecW[k]
 	}
-	fa := plan.Coefficients(nil, a)
-	fb := plan.Coefficients(nil, b)
-	for i := range fa {
-		fa[i] *= fb[i]
+	plan.Coefficients(a, a)
+	plan.Coefficients(b, b)
+	for i := range a {
+		a[i] *= b[i]
 	}
-	c := plan.Sequence(nil, fa)
+	c := plan.Sequence(a, a)
 	t.work += int64(3 * n)
 	delta := roundoffSafety * unitRoundoff * (3*math.Log2(float64(n)) + 3) * math.Sqrt(normA*normB)
 	out := make([]float64, r.m)

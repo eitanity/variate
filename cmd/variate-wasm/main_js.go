@@ -20,6 +20,7 @@ import (
 
 	"code.eitanity.com/variate"
 	"code.eitanity.com/variate/config"
+	"code.eitanity.com/variate/internal/browser"
 	"code.eitanity.com/variate/report"
 )
 
@@ -116,20 +117,9 @@ func load(args []js.Value) (*config.Model, error) {
 	if err := m.ApplyPhase(); err != nil {
 		return nil, err
 	}
-	m.Config.Workers = 1
-	// The page draws any node's entry count, so the node histograms are
-	// always kept.
-	m.Config.NodeHist = true
-	// The browser cannot interrupt a running transform, so unless the
-	// settings say otherwise its work budget is one that answers within
-	// a minute or so rather than hours.
-	if m.Config.Transform && m.Config.TransformWork == 0 {
-		m.Config.TransformWork = browserTransformWork
-	}
+	browser.Apply(&m.Config)
 	return m, nil
 }
-
-const browserTransformWork = 1 << 29
 
 func planFunc(_ js.Value, args []js.Value) any {
 	m, err := load(args)

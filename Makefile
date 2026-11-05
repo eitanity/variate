@@ -9,12 +9,12 @@ BIN                   := $(abspath bin)
 PKGS                  := ./...
 HOTPATH               := internal/lint/hotpath.txt
 
-.PHONY: all ci weekly tools build test test32 cover race alloc lint fmt vet custom-lint tinygo tinygo-version wasm demo golden wasm-smoke wasm-test \
+.PHONY: all ci weekly tools build test test32 cover race alloc lint fmt vet custom-lint tinygo tinygo-version tinymem wasm demo golden wasm-smoke wasm-test \
         norecursion escapes fuzz fuzz-long stat bench vuln clean
 
 all: ci
 
-ci: verify fmt vet lint custom-lint escapes race alloc test32 cover tinygo vuln
+ci: verify fmt vet lint custom-lint escapes race alloc test32 cover tinygo tinymem vuln
 
 weekly: stat fuzz-long bench
 
@@ -70,6 +70,14 @@ tinygo: tinygo-version
 
 demo: wasm
 	go run ./cmd/variate-demo
+
+# Each example compiled and transformed the way the page runs it, built
+# with TinyGo and run under wazero, four at a time: the heap reserved
+# must stay within the size from which a doubling of the wasm memory
+# cannot fail.
+tinymem: tinygo-version
+	tinygo build -o $(BIN)/tinymem.wasm -target wasip1 -no-debug -opt 2 ./internal/tinymem
+	ls examples/*.yaml | xargs -P 4 -I{} env PATH="$$PATH:$$(go env GOPATH)/bin" wazero run --mount=$(CURDIR)/examples:/examples:ro $(BIN)/tinymem.wasm /{}
 
 # Runs the wasm engine under node and compares its report with the CLI's.
 wasm-smoke: wasm

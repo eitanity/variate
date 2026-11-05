@@ -127,8 +127,8 @@ func (t *transformer) pass(h float64, m int, xStar float64) (*passResult, string
 // newPipeline prepares one rounding's state, with the period-scoped
 // values' lattice atoms; the reason when the atoms exceed the pass cap.
 func (t *transformer) newPipeline(h float64, m int, r float64, up bool) (*pipeline, string) {
-	p := &pipeline{t: t, h: h, m: m, r: r, up: up, fft: fourier.NewCmplxFFT(m)}
-	p.roots = unitRoots(m)
+	fft, roots := t.planFor(m)
+	p := &pipeline{t: t, h: h, m: m, r: r, up: up, fft: fft, roots: roots}
 	p.tilted = make([]complex128, m)
 	p.gf = make([]complex128, m)
 	p.mixBuf = make([]complex128, m)
@@ -153,6 +153,18 @@ func (t *transformer) newPipeline(h float64, m int, r float64, up bool) (*pipeli
 // unitRoots is e^(−2πi·j/M) for j below M, exactly conjugate-symmetric
 // about M/2 so that every generating function built from real masses
 // is, and its second half can be mirrored instead of computed.
+// planFor is the FFT plan and roots of unity of an M-point grid, kept
+// for the next pass at the same size: the two roundings run one after
+// the other and share them.
+func (t *transformer) planFor(m int) (*fourier.CmplxFFT, []complex128) {
+	if t.planM != m {
+		// The last size's are let go before the new ones are made.
+		t.plan, t.roots, t.planM = nil, nil, 0
+		t.plan, t.roots, t.planM = fourier.NewCmplxFFT(m), unitRoots(m), m
+	}
+	return t.plan, t.roots
+}
+
 func unitRoots(m int) []complex128 {
 	roots := make([]complex128, m)
 	// bound: M/2 + 1 roots

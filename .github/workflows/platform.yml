@@ -25,6 +25,24 @@ jobs:
       - name: Engine tests as wasm, golden reports against the native files
         run: make wasm-test
 
+  wasm-tinygo-heap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: false
+      - name: Install the wazero runtime
+        run: go install github.com/tetratelabs/wazero/cmd/wazero@v1.12.0
+      - name: Install TinyGo
+        run: |
+          curl -fsSLo tinygo.deb https://github.com/tinygo-org/tinygo/releases/download/v0.44.0/tinygo_0.44.0_amd64.deb
+          sudo dpkg -i tinygo.deb
+      - name: The browser engine's heap on every example
+        run: make tinymem
+
   wasm-node:
     runs-on: ubuntu-latest
     timeout-minutes: 30

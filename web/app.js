@@ -21,13 +21,26 @@ function startWorker() {
     const p = pending.get(id);
     if (!p) return;
     pending.delete(id);
+    if (error !== undefined && error.startsWith("RuntimeError")) {
+      // The engine trapped, out of memory most likely, and its instance
+      // is dead: a fresh worker takes over.
+      p.reject(new Error("The engine stopped (" + error + "), most likely out of memory, and was restarted."));
+      restartWorker("stopped");
+      return;
+    }
     if (error !== undefined) p.reject(new Error(error)); else p.resolve({ result: ok, ms, keep, blocks, graph });
   };
 }
 
 function cancelAll() {
+  restartWorker("cancelled");
+}
+
+// restartWorker replaces the worker, failing the calls still pending
+// with why: "cancelled", or "stopped" when the engine trapped.
+function restartWorker(why) {
   worker.terminate();
-  for (const p of pending.values()) p.reject(new Error("cancelled"));
+  for (const p of pending.values()) p.reject(new Error(why));
   pending.clear();
   startWorker();
   // The kept workspaces died with the worker.
@@ -35,7 +48,7 @@ function cancelAll() {
   if (baseline) {
     baseline = null;
     $("unpin").hidden = true;
-    $("compareNote").textContent = "The baseline was lost with the cancelled run.";
+    $("compareNote").textContent = why === "cancelled" ? "The baseline was lost with the cancelled run." : "The baseline was lost when the engine stopped.";
   }
 }
 

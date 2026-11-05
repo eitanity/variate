@@ -83,14 +83,17 @@ func mirror(out []complex128) {
 // leaving its values in out and the difference in lastEps; the reason
 // when they never agree or the next count would exceed the work budget.
 func (t *transformer) converged(d distribution, gc, out []complex128, n, doublings int, f float64) (int, string) {
-	prev := make([]complex128, len(gc))
+	// The buffers are the transformer's, kept across calls: a pass
+	// compounds every source, per category and period draw.
+	t.quadPrev = grow(t.quadPrev, len(gc))
+	prev := t.quadPrev[:len(gc)]
 	// bound: doublings, itself at most quadDoublings
 	for i := 0; i <= doublings && n <= quadMaxNodes; i++ {
 		if t.work+int64(n)*int64(len(gc)) > t.cfg.MaxWork {
 			return 0, t.budgetReason(t.grid)
 		}
-		x := make([]float64, n)
-		w := make([]float64, n)
+		t.quadX, t.quadW = grow(t.quadX, n), grow(t.quadW, n)
+		x, w := t.quadX[:n], t.quadW[:n]
 		if !d.Nodes(x, w) {
 			quantileNodes(d, x, w)
 		}
@@ -106,6 +109,14 @@ func (t *transformer) converged(d distribution, gc, out []complex128, n, doublin
 		n *= 2
 	}
 	return 0, reasonFreqNoConv
+}
+
+// grow returns buf with room for n values, reallocated only when short.
+func grow[T float64 | complex128](buf []T, n int) []T {
+	if cap(buf) < n {
+		return make([]T, n)
+	}
+	return buf[:n]
 }
 
 // sampleOf picks up to n evenly spaced points of gc.

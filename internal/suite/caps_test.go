@@ -67,7 +67,7 @@ func TestCapArrivalsPerPeriod(t *testing.T) {
 func TestCapTransformBytes(t *testing.T) {
 	m := mustCompile(t, Diamond())
 	tr, err := m.Transform(variate.TransformConfig{MaxBytes: 1 << 20})
-	if err != nil || tr.Applicable || !strings.Contains(tr.Reason, "would hold") {
+	if err != nil || tr.Applicable || !strings.Contains(tr.Reason, "would allocate") {
 		t.Errorf("transform: applicable %v reason %q err %v", tr.Applicable, tr.Reason, err)
 	}
 	cnt, err := m.TransformEntries(variate.TransformConfig{MaxBytes: 1 << 12})
@@ -77,5 +77,29 @@ func TestCapTransformBytes(t *testing.T) {
 	ok, err := m.Transform(variate.TransformConfig{Tol: 1e-2})
 	if err != nil || !ok.Applicable {
 		t.Errorf("the default budget should allow the diamond: %v %q", err, ok.Reason)
+	}
+}
+
+// TestCapTransformBytesMeasured: a pass is admitted on the allocation
+// the last one measured, scaled by the grid, so on every corpus model
+// the most one pass allocated stays within the limit, schedules, period
+// draws and quadrature included; the first pass, at the smallest grid,
+// is admitted on an estimate and allowed what that grid allocates.
+func TestCapTransformBytesMeasured(t *testing.T) {
+	const limit = 96 << 20
+	for _, cm := range corpus(t) {
+		c := mustCompile(t, cm.g)
+		cfg := variate.TransformConfig{Tol: 1e-2, MaxWork: 1 << 27, MaxBytes: limit}
+		tr, err := c.Transform(cfg)
+		if err != nil {
+			t.Fatalf("%s: %v", cm.name, err)
+		}
+		if tr.Bytes <= limit*11/10 {
+			continue
+		}
+		cfg.MaxGrid = 1 << 16
+		if smallest, err := c.Transform(cfg); err != nil || tr.Bytes > smallest.Bytes*11/10 {
+			t.Errorf("%s: a pass allocated %d MB under a limit of %d MB (%v)", cm.name, tr.Bytes>>20, limit>>20, err)
+		}
 	}
 }

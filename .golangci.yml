@@ -138,7 +138,7 @@ linters:
         - G404
   exclusions:
     rules:
-      - path: (cmd/variate|cmd/variate-demo|examples/gograph)/main\.go
+      - path: (cmd/variate|cmd/variate-demo|examples/gograph|internal/tinymem)/main\.go
         linters: [forbidigo]
         text: "os\\.Exit"
       - path: ^clock\.go
