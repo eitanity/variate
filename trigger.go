@@ -136,12 +136,13 @@ func (m *Compiled) fireProbabilities(g Graph, cfg Config) {
 			f, atoms[i] = m.gateFiring(i, trigOf, atoms)
 		} else {
 			atoms[i] = m.sumAtoms(index(i))
-			sf := fireOf(g, m.nodeIDs[tr.node], tr.over, cfg)
+			whole := m.sumsWholeTotal(i)
+			sf := fireOf(g, m.nodeIDs[tr.node], tr.over, whole, cfg)
 			f = sf.f
 			if !f.Exact() && tr.over > 0 {
 				p = math.Min(1, sf.mean/tr.over)
 			}
-			if f.Exact() && m.sumsWholeTotal(i) {
+			if f.Exact() && whole {
 				m.whole = &wholeSum{trig: i, figures: sf}
 			}
 		}
@@ -304,12 +305,13 @@ func binomialTail(p []float64, over float64) float64 {
 }
 
 // fireOf brackets P(S > over) for the trigger on node id, with the
-// sum's mean and variance and a bracket on the integral of P(S ≥ x) up
-// to the level, from which a sum of the whole total has its variance.
-// The transform resolves the sum up to its TailP quantile; when the
-// level lies beyond that, the tail level is raised until the quantile
-// passes the level or P(S > over) is bounded to 0.
-func fireOf(g Graph, id string, over float64, cfg Config) sumFigures {
+// sum's mean and variance and, when below is set, a bracket on the
+// integral of P(S ≥ x) up to the level, from which a sum of the whole
+// total has its variance. The transform resolves the sum at the level
+// alone, on a grid spanning its TailP quantile; when the level lies
+// beyond the grid, the tail level is raised until the grid holds it or
+// P(S > over) is bounded to 0.
+func fireOf(g Graph, id string, over float64, below bool, cfg Config) sumFigures {
 	nan := math.NaN()
 	out := sumFigures{f: Firing{Lo: nan, Hi: nan}, mean: nan, variance: nan, belowLo: nan, belowHi: nan}
 	fg := fireGraph(g, id)
@@ -332,6 +334,7 @@ func fireOf(g Graph, id string, over float64, cfg Config) sumFigures {
 	for range fireTails {
 		t := newTransformer(dm, TransformConfig{TailP: tail, MaxGrid: cfg.TransformGrid, Tol: cfg.TransformTol, MaxWork: cfg.TransformWork, MaxBytes: cfg.TransformBytes})
 		t.totalOnly = true
+		t.atLevel, t.level, t.below = true, over, below && over > 0
 		tr := &Transformed{}
 		if reason := t.applicable(); reason != "" {
 			out.f.Reason = "the transform of the sum does not apply: " + reason
@@ -346,8 +349,7 @@ func fireOf(g Graph, id string, over float64, cfg Config) sumFigures {
 			return out
 		}
 		lo, hi := exceedsBracket(tr.Total, over)
-		_, resolved := tr.Total.Quantile(tail)
-		if over < resolved || hi == 0 || tail >= fireTailMax {
+		if onGrid(tr.Total, over) || hi == 0 || tail >= fireTailMax {
 			out.f = Firing{Lo: lo, Hi: hi}
 			out.belowLo, out.belowHi = 0, 0
 			if over > 0 {
@@ -381,11 +383,16 @@ type sumFigures struct {
 // the bracket at that point holds P(S > x). Beyond the lattice the upper
 // curve's last value bounds it.
 func exceedsBracket(b Bounds, x float64) (lo, hi float64) {
-	k := int(math.Floor(x/b.H)) + 1
-	if k >= len(b.Lower) {
+	if !onGrid(b, x) {
 		return 0, b.Upper[len(b.Upper)-1]
 	}
+	k := int(math.Floor(x/b.H)) + 1
 	return b.Lower[k], b.Upper[k]
+}
+
+// onGrid reports whether the bracket on P(T > x) is a lattice point of b.
+func onGrid(b Bounds, x float64) bool {
+	return int(math.Floor(x/b.H))+1 < len(b.Lower)
 }
 
 // fireGraph is the model of a trigger's sum: the graph with only the
@@ -414,7 +421,75 @@ func fireGraph(g Graph, id string) Graph {
 			dropHoldings(&nodes[i])
 		}
 	}
-	return Graph{ID: g.ID, Sources: g.Sources, Nodes: nodes, Factors: g.Factors, Schedules: g.Schedules, Phased: g.Phased}
+	return Graph{ID: g.ID, Sources: bookingSources(g.Sources, nodes), Nodes: nodes, Factors: g.Factors, Schedules: g.Schedules, Phased: g.Phased}
+}
+
+// bookingSources is the sources that reach a node of the sum's model
+// with a function or a threshold: the rest add nothing to the sum, and
+// a transform would compound each at every grid point. All of them when
+// none reaches one, for the model's checks to report.
+func bookingSources(srcs []Source, nodes []Node) []Source {
+	at := make(map[string]int, len(nodes))
+	for i, n := range nodes {
+		at[n.ID] = i
+	}
+	leads := leadsToBooking(nodes, at)
+	out := make([]Source, 0, len(srcs))
+	for _, s := range srcs {
+		if i, ok := at[s.To]; ok && leads[i] {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return srcs
+	}
+	return out
+}
+
+// leadsToBooking marks the nodes that book, with a function or a
+// threshold, or lead to one that does, by a search back from those.
+func leadsToBooking(nodes []Node, at map[string]int) []bool {
+	from := make([][]int, len(nodes))
+	leads := make([]bool, len(nodes))
+	var stack []int
+	for i, n := range nodes {
+		for _, to := range nodeTargets(n) {
+			if j, ok := at[to]; ok {
+				from[j] = append(from[j], i)
+			}
+		}
+		if len(n.Functions) > 0 || n.Threshold != nil {
+			leads[i] = true
+			stack = append(stack, i)
+		}
+	}
+	// bound: each node is pushed once
+	for len(stack) > 0 {
+		j := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for _, i := range from[j] {
+			if !leads[i] {
+				leads[i] = true
+				stack = append(stack, i)
+			}
+		}
+	}
+	return leads
+}
+
+// nodeTargets is the IDs of the nodes n leads to.
+func nodeTargets(n Node) []string {
+	out := make([]string, 0, len(n.Outcomes)+3)
+	for _, o := range n.Outcomes {
+		out = append(out, o.To)
+	}
+	if n.Next != "" {
+		out = append(out, n.Next)
+	}
+	if n.Threshold != nil {
+		out = append(out, n.Threshold.Above, n.Threshold.Below)
+	}
+	return out
 }
 
 // sumNode is node n in the model of trigger tr's sum: its functions in

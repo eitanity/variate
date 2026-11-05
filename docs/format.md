@@ -203,7 +203,8 @@ consequence side. See `examples/bowtie.yaml`.
 
 The report counts a trigger as a source named after its node: its
 events are the firings, and its rows break down what the walk books.
-P(fire) is exact, a bracket from the transform of the period's sum,
+P(fire) is exact, a bracket within `transform_tol` from the transform
+of the period's sum at the level,
 and the means its walk books are exact with it. A chained trigger that
 counts other triggers' firings is exact when those share nothing (no
 source, shared factor, schedule or period-scoped value): the count is

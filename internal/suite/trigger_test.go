@@ -26,6 +26,33 @@ func triggered(lam, over float64) variate.Graph {
 	}
 }
 
+// TestTriggerOtherSources: sources that reach nothing the sum books
+// leave P(fire) as it is, a frequent one with a heavy loss and one
+// leading to the counted node through a node of its own kept.
+func TestTriggerOtherSources(t *testing.T) {
+	heavy, err := dist.NewLognormalFromMedianP90(1e5, 1e6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := triggered(4, 3)
+	g := base
+	g.Sources = append(append([]variate.Source{}, base.Sources...),
+		variate.Source{ID: "other", Frequency: C(50), To: "loss"},
+		variate.Source{ID: "via", Frequency: C(1), To: "relay"})
+	g.Nodes = append(append([]variate.Node{}, base.Nodes...),
+		variate.Node{ID: "loss", Functions: []variate.Function{Fn("loss", "cost", heavy)}},
+		variate.Node{ID: "relay", Next: "failure"})
+	c, _, err := g.Compile(variate.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, _ := c.Analytic()
+	f := e.Firing[0]
+	if want := poissonAbove(5, 3); !f.Exact() || f.Lo > want*(1+1e-9) || f.Hi < want*(1-1e-9) || f.Hi-f.Lo > 1e-3*want {
+		t.Errorf("P(fire) [%g, %g] %q, want %g", f.Lo, f.Hi, f.Reason, want)
+	}
+}
+
 // poissonAbove is P(N > k) for N Poisson with mean lam.
 func poissonAbove(lam float64, k int) float64 {
 	term, below := math.Exp(-lam), 0.0
@@ -266,10 +293,12 @@ func TestTriggerChain(t *testing.T) {
 		if ids[len(ids)-1] != "loss" {
 			t.Fatalf("the top trigger is not last: %v", ids)
 		}
+		var half float64
 		for _, f := range c.Firings() {
 			want := p
 			if ids[f.Source] == "loss" {
 				want = tc.want
+				half = (f.Hi - f.Lo) / 2
 			}
 			if !f.Exact() || f.Lo > want*(1+1e-9) || f.Hi < want*(1-1e-9) || f.Hi-f.Lo > 1e-3*want {
 				t.Errorf("k %d: %s P(fire) [%g, %g] %q, want %g", tc.k, ids[f.Source], f.Lo, f.Hi, f.Reason, want)
@@ -281,8 +310,9 @@ func TestTriggerChain(t *testing.T) {
 			t.Errorf("k %d: top fires %g a period, want %g ± %g", tc.k, top, tc.want, se)
 		}
 		e, _ := c.Analytic()
-		if mean := 3*lam*100 + tc.want*1e5; !near(e.Mean, mean, 1e-9) {
-			t.Errorf("k %d: mean %g, want %g", tc.k, e.Mean, mean)
+		// The mean takes the middle of the top's P(fire) bracket.
+		if mean := 3*lam*100 + tc.want*1e5; math.Abs(e.Mean-mean) > half*1e5+1e-9*mean {
+			t.Errorf("k %d: mean %g, want %g ± %g", tc.k, e.Mean, mean, half*1e5)
 		}
 	}
 }

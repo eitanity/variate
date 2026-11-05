@@ -128,6 +128,12 @@ type transformer struct {
 	passM     int     // its grid
 	totalOnly bool    // the total alone, without the categories and sources
 	walkFn    []bool  // with a trigger summing the whole total, the functions only its walk draws; nil otherwise
+	// A trigger's sum is resolved at its level alone: the bracket on
+	// P(S > level) and, with below, on the integral of P(S ≥ x) up to it.
+	atLevel bool
+	level   float64
+	below   bool
+	probing bool // the first pass of a level's: any pass that holds the draws
 }
 
 func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
@@ -301,6 +307,9 @@ func (t *transformer) run(out *Transformed) error {
 	c := math.Sqrt(t.tailP / (1 - t.tailP))
 	// First pass: the span comes from the closed-form Cantelli (or Markov)
 	// solve at each grid size.
+	if t.atLevel {
+		return t.runAtLevel(out, c)
+	}
 	first, reason := t.converge(minGrid, func(m int) (float64, bool) { return t.firstSpan(c, m) }, 0)
 	if first == nil {
 		out.Reason = reason
@@ -379,6 +388,83 @@ func (t *transformer) budgetReason(m int) string {
 	return "the work budget of " + i64toa(t.cfg.MaxWork) + " grid-point evaluations would be exceeded at " + itoa(m) + " grid points"
 }
 
+// runAtLevel resolves a trigger's sum at its level. A first pass on the
+// Cantelli span, the smallest grid that holds the draws, finds the tail
+// quantile; the passes after it span twice that quantile or the level,
+// whichever is further, which bounds the alias term, on nested finer
+// lattices until the bracket at the level is within Tol.
+func (t *transformer) runAtLevel(out *Transformed, c float64) error {
+	t.probing = true
+	first, reason := t.converge(minGrid, func(m int) (float64, bool) { return t.firstSpan(c, m) }, t.level)
+	t.probing = false
+	if first == nil {
+		out.Reason = reason
+		return nil
+	}
+	_, x := first.bounds(first.total).Quantile(t.tailP)
+	x = math.Max(x, t.level)
+	h1 := first.h
+	r := first
+	if !t.levelWithinTol(first) {
+		r, reason = t.converge(first.m, func(m int) (float64, bool) {
+			h := h1
+			// bound: halvings until the grid just holds 2·x
+			for h/2*float64(m) >= 2*x && h/2 > 0 {
+				h /= 2
+			}
+			return h, true
+		}, t.level)
+		if r == nil {
+			out.Reason = reason
+			return nil
+		}
+	}
+	r.fill(out)
+	out.Applicable = true
+	out.QuadNodes = t.quadN
+	out.Passes = t.passes
+	return nil
+}
+
+// stops reports whether pass r ends the doublings, with the deepest
+// point it had to resolve: any pass when probing, the level's bracket
+// within Tol at a level, else every quantile up to the TailP quantile,
+// or x* when it is known and smaller.
+func (t *transformer) stops(r *passResult, xStar float64) (bool, float64) {
+	switch {
+	case t.probing:
+		return true, 0
+	case t.atLevel:
+		return t.levelWithinTol(r), t.level
+	}
+	_, x := r.bounds(r.total).Quantile(t.tailP)
+	if xStar > 0 {
+		x = math.Min(x, xStar)
+	}
+	return r.withinTol(x, t.cfg.Tol, t.tailP), x
+}
+
+// levelWithinTol reports whether a pass resolves a trigger's sum at its
+// level: the bracket on P(S > level) within Tol of its upper end, or of
+// 1 − TailP when that is larger, and with below the integral of
+// P(S ≥ x) up to the level within Tol of its upper end. A level beyond
+// the grid stops too, for the caller to raise the tail level.
+func (t *transformer) levelWithinTol(r *passResult) bool {
+	b := r.bounds(r.total)
+	if !onGrid(b, t.level) {
+		return true
+	}
+	lo, hi := exceedsBracket(b, t.level)
+	if !resolved(lo, hi, t.cfg.Tol, t.tailP) {
+		return false
+	}
+	if !t.below {
+		return true
+	}
+	lo, hi = b.LayerMean(Layer{Limit: t.level})
+	return hi-lo <= t.cfg.Tol*hi
+}
+
 // firstSpan solves M·h = 2·x*(h) with x* from Cantelli on the lattice
 // moments; ok is false when the grid cannot hold the draws.
 func (t *transformer) firstSpan(c float64, m int) (float64, bool) {
@@ -423,11 +509,8 @@ func (t *transformer) converge(start int, span func(m int) (float64, bool), xSta
 			return nil, err
 		}
 		last = r
-		_, lastX = r.bounds(r.total).Quantile(t.tailP)
-		if xStar > 0 {
-			lastX = math.Min(lastX, xStar)
-		}
-		if r.withinTol(lastX, t.cfg.Tol, t.tailP) {
+		var done bool
+		if done, lastX = t.stops(r, xStar); done {
 			return r, ""
 		}
 	}
