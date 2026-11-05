@@ -103,10 +103,6 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if w.batch <= 0 {
 		w.batch = defaultBatch
 	}
-	nw := cfg.Workers
-	if nw <= 0 {
-		nw = runtime.GOMAXPROCS(0)
-	}
 	pool := cfg.PoolSize
 	if pool <= 0 {
 		pool = defaultPoolSize
@@ -114,8 +110,8 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if err := w.allocResult(); err != nil {
 		return nil, err
 	}
-	nslots := int(min(int64(2*nw+2), w.batch))
-	if err := w.checkFootprint(nw, nslots, pool); err != nil {
+	nw, nslots, err := w.fitWorkers(pool)
+	if err != nil {
 		return nil, err
 	}
 	w.carry = make([]float64, w.s*w.l.width)
@@ -246,6 +242,33 @@ func (w *Workspace) allocLayers(e *Expectation, res float64) {
 		r.Layers[j].Hist = stats.NewLogHist(scale, res)
 		w.hists[q] = r.Layers[j].Hist
 	}
+}
+
+// fitWorkers picks the worker and slot counts: Workers when set, else
+// the most workers up to GOMAXPROCS whose workspace fits MaxMemory, as
+// each holds its own histograms and the results do not depend on how
+// many there are. It refuses when the count set, or a single worker,
+// does not fit.
+func (w *Workspace) fitWorkers(pool int) (nw, nslots int, err error) {
+	nw = w.cfg.Workers
+	if nw > 0 {
+		nslots = w.slotsFor(nw)
+		return nw, nslots, w.checkFootprint(nw, nslots, pool)
+	}
+	// bound: GOMAXPROCS
+	for nw = runtime.GOMAXPROCS(0); nw > 1; nw-- {
+		nslots = w.slotsFor(nw)
+		if w.checkFootprint(nw, nslots, pool) == nil {
+			return nw, nslots, nil
+		}
+	}
+	nslots = w.slotsFor(1)
+	return 1, nslots, w.checkFootprint(1, nslots, pool)
+}
+
+// slotsFor is the number of result slots nw workers cycle through.
+func (w *Workspace) slotsFor(nw int) int {
+	return int(min(int64(2*nw+2), w.batch))
 }
 
 // checkFootprint evaluates the memory the workspace would hold and
@@ -546,3 +569,7 @@ func (m *Compiled) Simulate(ctx context.Context, cfg Config) (*Result, error) {
 // Footprint is the planned size of the workspace's buffers in bytes, the
 // figure checked against MaxMemory.
 func (w *Workspace) Footprint() int64 { return w.footprint }
+
+// Workers is the number of workers the workspace runs: Workers when
+// set, else the most up to GOMAXPROCS that fit MaxMemory.
+func (w *Workspace) Workers() int { return len(w.workers) }

@@ -56,3 +56,37 @@ func TestFootprint(t *testing.T) {
 		}
 	}
 }
+
+// TestFootprintFitsWorkers: with Workers unset the workspace takes the
+// most workers up to GOMAXPROCS that fit MaxMemory, so a limit that
+// holds two of four gives two; a Workers set above the limit, or a
+// limit below one worker's, is refused.
+func TestFootprintFitsWorkers(t *testing.T) {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
+	c, _, err := bigGraph(1000).Compile(variate.Config{NoBreakdown: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	footprint := func(cfg variate.Config) (int64, int) {
+		w, err := c.NewWorkspace(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer w.Close()
+		return w.Footprint(), w.Workers()
+	}
+	one, _ := footprint(variate.Config{NoBreakdown: true, Periods: 1000, Workers: 1})
+	two, _ := footprint(variate.Config{NoBreakdown: true, Periods: 1000, Workers: 2})
+	if got, n := footprint(variate.Config{NoBreakdown: true, Periods: 1000}); n != 4 || got <= two {
+		t.Fatalf("no limit: %d workers, %d bytes", n, got)
+	}
+	if got, n := footprint(variate.Config{NoBreakdown: true, Periods: 1000, MaxMemory: two}); n != 2 || got != two {
+		t.Errorf("limit %d: %d workers, %d bytes; want 2 workers", two, n, got)
+	}
+	if _, err := c.NewWorkspace(variate.Config{NoBreakdown: true, Periods: 1000, Workers: 3, MaxMemory: two}); err == nil || !strings.Contains(err.Error(), "exceeds MaxMemory") {
+		t.Errorf("3 workers set over the limit: %v", err)
+	}
+	if _, err := c.NewWorkspace(variate.Config{NoBreakdown: true, Periods: 1000, MaxMemory: one - 1}); err == nil || !strings.Contains(err.Error(), "exceeds MaxMemory") {
+		t.Errorf("a limit below one worker: %v", err)
+	}
+}

@@ -469,7 +469,7 @@ flag wins.
 |---|---|
 | `periods` | run exactly this many periods. Omitted: the plan decides, running until every criterion below is met. |
 | `seed` | the random seed; 0, the default, draws a fresh seed each run, which the report gives. The same seed, model and `block_periods` repeat a run exactly. |
-| `workers` | simulation threads; default all cores. |
+| `workers` | simulation threads; default all cores, or as many as fit `max_memory`. |
 | `min_hits` | events every reachable outcome must see (default 1000). |
 | `contrib_rse`, `target_rse` | relative standard error asked of each node's contribution and of each mean (default 1%). |
 | `tail`, `tail_hits` | the tail quantile to resolve (default 0.999) and the periods wanted beyond it (default 100). |

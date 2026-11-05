@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	"code.eitanity.com/variate"
 	"code.eitanity.com/variate/report"
@@ -78,6 +79,9 @@ func runModel(args []string, stdout, stderr io.Writer, stream bool) error {
 		return fmt.Errorf("workspace: %w", err)
 	}
 	defer w.Close()
+	if n := runtime.GOMAXPROCS(0); m.Config.Workers <= 0 && w.Workers() < n {
+		fmt.Fprintf(stderr, "warning: workers: %d of %d, the most that fit max_memory; the workspace holds %d MB\n", w.Workers(), n, w.Footprint()>>20)
+	}
 	r, err := w.Run(context.Background(), m.Config.Seed)
 	if err != nil {
 		err = fmt.Errorf("run: %w", err)
