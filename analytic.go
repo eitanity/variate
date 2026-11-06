@@ -170,14 +170,14 @@ func rateSecond(rho2, tau2 float64) float64 {
 }
 
 // Analytic computes the exact expectations of the model; with
-// Config.NoBreakdown the per-source, per-category and per-node variances
-// are NaN, left uncomputed.
+// Config.NoBreakdown or Config.NoBreakdownVariance the per-source,
+// per-category and per-node variances are NaN, left uncomputed.
 func (m *Compiled) Analytic() (*Expectation, error) {
 	e, lam, m1, m2 := m.means()
 	e.Var = m.variance(valueFilter{kind: filterAll}, lam, m1, m2, e.Mean)
 	d1, d2 := m.valueToGo(valueFilter{kind: filterDraws})
 	e.DrawsVar = m.variance(valueFilter{kind: filterDraws}, lam, d1, d2, e.DrawsMean)
-	if m.cfg.NoBreakdown {
+	if m.cfg.NoBreakdown || m.cfg.NoBreakdownVariance {
 		m.unknownBreakdownVariances(e)
 	} else {
 		m.breakdownVariances(e, lam, m1, m2)

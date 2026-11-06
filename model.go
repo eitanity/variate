@@ -179,6 +179,12 @@ type Config struct {
 	Pace         time.Duration
 	RoundScratch int
 	RecordBuffer int
+
+	// NoBreakdownVariance leaves the per-category, per-source and
+	// per-node variances uncomputed, as on a large model they are most of
+	// what Compile costs: the breakdowns are still kept, and their
+	// criteria are checked on what the run observes alone.
+	NoBreakdownVariance bool
 }
 
 // Watch selects which rounds an Observer receives: a round matches every
