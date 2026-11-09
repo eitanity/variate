@@ -138,7 +138,7 @@ func poissonCDF(lambda, k float64) float64 {
 	if k < 0 {
 		return 0
 	}
-	if lambda == 0 {
+	if lambda == 0 || math.IsInf(k, 1) {
 		return 1
 	}
 	return mathext.GammaIncRegComp(math.Floor(k)+1, lambda)
@@ -149,7 +149,7 @@ func poissonSurvival(lambda, k float64) float64 {
 	if k < 0 {
 		return 1
 	}
-	if lambda == 0 {
+	if lambda == 0 || math.IsInf(k, 1) {
 		return 0
 	}
 	return mathext.GammaIncReg(math.Floor(k)+1, lambda)

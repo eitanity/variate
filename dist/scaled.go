@@ -1,10 +1,16 @@
 package dist
 
-import "math/rand/v2"
+import (
+	"math"
+	"math/rand/v2"
+)
 
 const (
 	familyScaled = "scale"
 	paramFactor  = "factor"
+	// unscaleSteps bounds the ulp search in unscale: x/f lies within a
+	// step or two of every z with f·z = x.
+	unscaleSteps = 4
 )
 
 // Scaled is f·X for a factor f > 0: every draw of X multiplied by f, from
@@ -23,6 +29,25 @@ func NewScaled(d Distribution, f float64) (Scaled, error) {
 	return Scaled{d: d, f: f}, nil
 }
 
+// unscale returns the largest z with f·z ≤ x. The draws Fill carries to
+// at most x are exactly those at or below it, and x/f alone can round
+// past it and leave out an atom.
+func (d Scaled) unscale(x float64) float64 {
+	z := x / d.f
+	if math.IsInf(z, 0) || math.IsNaN(z) {
+		return z
+	}
+	// bound: unscaleSteps
+	for i := 0; i < unscaleSteps && d.f*z > x; i++ {
+		z = math.Nextafter(z, math.Inf(-1))
+	}
+	// bound: unscaleSteps
+	for i := 0; i < unscaleSteps && d.f*math.Nextafter(z, math.Inf(1)) <= x; i++ {
+		z = math.Nextafter(z, math.Inf(1))
+	}
+	return z
+}
+
 func (d Scaled) Fill(r *rand.Rand, dst []float64) {
 	d.d.Fill(r, dst)
 	for i := range dst {
@@ -39,9 +64,9 @@ func (d Scaled) Support() (lo, hi float64) {
 	return d.f * lo, d.f * hi
 }
 
-func (d Scaled) CDF(x float64) float64 { return d.d.CDF(x / d.f) }
+func (d Scaled) CDF(x float64) float64 { return d.d.CDF(d.unscale(x)) }
 
-func (d Scaled) Survival(x float64) float64 { return d.d.Survival(x / d.f) }
+func (d Scaled) Survival(x float64) float64 { return d.d.Survival(d.unscale(x)) }
 
 func (d Scaled) Quantile(p float64) float64 { return d.f * d.d.Quantile(p) }
 

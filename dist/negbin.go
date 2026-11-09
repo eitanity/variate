@@ -78,6 +78,9 @@ func (d Geometric) PMF(x float64) float64 {
 	if x < 0 || x != math.Floor(x) {
 		return 0
 	}
+	if x == 0 {
+		return d.p
+	}
 	return d.p * math.Exp(x*d.logQ)
 }
 
@@ -132,12 +135,18 @@ func (d NegativeBinomial) CDF(x float64) float64 {
 	if x < 0 {
 		return 0
 	}
+	if math.IsInf(x, 1) {
+		return 1
+	}
 	return mathext.RegIncBeta(d.r, math.Floor(x)+1, d.p)
 }
 
 func (d NegativeBinomial) Survival(x float64) float64 {
 	if x < 0 {
 		return 1
+	}
+	if math.IsInf(x, 1) {
+		return 0
 	}
 	return mathext.RegIncBeta(math.Floor(x)+1, d.r, 1-d.p)
 }

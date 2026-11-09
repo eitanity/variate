@@ -114,6 +114,9 @@ func (d LogUniform) CDF(x float64) float64 {
 }
 
 func (d LogUniform) Survival(x float64) float64 {
+	if x <= d.a {
+		return 1
+	}
 	if x >= d.b {
 		return 0
 	}
