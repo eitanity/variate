@@ -196,8 +196,5 @@ func (d NegativeBinomial) QuantileUpper(q float64) float64 {
 }
 
 func (d NegativeBinomial) PMF(x float64) float64 {
-	if x < 0 || x != math.Floor(x) {
-		return 0
-	}
-	return math.Exp(lgamma(x+d.r) - lgamma(x+1) - lgamma(d.r) + d.r*math.Log(d.p) + x*math.Log1p(-d.p))
+	return math.Exp(d.LogDensity(x))
 }

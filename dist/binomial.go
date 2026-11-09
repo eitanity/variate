@@ -352,21 +352,5 @@ func (d Binomial) QuantileUpper(q float64) float64 {
 }
 
 func (d Binomial) PMF(x float64) float64 {
-	if x < 0 || x > d.n || x != math.Floor(x) {
-		return 0
-	}
-	switch d.p {
-	case 0:
-		return boolToFloat(x == 0)
-	case 1:
-		return boolToFloat(x == d.n)
-	}
-	return math.Exp(lgamma(d.n+1) - lgamma(x+1) - lgamma(d.n-x+1) + x*math.Log(d.p) + (d.n-x)*math.Log1p(-d.p))
-}
-
-func boolToFloat(b bool) float64 {
-	if b {
-		return 1
-	}
-	return 0
+	return math.Exp(d.LogDensity(x))
 }

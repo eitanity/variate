@@ -99,16 +99,19 @@ func (d *Categorical) buildOrder() {
 	sort.Slice(idx, func(a, b int) bool { return d.values[idx[a]] < d.values[idx[b]] })
 	d.sortedV = make([]float64, 0, n)
 	d.cumP = make([]float64, 0, n)
+	d.mass = make([]float64, 0, n)
 	cum := 0.0
 	for _, i := range idx {
 		v, p := d.values[i], d.probs[i]
 		cum += p
 		if k := len(d.sortedV); k > 0 && d.sortedV[k-1] == v {
 			d.cumP[k-1] = cum
+			d.mass[k-1] += p
 			continue
 		}
 		d.sortedV = append(d.sortedV, v)
 		d.cumP = append(d.cumP, cum)
+		d.mass = append(d.mass, p)
 	}
 	d.lo, d.hi = d.sortedV[0], d.sortedV[len(d.sortedV)-1]
 	var m, m2 float64

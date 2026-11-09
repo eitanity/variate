@@ -87,6 +87,17 @@ type LogPERT struct {
 // NewLogPERT validates like NewPERT and additionally requires low > 0. Its
 // moments are computed once by quadrature.
 func NewLogPERT(low, peak, high, t float64) (LogPERT, error) {
+	d, err := NewLogPERTDensity(low, peak, high, t)
+	if err != nil {
+		return LogPERT{}, err
+	}
+	d.mean, d.variance = d.moments()
+	return d, nil
+}
+
+// NewLogPERTDensity validates as NewLogPERT and leaves Mean and Var NaN,
+// for evaluating densities at many parameter values.
+func NewLogPERTDensity(low, peak, high, t float64) (LogPERT, error) {
 	if !(low > 0) {
 		return LogPERT{}, paramError(familyLogPERT, paramLow, low)
 	}
@@ -97,9 +108,7 @@ func NewLogPERT(low, peak, high, t float64) (LogPERT, error) {
 	if err != nil {
 		return LogPERT{}, err
 	}
-	d := LogPERT{lp: lp, low: low, high: high}
-	d.mean, d.variance = d.moments()
-	return d, nil
+	return LogPERT{lp: lp, low: low, high: high, mean: math.NaN(), variance: math.NaN()}, nil
 }
 
 func (d LogPERT) Fill(r *rand.Rand, dst []float64) {

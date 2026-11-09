@@ -12,6 +12,13 @@ import (
 // without one, and the caller integrates numerically instead. Nodes fills
 // a Gauss rule for the family's own density (see nodes.go); false for a
 // family without one.
+//
+// LogDensity is the natural log of the probability density or mass at x:
+// ln f(x) with f = dF/dx for a continuous family, ln P(X = x) for a
+// discrete family or at an atom of a mixed distribution, −Inf off the
+// support. IsAtom reports P(X = x) > 0. LogSurvival is ln P(X > x), in
+// closed form where one exists, so that it stays finite past the point
+// where Survival underflows.
 type Distribution interface {
 	Fill(r *rand.Rand, dst []float64)
 	Mean() float64
@@ -20,6 +27,9 @@ type Distribution interface {
 	CDF(x float64) float64
 	Laplace(s complex128) (value complex128, ok bool)
 	Nodes(x, w []float64) bool
+	LogDensity(x float64) float64
+	IsAtom(x float64) bool
+	LogSurvival(x float64) float64
 	Quantiler
 }
 

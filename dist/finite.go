@@ -26,6 +26,7 @@ type Categorical struct {
 	// sorted copies for CDF and PMF
 	sortedV []float64
 	cumP    []float64 // cumulative probability by sorted value, merged on ties
+	mass    []float64 // probability of each sorted value, merged on ties
 }
 
 func (d Categorical) Fill(r *rand.Rand, dst []float64) {
@@ -63,10 +64,7 @@ func (d Categorical) PMF(x float64) float64 {
 	if i == len(d.sortedV) || d.sortedV[i] != x {
 		return 0
 	}
-	if i == 0 {
-		return d.cumP[0]
-	}
-	return d.cumP[i] - d.cumP[i-1]
+	return d.mass[i]
 }
 
 // Len returns the number of entries.

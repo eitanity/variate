@@ -207,16 +207,7 @@ func (d Poisson) QuantileUpper(q float64) float64 { return poissonQuantileUpper(
 
 // PMF returns P(K = x); zero off the integers.
 func (d Poisson) PMF(x float64) float64 {
-	if x < 0 || x != math.Floor(x) {
-		return 0
-	}
-	if d.lambda == 0 {
-		if x == 0 {
-			return 1
-		}
-		return 0
-	}
-	return math.Exp(x*math.Log(d.lambda) - d.lambda - lgamma(x+1))
+	return math.Exp(d.LogDensity(x))
 }
 
 // PoissonCount draws one count for a rate that changes on every call, such
