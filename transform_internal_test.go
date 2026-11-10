@@ -122,7 +122,9 @@ func TestTransformBranchCut(t *testing.T) {
 		gc[j] = cmplx.Rect(rad, 2*math.Pi*float64(j)/n)
 	}
 	closed := make([]complex128, n)
-	if _, reason := tr.compound(0, gc, closed, 1); reason != "" {
+	// The points are not a conjugate-symmetric grid, so every one is
+	// evaluated rather than mirrored.
+	if _, reason := tr.compoundHalf(0, gc, closed, 1, n); reason != "" {
 		t.Fatal(reason)
 	}
 	x := make([]float64, 1<<13)
@@ -561,8 +563,81 @@ func TestTransformOrder(t *testing.T) {
 		t.Errorf("generating function at z = 1 is %v", total[0])
 	}
 	// Every node's buffer came back to the pool, and few were ever needed:
-	// the chain a1 → a2 → shared is the deepest, plus the scratch.
-	if len(p.free) == 0 || len(p.free) > 4 {
+	// the chain a1 → a2 → shared is the deepest, plus the scratch and the
+	// summed exponent of the two constant-rate sources.
+	if len(p.free) == 0 || len(p.free) > 5 {
 		t.Errorf("%d buffers in the pool after the recursion", len(p.free))
+	}
+}
+
+// TestTransformMergedExponent: with a shared factor, the total from the
+// recursion that sums the constant-rate sources' exponents equals the one
+// that compounds every source on its own, at every grid point.
+func TestTransformMergedExponent(t *testing.T) {
+	ln, _ := dist.NewLognormal(0, 0.5)
+	e, _ := dist.NewExponential(2)
+	g2, _ := dist.NewGamma(2, 1.5)
+	gm, _ := dist.NewGamma(4, 0.5)
+	g := Graph{
+		Factors: []Factor{{ID: "f", Model: ln}},
+		Sources: []Source{
+			{ID: "s1", Frequency: c(1.5), To: "a", Factor: "f"},
+			{ID: "s2", Frequency: c(0.7), To: "b"},
+			{ID: "s3", Frequency: gm, To: "a", Factor: "f"},
+		},
+		Nodes: []Node{
+			{ID: "a", Functions: []Function{fn("x", "k", e)}},
+			{ID: "b", Functions: []Function{fn("y", "k", g2)}},
+		},
+	}
+	m := compiled(t, g)
+	totals := make([][]complex128, 2)
+	for i, totalOnly := range []bool{false, true} {
+		tr := newTransformer(m, TransformConfig{})
+		tr.totalOnly = totalOnly
+		if tr.constN != 2 {
+			t.Fatalf("%d constant-rate sources, want 2", tr.constN)
+		}
+		p, reason := tr.newPipeline(0.05, minGrid, 0.9999, false)
+		if reason != "" {
+			t.Fatal(reason)
+		}
+		r, reason := p.graph()
+		if reason != "" {
+			t.Fatal(reason)
+		}
+		totals[i] = r.total
+	}
+	if d := maxAbsDiff(totals[0], totals[1]); d > 1e-13 {
+		t.Errorf("merged and per-source totals differ by %g", d)
+	}
+}
+
+// TestTransformHalfGrid: compounding the first half of a conjugate-
+// symmetric grid and mirroring it gives what evaluating every point does,
+// for a closed form and for a frequency quadrature.
+func TestTransformHalfGrid(t *testing.T) {
+	gm, _ := dist.NewGamma(2.5, 0.8)
+	pertF, _ := dist.NewPERT(0, 5, 20, dist.DefaultPERTShape)
+	e, _ := dist.NewExponential(1)
+	const n = 1 << 12
+	gc := unitRoots(n)
+	for j := range gc {
+		gc[j] *= complex(0.999, 0) * complex(1-0.3*math.Cos(float64(j)), 0)
+	}
+	mirror(gc)
+	for _, freq := range []dist.Distribution{gm, pertF} {
+		tr := newTransformer(compiled(t, compoundOf(freq, e)), TransformConfig{})
+		half := make([]complex128, n)
+		if _, reason := tr.compound(0, gc, half, 1); reason != "" {
+			t.Fatal(reason)
+		}
+		every := make([]complex128, n)
+		if _, reason := tr.compoundHalf(0, gc, every, 1, n); reason != "" {
+			t.Fatal(reason)
+		}
+		if d := maxAbsDiff(half, every); d > 1e-13 {
+			t.Errorf("%T: mirrored and evaluated grids differ by %g", freq, d)
+		}
 	}
 }

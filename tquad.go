@@ -8,31 +8,44 @@ import (
 )
 
 // compound applies source k's mixed-Poisson generating function P_N to
-// gc, writing out; eps is the quadrature error, 0 for a closed form, and
-// reason is non-empty when the quadrature is refused.
+// gc, a conjugate-symmetric grid, writing out; eps is the quadrature
+// error, 0 for a closed form, and reason is non-empty when the quadrature
+// is refused.
 func (t *transformer) compound(k int, gc, out []complex128, f float64) (eps float64, reason string) {
+	half := len(gc)/2 + 1
+	eps, reason = t.compoundHalf(k, gc[:half], out[:half], f, len(gc))
+	if reason == "" {
+		mirror(out)
+	}
+	return eps, reason
+}
+
+// compoundHalf is compound on the first half of an m-point grid, the
+// points 0 to m/2; the rest is their mirror image under conjugation.
+// Work is counted for the whole grid, as if every point were computed.
+func (t *transformer) compoundHalf(k int, gc, out []complex128, f float64, m int) (eps float64, reason string) {
 	d := t.m.pools[t.m.srcs[k].pool]
 	if pmf := t.m.countPMF[k]; pmf != nil {
-		if t.work+int64(len(pmf))*int64(len(gc)) > t.cfg.MaxWork {
+		if t.work+int64(len(pmf))*int64(m) > t.cfg.MaxWork {
 			return 0, t.budgetReason(t.grid)
 		}
 		for i, w := range gc {
 			out[i] = polyAt(pmf, w)
 		}
-		t.work += int64(len(pmf)) * int64(len(gc))
+		t.work += int64(len(pmf)) * int64(m)
 		return t.m.countTail[k], ""
 	}
 	if _, ok := d.Laplace(0); ok {
-		if t.work+int64(len(gc)) > t.cfg.MaxWork {
+		if t.work+int64(m) > t.cfg.MaxWork {
 			return 0, t.budgetReason(t.grid)
 		}
 		for i, w := range gc {
 			out[i], _ = d.Laplace(complex(f, 0) * (1 - w))
 		}
-		t.work += int64(len(gc))
+		t.work += int64(m)
 		return 0, ""
 	}
-	eps, reason = t.quadratureCompound(d, gc, out, f)
+	eps, reason = t.quadratureCompound(d, gc, out, f, m)
 	if reason != "" {
 		reason += " for source " + t.m.sourceIDs[k]
 	}
@@ -42,28 +55,26 @@ func (t *transformer) compound(k int, gc, out []complex128, f float64) (eps floa
 // quadratureCompound evaluates P_N(w) = E_λ[exp(λ(w − 1))] by quadrature
 // over the rate: the family's own Gauss rule where it has one, otherwise
 // Gauss–Legendre in the quantile domain with the tail substitution, each
-// half of the range on the side that keeps its precision. The nodes double
-// until the sums agree to quadTol absolutely at every grid point: first on
-// a sample of the grid, which finds the count cheaply or refuses cheaply,
-// then on the first half of the grid from that count, the second half
-// being the first's mirror image under conjugation.
-func (t *transformer) quadratureCompound(d distribution, gc, out []complex128, f float64) (eps float64, reason string) {
+// half of the range on the side that keeps its precision. gc is the first
+// half of an m-point grid. The nodes double until the sums agree to
+// quadTol absolutely at every point: first on a sample of the points,
+// which finds the count cheaply or refuses cheaply, then on all of them
+// from that count.
+func (t *transformer) quadratureCompound(d distribution, gc, out []complex128, f float64, m int) (eps float64, reason string) {
 	sample := sampleOf(gc, quadSample)
 	n, reason := t.converged(d, sample, make([]complex128, len(sample)), quadStart, quadDoublings, f)
 	if reason != "" {
 		return 0, reason
 	}
-	if int64(n)*int64(len(gc)) > quadWorkCap {
-		return 0, "frequency quadrature needs " + itoa(n) + " nodes at " + itoa(len(gc)) + " grid points, above the work cap,"
+	if int64(n)*int64(m) > quadWorkCap {
+		return 0, "frequency quadrature needs " + itoa(n) + " nodes at " + itoa(m) + " grid points, above the work cap,"
 	}
-	// The first half from the count the sample found, allowing one more
+	// All the points from the count the sample found, allowing one more
 	// doubling before refusing.
-	half := len(gc)/2 + 1
-	n, reason = t.converged(d, gc[:half], out[:half], max(quadStart, n/2), 2, f)
+	n, reason = t.converged(d, gc, out, max(quadStart, n/2), 2, f)
 	if reason != "" {
 		return 0, reason
 	}
-	mirror(out)
 	t.quadN = max(t.quadN, n)
 	return t.lastEps, ""
 }

@@ -32,6 +32,7 @@ type pipeline struct {
 	t         *transformer
 	h         float64
 	m         int
+	half      int     // points 0 to M/2, which the recursion computes; the rest is their conjugate
 	r         float64 // tilt factor e^(−θh)
 	up        bool
 	fft       *fourier.CmplxFFT
@@ -128,7 +129,7 @@ func (t *transformer) pass(h float64, m int, xStar float64) (*passResult, string
 // values' lattice atoms; the reason when the atoms exceed the pass cap.
 func (t *transformer) newPipeline(h float64, m int, r float64, up bool) (*pipeline, string) {
 	fft, roots := t.planFor(m)
-	p := &pipeline{t: t, h: h, m: m, r: r, up: up, fft: fft, roots: roots}
+	p := &pipeline{t: t, h: h, m: m, half: m/2 + 1, r: r, up: up, fft: fft, roots: roots}
 	p.tilted = make([]complex128, m)
 	p.gf = make([]complex128, m)
 	p.mixBuf = make([]complex128, m)
@@ -305,9 +306,10 @@ func (p *pipeline) tensor() (*graphResult, string) {
 		if work := int64(p.mix.passes()) * int64(max(1, p.t.quadN)) * int64(p.m) * int64(1+p.t.categories()); work > quadWorkCap {
 			return nil, "period-scoped mixture of " + itoa(p.mix.passes()) + " passes with " + itoa(p.t.quadN) + " frequency quadrature nodes at " + itoa(p.m) + " grid points is above the work cap"
 		}
-		out.add(one, complex(w, 0))
+		out.add(one, complex(w, 0), p.half)
 		p.recycle(one)
 	}
+	out.mirror()
 	return out, ""
 }
 
@@ -344,22 +346,37 @@ func (p *pipeline) beyondGrid() bool {
 	return false
 }
 
-func (g *graphResult) add(o *graphResult, w complex128) {
-	for j := range g.total {
-		g.total[j] += w * o.total[j]
-	}
-	for j := range g.walk {
-		g.walk[j] += w * o.walk[j]
-	}
+// add adds w times o's first n points, the half the recursion computes.
+func (g *graphResult) add(o *graphResult, w complex128, n int) {
+	addScaled(g.total, o.total, w, n)
+	addScaled(g.walk, o.walk, w, n)
 	for c := range g.cats {
-		for j := range g.cats[c] {
-			g.cats[c][j] += w * o.cats[c][j]
-		}
+		addScaled(g.cats[c], o.cats[c], w, n)
 	}
 	for k := range g.srcs {
-		for j := range g.srcs[k] {
-			g.srcs[k][j] += w * o.srcs[k][j]
-		}
+		addScaled(g.srcs[k], o.srcs[k], w, n)
+	}
+}
+
+// addScaled adds w·src to dst on the first n points of dst, if it has any.
+func addScaled(dst, src []complex128, w complex128, n int) {
+	if len(dst) == 0 {
+		return
+	}
+	for j := range dst[:n] {
+		dst[j] += w * src[j]
+	}
+}
+
+// mirror fills every function's second half from its first.
+func (g *graphResult) mirror() {
+	mirror(g.total)
+	mirror(g.walk)
+	for c := range g.cats {
+		mirror(g.cats[c])
+	}
+	for k := range g.srcs {
+		mirror(g.srcs[k])
 	}
 }
 
@@ -406,6 +423,14 @@ func (p *pipeline) recurse(cat int32, srcs [][]complex128) ([]complex128, string
 	for j := range total {
 		total[j] = 1
 	}
+	// The constant-rate sources compound to exp(f·λ·(G − 1)) each: with
+	// two or more, their exponents are summed and taken once, unless each
+	// source's own function is wanted.
+	var expo []complex128
+	if srcs == nil && p.t.constN > 1 {
+		expo = p.grid()
+		clear(expo)
+	}
 	scratch := p.grid()
 	for _, v := range p.t.order {
 		n := m.nodes[v]
@@ -418,12 +443,18 @@ func (p *pipeline) recurse(cat int32, srcs [][]complex128) ([]complex128, string
 			p.nodeMix(gv, v, n, cat, g, uses)
 		}
 		g[v] = gv
-		if reason := p.compoundAt(v, cat, gv, total, scratch, srcs, uses); reason != "" {
+		if reason := p.compoundAt(v, cat, gv, total, scratch, expo, srcs, uses); reason != "" {
 			return nil, reason
 		}
 		if uses[v] == 0 {
 			p.release(g, v)
 		}
+	}
+	if expo != nil {
+		for j := range total[:p.half] {
+			total[j] *= cmplx.Exp(expo[j])
+		}
+		p.free = append(p.free, expo)
 	}
 	p.free = append(p.free, scratch)
 	if cat == -1 {
@@ -434,8 +465,9 @@ func (p *pipeline) recurse(cat int32, srcs [][]complex128) ([]complex128, string
 
 // compoundAt compounds every source whose target is node v, now that
 // its generating function gv is complete, into total, and into srcs
-// when given; each source counts as one use of v.
-func (p *pipeline) compoundAt(v, cat int32, gv, total, scratch []complex128, srcs [][]complex128, uses []int32) string {
+// when given; a constant-rate source adds its exponent to expo instead
+// when expo is given. Each source counts as one use of v.
+func (p *pipeline) compoundAt(v, cat int32, gv, total, scratch, expo []complex128, srcs [][]complex128, uses []int32) string {
 	// bound: sources
 	for k, s := range p.t.m.srcs {
 		if s.to != v {
@@ -454,16 +486,36 @@ func (p *pipeline) compoundAt(v, cat int32, gv, total, scratch []complex128, src
 		if cat != -1 && allOne(gv) {
 			continue
 		}
+		if lam := p.t.constRate[k]; expo != nil && !math.IsNaN(lam) {
+			if reason := p.addExponent(k, lam, gv, expo); reason != "" {
+				return reason
+			}
+			continue
+		}
 		if reason := p.compound(k, gv, scratch); reason != "" {
 			return reason
 		}
-		for j := range total {
+		for j := range total[:p.half] {
 			total[j] *= scratch[j]
 		}
 		if srcs != nil {
 			srcs[k] = append(p.grid()[:0], scratch...)
 		}
 	}
+	return ""
+}
+
+// addExponent adds a constant-rate source's exponent f·λ·(G − 1) to
+// expo, counting the work as the closed form's.
+func (p *pipeline) addExponent(k int, lam float64, gv, expo []complex128) string {
+	if p.t.work+int64(p.m) > p.t.cfg.MaxWork {
+		return p.t.budgetReason(p.t.grid)
+	}
+	a := complex(lam*p.t.m.factorAt(k, p.mix.drawn), 0)
+	for j := range expo[:p.half] {
+		expo[j] += a * (gv[j] - 1)
+	}
+	p.t.work += int64(p.m)
 	return ""
 }
 
@@ -561,7 +613,7 @@ func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, cat int32, g [][]c
 			p.multiplyFunction(branch, f, cat == -1 && !p.accounted)
 			child = branch
 		}
-		for i := range mix {
+		for i := range mix[:p.half] {
 			mix[i] += pj * child[i]
 		}
 		uses[to]--
@@ -572,7 +624,7 @@ func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, cat int32, g [][]c
 	if branch != nil {
 		p.free = append(p.free, branch)
 	}
-	for i := range gv {
+	for i := range gv[:p.half] {
 		gv[i] *= mix[i]
 	}
 }
@@ -605,7 +657,7 @@ func (p *pipeline) accountFunction(f int32, dropped, lmean float64) {
 func (p *pipeline) multiplyAtom(gv []complex128, k int) {
 	rk := complex(math.Pow(p.r, float64(k)), 0)
 	step, at := k%p.m, 0
-	for j := range gv {
+	for j := range gv[:p.half] {
 		gv[j] *= rk * p.roots[at]
 		at += step
 		if at >= p.m {
@@ -620,7 +672,7 @@ func (p *pipeline) multiplyAtom(gv []complex128, k int) {
 // dropped mass are accounted once, in the first all-functions pass.
 func (p *pipeline) multiplyFunction(gv []complex128, f int32, account bool) {
 	if p.fnG != nil && p.fnG[f] != nil {
-		for i := range gv {
+		for i := range gv[:p.half] {
 			gv[i] *= p.fnG[f][i]
 		}
 		return
@@ -677,14 +729,15 @@ func (p *pipeline) multiplyFunction(gv []complex128, f int32, account bool) {
 	if p.fnG != nil {
 		p.fnG[f] = append([]complex128(nil), gf...)
 	}
-	for i := range gv {
+	for i := range gv[:p.half] {
 		gv[i] *= gf[i]
 	}
 }
 
-// compound applies source k's mixed-Poisson generating function to gc.
+// compound applies source k's mixed-Poisson generating function to the
+// first half of gc.
 func (p *pipeline) compound(k int, gc, out []complex128) string {
-	eps, reason := p.t.compound(k, gc, out, p.t.m.factorAt(k, p.mix.drawn))
+	eps, reason := p.t.compoundHalf(k, gc[:p.half], out[:p.half], p.t.m.factorAt(k, p.mix.drawn), p.m)
 	p.eps = math.Max(p.eps, eps)
 	return reason
 }
