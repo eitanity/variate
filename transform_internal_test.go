@@ -615,7 +615,11 @@ func TestTransformMergedExponent(t *testing.T) {
 
 // TestTransformHalfGrid: compounding the first half of a conjugate-
 // symmetric grid and mirroring it gives what evaluating every point does,
-// for a closed form and for a frequency quadrature.
+// for a closed form and for a frequency quadrature. The grid's modulus
+// varies from point to point but stays inside the unit disk, as a
+// tilted transform's does: outside it the mixture grows with the rate
+// and its round-off, 3e-14 to 2e-13 on arm64, never meets the
+// quadrature's tolerance.
 func TestTransformHalfGrid(t *testing.T) {
 	gm, _ := dist.NewGamma(2.5, 0.8)
 	pertF, _ := dist.NewPERT(0, 5, 20, dist.DefaultPERTShape)
@@ -623,7 +627,7 @@ func TestTransformHalfGrid(t *testing.T) {
 	const n = 1 << 12
 	gc := unitRoots(n)
 	for j := range gc {
-		gc[j] *= complex(0.999, 0) * complex(1-0.3*math.Cos(float64(j)), 0)
+		gc[j] *= complex(0.999*(0.85+0.15*math.Cos(float64(j))), 0)
 	}
 	mirror(gc)
 	for _, freq := range []dist.Distribution{gm, pertF} {
