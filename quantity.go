@@ -8,7 +8,7 @@ import "math"
 // of them the way it draws the total.
 
 // QuantityRow finds the row of a quantity by kind ("total", "category",
-// "source", "entries", "contrib", "layer") and name; ok is false for a kind or
+// "source", "entries", "contrib", "layer", "trigger") and name; ok is false for a kind or
 // name the model does not have, and for a breakdown with Config.NoBreakdown.
 func (w *Workspace) QuantityRow(kind, name string) (row int, ok bool) {
 	l := w.l
@@ -45,6 +45,12 @@ func (w *Workspace) quantityNames(kind string) (names []string, at func(int) int
 			names[i] = y.ID
 		}
 		return names, l.layer
+	case "trigger":
+		names = make([]string, len(w.m.trigs))
+		for i, tr := range w.m.trigs {
+			names[i] = w.m.sourceIDs[tr.src]
+		}
+		return names, l.trig
 	}
 	return nil, nil
 }

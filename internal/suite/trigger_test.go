@@ -1,6 +1,7 @@
 package suite
 
 import (
+	"context"
 	"math"
 	"strings"
 	"testing"
@@ -399,5 +400,103 @@ func TestTriggerZero(t *testing.T) {
 	zero := 1 - r.Total.Hist.Exceedance(1e-9)
 	if want := math.Exp(-1); !near(e.PZero(), want, 1e-9) || math.Abs(zero-want) > 5*math.Sqrt(want*(1-want)/1e5) {
 		t.Errorf("P(T = 0) %g, run %g, want %g", e.PZero(), zero, want)
+	}
+}
+
+// budgeted is two sources whose costs a budget trigger sums; above the
+// level it books an overrun.
+func budgeted(over float64) variate.Graph {
+	return variate.Graph{
+		Sources: []variate.Source{
+			{ID: "a", Frequency: C(3), To: "work_a"},
+			{ID: "b", Frequency: C(1.5), To: "work_b"},
+		},
+		Nodes: []variate.Node{
+			{ID: "work_a", Functions: []variate.Function{Fn("hours", "work", Pert(2, 5, 12))}},
+			{ID: "work_b", Functions: []variate.Function{Fn("hours", "work", Pert(5, 10, 30))}},
+			{ID: "overrun", Functions: []variate.Function{Fn("flag", "breach", C(1))},
+				Trigger: &variate.Trigger{Over: over, Inputs: []variate.TriggerInput{{Node: "work_a"}, {Node: "work_b"}}}},
+		},
+	}
+}
+
+// TestTriggerSumQuantity: the sum a trigger tests is a quantity of its
+// own. Period by period it is the total less what the trigger's walk
+// books; the share of periods above the level is the firing rate
+// exactly; its mean agrees with the exact mean of the sum; and it is
+// there with the breakdowns off. Seed 7: deterministic.
+func TestTriggerSumQuantity(t *testing.T) {
+	for _, noBreakdown := range []bool{false, true} {
+		cfg := variate.Config{Periods: 40000, Workers: 4, Series: true, NoBreakdown: noBreakdown}
+		c, _, err := budgeted(30).Compile(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := c.NewWorkspace(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := w.Run(context.Background(), 7)
+		if err != nil {
+			w.Close()
+			t.Fatal(err)
+		}
+		row, ok := w.QuantityRow("trigger", "overrun")
+		if !ok || !w.HasHistogram(row) {
+			t.Fatalf("no trigger quantity with a histogram (ok %v)", ok)
+		}
+		n := r.Series.Periods()
+		sum := r.Series.TriggerColumn(0, make([]float64, n))
+		total := r.Series.TotalColumn(make([]float64, n))
+		above := 0
+		for p := range sum {
+			// The walk books its flag, 1, in the periods it fires.
+			walk := 0.0
+			if sum[p] > 30 {
+				above++
+				walk = 1
+			}
+			if d := math.Abs(sum[p] - (total[p] - walk)); d > 1e-9*math.Max(1, total[p]) {
+				t.Fatalf("period %d: sum %g, total %g", p, sum[p], total[p])
+			}
+		}
+		if fired := r.Events[2]; uint64(above) != fired {
+			t.Errorf("%d periods above the level, %d firings", above, fired)
+		}
+		var s variate.Summary
+		w.Summarize(&s)
+		f := c.Firings()[0]
+		st := s.Triggers["overrun"]
+		if z := (st.Mean - f.SumMean) / st.StdErr; math.IsNaN(z) || math.Abs(z) > 5 {
+			t.Errorf("no breakdown %v: sum mean %g ± %g, exact %g", noBreakdown, st.Mean, st.StdErr, f.SumMean)
+		}
+		if want := 3*Pert(2, 5, 12).Mean() + 1.5*Pert(5, 10, 30).Mean(); math.Abs(f.SumMean-want) > 1e-9*want {
+			t.Errorf("exact sum mean %g, want %g", f.SumMean, want)
+		}
+		w.Close()
+	}
+}
+
+// TestTriggerSumCountsEntries: a trigger on entries tests a count, which
+// is the entries of the counted node period by period.
+func TestTriggerSumCountsEntries(t *testing.T) {
+	cfg := variate.Config{Periods: 20000, Workers: 2, Series: true}
+	c, r := run(t, triggered(4, 5), cfg, 9)
+	failure := -1
+	for v, id := range c.NodeIDs() {
+		if id == "failure" {
+			failure = v
+		}
+	}
+	n := r.Series.Periods()
+	sum := r.Series.TriggerColumn(0, make([]float64, n))
+	entries := r.Series.EntriesColumn(failure, make([]float64, n))
+	for p := range sum {
+		if sum[p] != entries[p] {
+			t.Fatalf("period %d: sum %g, entries %g", p, sum[p], entries[p])
+		}
+	}
+	if f := c.Firings()[0]; math.Abs(f.SumMean-4) > 1e-9 {
+		t.Errorf("exact count mean %g, want 4", f.SumMean)
 	}
 }

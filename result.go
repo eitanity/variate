@@ -73,6 +73,7 @@ type Result struct {
 	EntriesPer []Accum // [node]
 	Contrib    []Accum // [node]; zero for nodes without functions
 	Layers     []Accum // [layer]: the layer's payout per period
+	Triggers   []Accum // [trigger]: the sum the trigger tests per period
 
 	Steps         uint64
 	BeyondHorizon float64
@@ -87,7 +88,8 @@ type Result struct {
 }
 
 // Series holds every closed period's row of quantities: total, categories,
-// sources, entries per node and contribution per node.
+// sources, entries per node, contribution per node, layers and the sum
+// each trigger tests.
 type Series struct {
 	l    layout
 	rows []float64 // [period×width]
@@ -128,6 +130,9 @@ func (s *Series) TotalColumn(dst []float64) []float64 { return s.column(s.l.tota
 
 // LayerColumn copies a layer's payouts into dst.
 func (s *Series) LayerColumn(j int, dst []float64) []float64 { return s.column(s.l.layer(j), dst) }
+
+// TriggerColumn copies the sums trigger i tested into dst.
+func (s *Series) TriggerColumn(i int, dst []float64) []float64 { return s.column(s.l.trig(i), dst) }
 
 // EntriesColumn copies node v's entries into dst.
 func (s *Series) EntriesColumn(v int, dst []float64) []float64 {

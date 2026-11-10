@@ -414,3 +414,29 @@ func TestPhase(t *testing.T) {
 		t.Fatalf("--phase 0 over a file phase: %s", out)
 	}
 }
+
+// TestRunTriggerSum: the table and the CSV carry each trigger's sum as a
+// quantity, and the analytic report its exact mean.
+func TestRunTriggerSum(t *testing.T) {
+	example := filepath.Join("..", "..", "examples", "trigger.yaml")
+	table, _, code := invoke(t, "run", "-f", example, "-n", "2000", "--seed", "2", "--analytic")
+	if code != 0 || !strings.Contains(table, "\ntrigger inspection ") || !strings.Contains(table, "sum mean ") {
+		t.Errorf("table:\n%s", table)
+	}
+	out, _, code := invoke(t, "run", "-f", example, "-n", "2000", "--seed", "2", "--analytic", "--format", "csv")
+	if code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	rows, err := csv.NewReader(strings.NewReader(out)).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sum, exact bool
+	for _, r := range rows {
+		sum = sum || r[0] == "trigger" && r[1] == "inspection"
+		exact = exact || r[0] == "analytic trigger sum" && r[1] == "inspection" && r[3] != "NaN"
+	}
+	if !sum || !exact {
+		t.Errorf("csv trigger row %v, analytic sum %v", sum, exact)
+	}
+}

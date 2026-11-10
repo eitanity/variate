@@ -47,6 +47,7 @@ type Summary struct {
 	EntriesPer map[string]Stat
 	ContribPer map[string]Stat // value booked per period at each node
 	Layers     map[string]Stat // each layer's payout per period, its share that of the total's mean
+	Triggers   map[string]Stat // by the trigger's source name: the sum it tests per period
 	TailShares []TailShare     // who the tail belongs to, at each threshold with a period
 	Plan       []PlanRow
 }
@@ -87,6 +88,10 @@ func (w *Workspace) Summarize(dst *Summary) {
 	dst.Layers = ensureStats(dst.Layers)
 	for j, y := range w.m.layers {
 		dst.Layers[y.ID] = w.stat(&r.Layers[j], r.Total.Mean())
+	}
+	dst.Triggers = ensureStats(dst.Triggers)
+	for i, tr := range w.m.trigs {
+		dst.Triggers[r.Sources[tr.src]] = w.stat(&r.Triggers[i], 1)
 	}
 	dst.TailShares = w.tailShares(dst.TailShares)
 	w.summarizeReach(dst)

@@ -220,10 +220,9 @@ func (w *Workspace) histRes() float64 {
 }
 
 // newHistLike allocates a worker histogram with the layout of global
-// quantity q.
+// quantity q's: the integer histogram where the global one is.
 func (w *Workspace) newHistLike(q int, res float64) *stats.LogHist {
-	l := w.l
-	if q >= 1+l.cats+l.srcs && q < 1+l.cats+l.srcs+l.nodes {
+	if exactBucketsOf(w.hists[q]) > 0 {
 		return stats.NewIntHist(w.means[q], res)
 	}
 	return stats.NewLogHist(w.means[q], res)
@@ -241,6 +240,32 @@ func (w *Workspace) allocLayers(e *Expectation, res float64) {
 		w.means[q] = scale
 		r.Layers[j].Hist = stats.NewLogHist(scale, res)
 		w.hists[q] = r.Layers[j].Hist
+	}
+}
+
+// allocTriggers gives each trigger's sum its accumulator and histogram,
+// ranged from the sum's mean, or its level when the mean is unknown; a
+// count of entries takes the integer histogram.
+func (w *Workspace) allocTriggers(res float64) {
+	r := &w.result
+	counted := make([]bool, len(w.m.trigs))
+	for _, i := range w.m.counts {
+		counted[i] = true
+	}
+	r.Triggers = make([]Accum, len(w.m.trigs))
+	for i, tr := range w.m.trigs {
+		q := w.l.trig(i)
+		scale := tr.firing.SumMean
+		if !(scale > 0) || math.IsInf(scale, 1) {
+			scale = math.Max(tr.over, 1)
+		}
+		w.means[q] = scale
+		if counted[i] {
+			r.Triggers[i].Hist = stats.NewIntHist(scale, res)
+		} else {
+			r.Triggers[i].Hist = stats.NewLogHist(scale, res)
+		}
+		w.hists[q] = r.Triggers[i].Hist
 	}
 }
 
@@ -363,6 +388,7 @@ func (w *Workspace) allocResult() error {
 		r.TailSums[j] = make([]float64, w.l.tailWidth())
 	}
 	w.allocLayers(e, res)
+	w.allocTriggers(res)
 	r.Contrib = make([]Accum, len(m.nodes))
 	w.hasFn = make([]bool, len(m.nodes))
 	for v := range m.nodes {
@@ -395,8 +421,10 @@ func (w *Workspace) accum(i int) *Accum {
 		return &w.result.EntriesPer[i-1-l.cats-l.srcs]
 	case i < 1+l.cats+l.srcs+2*l.nodes:
 		return &w.result.Contrib[i-1-l.cats-l.srcs-l.nodes]
+	case i < l.trigAt:
+		return &w.result.Layers[i-l.layerAt]
 	default:
-		return &w.result.Layers[i-1-l.cats-l.srcs-2*l.nodes]
+		return &w.result.Triggers[i-l.trigAt]
 	}
 }
 

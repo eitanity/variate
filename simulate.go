@@ -325,7 +325,8 @@ func (w *Workspace) leavePeriod(sl *slot, p, first int64, hs []*stats.LogHist) {
 
 // closeRow folds a finished period into the slot statistics and the
 // histograms, after checking that the breakdowns sum to the total; with
-// the breakdowns off, only the total, the entries and the layers.
+// the breakdowns off, only the total, the entries, the layers and the
+// triggers' sums.
 func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHist) {
 	l := &w.l
 	total := row[l.total()]

@@ -41,9 +41,10 @@ type ctrig struct {
 // Firing is P(fire) of a trigger: within [Lo, Hi] from the transform of
 // its sum, or NaN with the reason the transform does not apply.
 type Firing struct {
-	Source int // the trigger's index among the sources
-	Lo, Hi float64
-	Reason string
+	Source  int // the trigger's index among the sources
+	Lo, Hi  float64
+	Reason  string
+	SumMean float64 // E[the sum the trigger tests]; NaN when unknown, as for a gate on other triggers
 }
 
 // Exact reports whether the bracket is known.
@@ -132,6 +133,7 @@ func (m *Compiled) fireProbabilities(g Graph, cfg Config) {
 		tr := &m.trigs[i]
 		var f Firing
 		p := 1.0
+		sumMean := math.NaN()
 		if tr.upstream != "" {
 			f, atoms[i] = m.gateFiring(i, trigOf, atoms)
 		} else {
@@ -139,6 +141,7 @@ func (m *Compiled) fireProbabilities(g Graph, cfg Config) {
 			whole := m.sumsWholeTotal(i)
 			sf := fireOf(g, m.nodeIDs[tr.node], tr.over, whole, cfg)
 			f = sf.f
+			sumMean = sf.mean
 			if !f.Exact() && tr.over > 0 {
 				p = math.Min(1, sf.mean/tr.over)
 			}
@@ -150,6 +153,7 @@ func (m *Compiled) fireProbabilities(g Graph, cfg Config) {
 			p = (f.Lo + f.Hi) / 2
 		}
 		f.Source = int(tr.src)
+		f.SumMean = sumMean
 		tr.firing = f
 		k := tr.src
 		m.pools[m.srcs[k].pool] = point(p)
@@ -627,8 +631,11 @@ func (w *Workspace) count(wk *worker, v int32) {
 // trigger after those whose walks feed it, so the sum is the period's
 // whole.
 func (w *Workspace) runTrigger(wk *worker, sl *slot, k int32, p, first int64) {
-	tr := w.m.trigs[w.m.srcs[k].trigger]
-	if !(wk.sums[w.m.srcs[k].trigger] > tr.over) {
+	i := w.m.srcs[k].trigger
+	tr := w.m.trigs[i]
+	// The sum the trigger tests is a quantity of the period, kept in its row.
+	sl.row(w.l, w.s, first, p)[w.l.trig(int(i))] = wk.sums[i]
+	if !(wk.sums[i] > tr.over) {
 		return
 	}
 	if p >= 0 {

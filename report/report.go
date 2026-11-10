@@ -157,6 +157,10 @@ func (rep *Report) jsonSeries(j *jw) {
 	for i, y := range rep.C.Layers() {
 		j.nums("layer:"+y.ID, s.LayerColumn(i, col))
 	}
+	srcs := rep.C.SourceIDs()
+	for i, f := range rep.C.Firings() {
+		j.nums("trigger:"+srcs[f.Source], s.TriggerColumn(i, col))
+	}
 	j.closeC('}')
 }
 
@@ -261,6 +265,9 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 	}
 	for _, y := range rep.C.Layers() {
 		statRow(w, "layer "+y.ID, rep.Sum.Layers[y.ID], true)
+	}
+	for _, name := range sortedKeys(rep.Sum.Triggers) {
+		statRow(w, "trigger "+name, rep.Sum.Triggers[name], false)
 	}
 	rep.writeReachTable(w)
 	fmt.Fprintf(w, "\n%-12s %-32s %12s %12s %12s %5s\n", "criterion", "driver", "per period", "periods", "observed", "met")
@@ -391,9 +398,9 @@ func (rep *Report) writeAnalyticTable(w *bufio.Writer) {
 	srcs := rep.C.SourceIDs()
 	for _, f := range e.Firing {
 		if f.Exact() {
-			fmt.Fprintf(w, "  trigger %-21s P(fire) in [%.6g, %.6g]\n", srcs[f.Source], f.Lo, f.Hi)
+			fmt.Fprintf(w, "  trigger %-21s P(fire) in [%.6g, %.6g]  sum mean %.6g\n", srcs[f.Source], f.Lo, f.Hi, f.SumMean)
 		} else {
-			fmt.Fprintf(w, "  trigger %-21s P(fire) unknown: %s\n", srcs[f.Source], f.Reason)
+			fmt.Fprintf(w, "  trigger %-21s P(fire) unknown: %s  sum mean %.6g\n", srcs[f.Source], f.Reason, f.SumMean)
 		}
 	}
 	if rep.Tr == nil {
@@ -560,6 +567,7 @@ func (rep *Report) WriteJSON(w *bufio.Writer) {
 	j.stats("entries_per", rep.Sum.EntriesPer)
 	j.stats("contrib_per", rep.Sum.ContribPer)
 	rep.jsonLayers(j)
+	rep.jsonTriggerSums(j)
 	rep.jsonTailShares(j)
 	j.key("reach")
 	j.open('{')
@@ -647,6 +655,13 @@ func (rep *Report) jsonLayers(j *jw) {
 	j.closeC('}')
 }
 
+// jsonTriggerSums writes the statistics of the sum each trigger tests.
+func (rep *Report) jsonTriggerSums(j *jw) {
+	if len(rep.Sum.Triggers) > 0 {
+		j.stats("trigger_sums", rep.Sum.Triggers)
+	}
+}
+
 // jsonTailShares writes who the tail belongs to at each threshold.
 func (rep *Report) jsonTailShares(j *jw) {
 	j.key("tail_shares")
@@ -706,6 +721,7 @@ func (rep *Report) jsonFirings(j *jw) {
 		j.field("fire_lower", f.Lo)
 		j.field("fire_upper", f.Hi)
 		j.fieldStr("reason", f.Reason)
+		j.field("sum_mean", f.SumMean)
 		j.closeC('}')
 	}
 	j.closeC('}')
@@ -797,6 +813,9 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 	for _, name := range sortedKeys(rep.Sum.EntriesPer) {
 		csvStat(w, "entries", name, rep.Sum.EntriesPer[name])
 	}
+	for _, name := range sortedKeys(rep.Sum.Triggers) {
+		csvStat(w, "trigger", name, rep.Sum.Triggers[name])
+	}
 	if rep.Analytic {
 		e := rep.E
 		fmt.Fprintf(w, "analytic,total,,%s,,%s,,,,,,,,,\n", csvNum(e.Mean), csvNum(math.Sqrt(e.Var)))
@@ -808,6 +827,7 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 		}
 		for _, f := range e.Firing {
 			fmt.Fprintf(w, "analytic fire,%s,,%s,,,,,,,,,,,\n", CSVField(rep.C.SourceIDs()[f.Source]), csvNum((f.Lo+f.Hi)/2))
+			fmt.Fprintf(w, "analytic trigger sum,%s,,%s,,,,,,,,,,,\n", CSVField(rep.C.SourceIDs()[f.Source]), csvNum(f.SumMean))
 		}
 	}
 }

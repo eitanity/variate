@@ -202,7 +202,13 @@ belongs to a reliability block. The top trigger's walk is a bow-tie's
 consequence side. See `examples/bowtie.yaml`.
 
 The report counts a trigger as a source named after its node: its
-events are the firings, and its rows break down what the walk books.
+events are the firings, and its rows break down what the walk books. The
+sum it tests is a quantity of its own, `trigger <node>`, with the
+statistics, histogram and series column of any quantity, and the
+analytic report gives its exact mean beside P(fire). The share of
+periods in which it is above a level c is P(fire) at that level, so in
+a capacity model one run gives the whole P(breach)-against-capacity
+curve from that quantity.
 P(fire) is exact, a bracket within `transform_tol` from the transform
 of the period's sum at the level,
 and the means its walk books are exact with it. A chained trigger that
