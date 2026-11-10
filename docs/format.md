@@ -280,7 +280,7 @@ quantity.
 
 ```yaml
 factors:
-  - { id: climate, lognormal: { median: 1, p90: 1.8 } }
+  - { id: climate, lognormal: { mean: 1, sd: 0.48 } }
 graphs:
   - id: register
     sources:
@@ -289,7 +289,9 @@ graphs:
 ```
 
 A factor with mean 1 leaves every mean unchanged and adds only the
-dependence; a factor's mean scales the rates it touches.
+dependence; a factor's mean scales the rates it touches. Write a
+lognormal factor by its mean and sd for that reason: `{ median: 1,
+p90: 1.8 }` has mean 1.11, so it raises every rate it touches by 11%.
 
 ## Rates that vary by period
 

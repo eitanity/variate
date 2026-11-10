@@ -2,10 +2,11 @@
 # threat climate, drawn once per period and shared, so a bad year is bad
 # for all of them at once. Independent sources would understate the
 # aggregate tail; the factor's spread puts the dependence in exactly,
-# and the exact distribution mixes over it.
+# and the exact distribution mixes over it. Its mean is 1, so the rates
+# are as written.
 period: { days: 365 }
 factors:
-  - { id: climate, lognormal: { median: 1, p90: 1.8 } }
+  - { id: climate, lognormal: { mean: 1, sd: 0.48 } }
 graphs:
   - id: register
     sources:

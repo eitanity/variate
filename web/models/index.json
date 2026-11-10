@@ -475,15 +475,15 @@
   "id": "factor",
   "title": "A common shock: risks that rise and fall together",
   "file": "factor.yaml",
-  "about": "Three cyber risks, two of them scaled by one threat climate drawn once per year and shared, so a bad year is bad for both at once. Widen the climate's spread and watch the exceedance tail thicken while every mean stays put; bring its 90th percentile down to 1.05 for near-independence. Pin that as the baseline and compare.",
+  "about": "Three cyber risks, two of them scaled by one threat climate drawn once per year and shared, so a bad year is bad for both at once. Widen the climate's spread and watch the exceedance tail thicken while every mean stays put; bring its spread down to 0.04 for near-independence. Pin that as the baseline and compare.",
   "knobs": [
    {
-    "key": "climate_p90",
-    "label": "Threat climate, 90th percentile (median 1)",
-    "min": 1.05,
-    "max": 4,
-    "step": 0.05,
-    "value": 1.8
+    "key": "climate_sd",
+    "label": "Threat climate, spread (standard deviation, mean 1)",
+    "min": 0.04,
+    "max": 1.5,
+    "step": 0.02,
+    "value": 0.48
    },
    {
     "key": "phishing_peak",

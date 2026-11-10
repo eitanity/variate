@@ -1,6 +1,6 @@
 period: { days: 365 }
 factors:
-  - { id: climate, lognormal: { median: 1, p90: {{climate_p90}} } }
+  - { id: climate, lognormal: { mean: 1, sd: {{climate_sd}} } }
 graphs:
   - id: register
     sources:
