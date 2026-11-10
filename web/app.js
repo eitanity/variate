@@ -240,7 +240,8 @@ function unpin() {
 }
 
 // fillQuantities lists what the two charts can draw: the total, each
-// category and source, and each node's entries per period.
+// category, source and layer, the sum each trigger tests, and each
+// node's entries per period.
 function fillQuantities(r, graph) {
   const sel = $("quantity");
   sel.innerHTML = "";
@@ -249,6 +250,7 @@ function fillQuantities(r, graph) {
   for (const name of Object.keys(r.by_category)) add("category:" + name, "category " + name);
   for (const name of Object.keys(r.by_source)) add("source:" + name, "source " + name);
   for (const name of Object.keys(r.layers || {})) add("layer:" + name, "layer " + name);
+  for (const name of Object.keys(r.trigger_sums || {})) add("trigger:" + name, "sum trigger " + name + " tests");
   if (graph) for (const n of graph.nodes) add("entries:" + n.id, "events per period at " + n.id);
   const cs = $("countsource");
   cs.innerHTML = "";
@@ -265,7 +267,7 @@ async function redraw() {
   const [qkind, qname] = ($("quantity").value || "total:").split(":");
   if (qkind !== "total") {
     const { result: q } = await call("quantity", null, null, { keep: lastKeep, qkind, qname, top: 0, bands: BANDS });
-    const title = qkind === "entries" ? "events per period at " + qname : qkind + " " + qname;
+    const title = qkind === "entries" ? "events per period at " + qname : qkind === "trigger" ? "sum trigger " + qname + " tests" : qkind + " " + qname;
     $("histTitle").textContent = title;
     $("ecTitle").textContent = title;
     $("quantityNote").textContent = `mean ${fmt(q.stat.mean, 4)}, median ${fmt(q.stat.p50, 4)}, P99 ${fmt(q.stat.p99, 4)}` + (q.stat.share ? `, ${pct(q.stat.share)} of the total` : "");

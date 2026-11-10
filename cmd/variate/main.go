@@ -15,7 +15,8 @@ const usage = `usage:
   variate version
   variate plan   -f model.yaml [settings] [--phase I] [--format table|json]
   variate run    -f model.yaml [settings] [--phase I] [-n PERIODS [--series]] [--analytic]
-                 [--format table|json|csv] [--out FILE] [--exceedance FILE]
+                 [--format table|json|csv] [--out FILE]
+                 [--exceedance FILE [--exceedance-of KIND:NAME]]
                  [--rounds jsonl|csv|bin --rounds-out FILE] [watch flags]
   variate stream -f model.yaml [run flags] [--watch NODE,...] [--leaf LEAF,...]
                  [--min-value X] [--pace DURATION] [--round-scratch N]

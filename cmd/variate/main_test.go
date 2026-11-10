@@ -440,3 +440,52 @@ func TestRunTriggerSum(t *testing.T) {
 		t.Errorf("csv trigger row %v, analytic sum %v", sum, exact)
 	}
 }
+
+// TestRunCapacityCurve: --exceedance-of writes a trigger's sum's curve,
+// which falls with the level and passes the exact P(fire) at the
+// trigger's own level, 120 hours; an unknown quantity, or the flag
+// without --exceedance, is refused.
+func TestRunCapacityCurve(t *testing.T) {
+	example := filepath.Join("..", "..", "examples", "capacity.yaml")
+	ecFile := filepath.Join(t.TempDir(), "curve.csv")
+	_, _, code := invoke(t, "run", "-f", example, "-n", "20000", "--seed", "2", "--analytic", "--exceedance", ecFile, "--exceedance-of", "trigger:overrun")
+	if code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	data, err := os.ReadFile(ecFile) //nolint:gosec // test temp dir
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := csv.NewReader(bytes.NewReader(data)).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 65 || len(rows[0]) != 3 {
+		t.Fatalf("%d rows, header %v", len(rows), rows[0])
+	}
+	// The exact P(fire) at 120 is 0.18439 within 1e-4.
+	const level, exact = 120, 0.18439
+	last := 1.0
+	var below, above float64
+	for _, r := range rows[1:] {
+		x, _ := strconv.ParseFloat(r[0], 64)
+		p, _ := strconv.ParseFloat(r[1], 64)
+		if p > last {
+			t.Errorf("curve rises to %g at %g", p, x)
+		}
+		last = p
+		if x <= level {
+			below = p
+		} else if above == 0 {
+			above = p
+		}
+	}
+	if se := math.Sqrt(exact * (1 - exact) / 20000); !(below+5*se >= exact && above-5*se <= exact) {
+		t.Errorf("curve %g to %g around %d, exact %g", below, above, level, exact)
+	}
+	for _, args := range [][]string{{"--exceedance", ecFile, "--exceedance-of", "trigger:nobody"}, {"--exceedance-of", "trigger:overrun"}} {
+		if _, stderr, code := invoke(t, append([]string{"run", "-f", example, "-n", "100"}, args...)...); code == 0 || !strings.Contains(stderr, "--exceedance-of") {
+			t.Errorf("%v: code %d stderr %q", args, code, stderr)
+		}
+	}
+}

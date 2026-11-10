@@ -208,7 +208,15 @@ statistics, histogram and series column of any quantity, and the
 analytic report gives its exact mean beside P(fire). The share of
 periods in which it is above a level c is P(fire) at that level, so in
 a capacity model one run gives the whole P(breach)-against-capacity
-curve from that quantity.
+curve from that quantity: `variate run --exceedance curve.csv
+--exceedance-of trigger:<node>` writes its curve P(S ≥ c), which for a
+sum of continuous values is P(S > c), and for a count of entries is
+P(fire) at c − 1. The quantity's quantiles answer the other way round:
+its p95 is the level that fires one period in twenty. A level that
+varies with a schedule, a crew on leave in August, is read the same
+way one phase at a time: `--phase i` runs that place in the cycle, and
+its curve read at that phase's level is the phase's P(fire). See
+`examples/capacity.yaml`.
 P(fire) is exact, a bracket within `transform_tol` from the transform
 of the period's sum at the level,
 and the means its walk books are exact with it. A chained trigger that

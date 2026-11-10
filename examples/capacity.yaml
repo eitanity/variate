@@ -1,0 +1,26 @@
+# Capacity: a maintenance crew with 120 hours a week. Breakdowns and
+# planned jobs book hours, and a week whose work is more than the
+# crew's hours overruns (`trigger` with `inputs`) and calls in a
+# contractor for a day. The sum the trigger tests is a quantity of its
+# own, `trigger overrun`: the share of weeks it is above c is P(overrun)
+# with a crew of c hours, so one run gives the whole curve:
+#
+#     variate run -f examples/capacity.yaml --exceedance curve.csv --exceedance-of trigger:overrun
+#
+# and the quantity's quantiles give the hours for a tolerance: its p95
+# is the crew that overruns one week in twenty. P(fire) at 120 itself
+# is exact in `variate run --analytic`.
+period: { days: 7 }
+graphs:
+  - id: crew
+    sources:
+      - { id: breakdowns, frequency: { gamma: { mean: 6, sd: 2 } }, to: breakdown }
+      - { id: planned, frequency: 10, to: planned_job }
+    nodes:
+      - id: breakdown
+        functions: [ { name: repair, category: hours, lognormal: { median: 6, p90: 16 } } ]
+      - id: planned_job
+        functions: [ { name: job, category: hours, pert: [2, 4, 8] } ]
+      - id: overrun
+        trigger: { over: 120, inputs: [breakdown, planned_job] }
+        functions: [ { name: contractor, category: contractor, constant: 8 } ]

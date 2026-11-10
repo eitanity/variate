@@ -28,6 +28,7 @@ type Report struct {
 	Hist     *Histogram        // linear bands of the period total, for drawing; nil = none
 	LogHist  *Histogram        // log-spaced bands of the same, for drawing; nil = none
 	Warnings []variate.Warning // compile warnings to include in the JSON
+	Curve    []variate.ECPoint // the curve the exceedance file holds when not the total's; nil = the total's
 }
 
 // New assembles the report of a finished run from its workspace: the
@@ -846,21 +847,26 @@ func csvStat(w *bufio.Writer, kind, name string, s variate.Stat) {
 }
 
 // WriteExceedanceFile writes the curve as CSV: x, p, stderr, and the
-// transform's lower and upper bounds when they exist.
+// transform's lower and upper bounds when they exist. The curve is
+// Curve when set, without bounds, else the total's.
 func (rep *Report) WriteExceedanceFile(path string) error {
+	pts, bounds := rep.Sum.Exceedance, rep.bounds()
+	if rep.Curve != nil {
+		pts, bounds = rep.Curve, false
+	}
 	f, err := os.Create(path) //nolint:gosec // the output file the user named
 	if err != nil {
 		return fmt.Errorf("exceedance file: %w", err)
 	}
 	w := bufio.NewWriter(f)
 	fmt.Fprint(w, "x,p,stderr")
-	if rep.bounds() {
+	if bounds {
 		fmt.Fprint(w, ",lower,upper")
 	}
 	fmt.Fprintln(w)
-	for _, p := range rep.Sum.Exceedance {
+	for _, p := range pts {
 		fmt.Fprintf(w, "%s,%s,%s", csvNum(p.X), csvNum(p.P), csvNum(p.StdErr))
-		if rep.bounds() {
+		if bounds {
 			lo, hi := rep.boundsAt(p.X)
 			fmt.Fprintf(w, ",%s,%s", csvNum(lo), csvNum(hi))
 		}

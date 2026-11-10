@@ -34,6 +34,7 @@ type options struct {
 	format     string
 	out        string
 	exceedance string
+	curveOf    string
 	rounds     string
 	roundsOut  string
 	watch      string
@@ -68,6 +69,7 @@ func parseFlags(name string, args []string, stderr io.Writer) (*options, error) 
 	fs.StringVar(&o.format, "format", formatTable, "table, json or csv")
 	fs.StringVar(&o.out, "out", "", "write the summary here")
 	fs.StringVar(&o.exceedance, "exceedance", "", "write the exceedance curve here as CSV")
+	fs.StringVar(&o.curveOf, "exceedance-of", "", "the quantity whose curve --exceedance writes, as kind:name; the total by default")
 	fs.StringVar(&o.rounds, "rounds", "", "round record format: jsonl, csv or bin")
 	fs.StringVar(&o.roundsOut, "rounds-out", "", "write round records here")
 	fs.StringVar(&o.watch, "watch", "", "deliver rounds reaching any of these nodes (comma-separated)")
@@ -114,6 +116,9 @@ func (o *options) checkFormats() error {
 	case "", formatJSONL, formatCSV, formatBin:
 	default:
 		return errors.New("--rounds must be jsonl, csv or bin")
+	}
+	if o.curveOf != "" && o.exceedance == "" {
+		return errors.New("--exceedance-of needs --exceedance")
 	}
 	return nil
 }

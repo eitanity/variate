@@ -3,6 +3,7 @@ package suite
 import (
 	"context"
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -498,5 +499,61 @@ func TestTriggerSumCountsEntries(t *testing.T) {
 	}
 	if f := c.Firings()[0]; math.Abs(f.SumMean-4) > 1e-9 {
 		t.Errorf("exact count mean %g, want 4", f.SumMean)
+	}
+}
+
+// TestTriggerSumCurve: one trigger's sum gives P(fire) at any level.
+// Beside the trigger at 30 stand two on the same inputs at 25 and 45.
+// In the same run the periods in which the first's sum is above each
+// level are the firings of that level's trigger, and the sum's curve at
+// each level agrees with that trigger's exact P(fire) from the
+// transform. Seed 11: deterministic.
+func TestTriggerSumCurve(t *testing.T) {
+	levels := []float64{30, 25, 45}
+	g := budgeted(levels[0])
+	inputs := g.Nodes[2].Trigger.Inputs
+	for _, c := range levels[1:] {
+		g.Nodes = append(g.Nodes, variate.Node{ID: "over_" + strconv.Itoa(int(c)), Functions: []variate.Function{Fn("flag", "breach", C(1))},
+			Trigger: &variate.Trigger{Over: c, Inputs: inputs}})
+	}
+	cfg := variate.Config{Periods: 40000, Workers: 4, Series: true}
+	c, _, err := g.Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := c.NewWorkspace(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	r, err := w.Run(context.Background(), 11)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, ok := w.QuantityRow("trigger", "overrun")
+	if !ok || !w.HasHistogram(row) {
+		t.Fatalf("no trigger quantity with a histogram (ok %v)", ok)
+	}
+	n := r.Series.Periods()
+	sum := r.Series.TriggerColumn(0, make([]float64, n))
+	firings := c.Firings()
+	// bound: len(levels)
+	for j, level := range levels {
+		f := firings[j]
+		above := 0
+		// bound: n
+		for _, s := range sum {
+			if s > level {
+				above++
+			}
+		}
+		if fired := r.Events[f.Source]; uint64(above) != fired {
+			t.Errorf("level %g: %d periods above it, %d firings", level, above, fired)
+		}
+		curve := w.BandsOf(row, []float64{level, math.Inf(1)}, make([]float64, 1))[0]
+		se := math.Sqrt(f.Hi * (1 - f.Hi) / float64(n))
+		if !(f.Lo <= f.Hi) || curve < f.Lo-5*se || curve > f.Hi+5*se {
+			t.Errorf("level %g: curve %g, exact P(fire) in [%g, %g] ± %g", level, curve, f.Lo, f.Hi, se)
+		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 
 	"code.eitanity.com/variate"
 	"code.eitanity.com/variate/report"
@@ -79,6 +80,10 @@ func runModel(args []string, stdout, stderr io.Writer, stream bool) error {
 		return fmt.Errorf("workspace: %w", err)
 	}
 	defer w.Close()
+	curveRow, err := o.curveRow(w)
+	if err != nil {
+		return err
+	}
 	if n := runtime.GOMAXPROCS(0); m.Config.Workers <= 0 && w.Workers() < n {
 		fmt.Fprintf(stderr, "warning: workers: %d of %d, the most that fit max_memory; the workspace holds %d MB\n", w.Workers(), n, w.Footprint()>>20)
 	}
@@ -96,7 +101,27 @@ func runModel(args []string, stdout, stderr io.Writer, stream bool) error {
 	if err != nil {
 		return err
 	}
+	if curveRow >= 0 {
+		rep.Curve = w.ExceedanceOf(curveRow, make([]variate.ECPoint, 0, 64))
+	}
 	return o.writeOutputs(rep, stdout, stderr, stream)
+}
+
+// curveRow is the row of the quantity --exceedance-of names, as
+// kind:name with the names of the series columns, or −1 for the total.
+func (o *options) curveRow(w *variate.Workspace) (int, error) {
+	if o.curveOf == "" || o.curveOf == "total" {
+		return -1, nil
+	}
+	kind, name, _ := strings.Cut(o.curveOf, ":")
+	row, ok := w.QuantityRow(kind, name)
+	if !ok {
+		return 0, errors.New("--exceedance-of: no quantity " + o.curveOf + "; name one as kind:name, as category:labour or trigger:overrun")
+	}
+	if !w.HasHistogram(row) {
+		return 0, errors.New("--exceedance-of: " + o.curveOf + " keeps no histogram in this run")
+	}
+	return row, nil
 }
 
 // roundsWriter builds the observer for --rounds: to --rounds-out, or to

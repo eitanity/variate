@@ -1,0 +1,16 @@
+# Capacity: a maintenance crew's hours a week against the work that
+# arrives; a week with more work than hours calls in a contractor.
+period: { days: 7 }
+graphs:
+  - id: crew
+    sources:
+      - { id: breakdowns, frequency: { gamma: { mean: {{breakdowns}}, sd: 2 } }, to: breakdown }
+      - { id: planned, frequency: {{planned}}, to: planned_job }
+    nodes:
+      - id: breakdown
+        functions: [ { name: repair, category: hours, lognormal: { median: {{repair_median}}, p90: 16 } } ]
+      - id: planned_job
+        functions: [ { name: job, category: hours, pert: [2, 4, 8] } ]
+      - id: overrun
+        trigger: { over: {{crew_hours}}, inputs: [breakdown, planned_job] }
+        functions: [ { name: contractor, category: contractor, constant: 8 } ]

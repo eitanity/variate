@@ -70,7 +70,8 @@ same model, seed and block size repeat a run exactly.
 `make demo` builds the engine to WebAssembly with TinyGo and serves a
 page at http://127.0.0.1:8000/ with every example as a model with
 knobs, or any model pasted as YAML. A run draws the histogram and
-exceedance curve of the total or of any category, source or node, with
+exceedance curve of the total or of any category, source, node or
+trigger's sum, with
 return periods and the exact bounds when asked for; the sources'
 contributions and who the tail belongs to beyond a return period; a
 source's events per period against a Poisson reference; the totals
