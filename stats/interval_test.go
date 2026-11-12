@@ -149,3 +149,59 @@ func TestQuantileIntervalEdges(t *testing.T) {
 		t.Fatal("interval reaching Over: clipped not set")
 	}
 }
+
+// TestAddPair: a coarse copy filled through AddPair holds what Add would
+// put in it, for a continuous and an integer histogram.
+func TestAddPair(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		fine *LogHist
+		draw func(r *rand.Rand) float64
+	}{
+		{"continuous", NewLogHist(1, 1e-3), func(r *rand.Rand) float64 {
+			if r.IntN(10) == 0 {
+				return 0
+			}
+			return math.Exp(3 * r.NormFloat64())
+		}},
+		{"integer", NewIntHist(50, 1e-3), func(r *rand.Rand) float64 {
+			return math.Floor(math.Exp(12 * r.Float64() * r.Float64()))
+		}},
+		{"integer, no log bins", NewIntHist(1e-6, 1e-3), func(r *rand.Rand) float64 {
+			return float64(r.IntN(4096))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := NewCoarse(tc.fine, 0.1)
+			direct := c.Empty()
+			r := rand.New(rand.NewPCG(1, 2))
+			for range 200000 {
+				x := tc.draw(r)
+				tc.fine.AddPair(x, c)
+				direct.Add(x)
+			}
+			if c.N != direct.N || c.Zero != direct.Zero || c.Under != direct.Under || c.Over != direct.Over {
+				t.Fatalf("counts apart: N %d/%d zero %d/%d under %d/%d over %d/%d",
+					c.N, direct.N, c.Zero, direct.Zero, c.Under, direct.Under, c.Over, direct.Over)
+			}
+			for k := range c.bins {
+				if c.bins[k] != direct.bins[k] {
+					t.Errorf("coarse bin %d: AddPair %d, Add %d", k, c.bins[k], direct.bins[k])
+				}
+			}
+		})
+	}
+}
+
+// TestCoarseBin: the reciprocal division of the coarse map is k/div for
+// every bin index, at small, odd, even and power-of-two divisors.
+func TestCoarseBin(t *testing.T) {
+	for _, div := range []int{1, 2, 3, 7, 64, 95, 96, 954, 9531} {
+		m := newCoarseMap(div, 5)
+		for k := range 1 << 22 {
+			if got := m.bin(k); got != 5+k/div {
+				t.Fatalf("div %d, k %d: bin %d, want %d", div, k, got, 5+k/div)
+			}
+		}
+	}
+}

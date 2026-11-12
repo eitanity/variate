@@ -319,18 +319,19 @@ func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
 	// the rows summed per tail threshold.
 	counters := int64(len(w.m.srcs))*int64(1+len(w.m.nodes)+len(w.m.outs)) + int64(len(w.m.tailThresholds))*int64(w.l.tailWidth()+1)
 	// With delays, each quantity with a histogram has batch-group
-	// histograms, and each slot a coarse copy of one.
-	coarse := int64(0)
+	// histograms, and each slot a coarse copy of one, all sharing a bin map.
+	coarse, coarseMaps := int64(0), int64(0)
 	for q, h := range w.hists {
 		if h != nil {
 			if g := w.accum(q).Groups; g != nil {
 				coarse += int64(g[0].Bins())
+				coarseMaps += g[0].MapBytes()
 			}
 		}
 	}
 	slotsB := int64(nslots) * (8*a*int64(2*w.s+1) + 64*a + 8*counters + 8*coarse)
 	carryB := 8 * a * int64(w.s)
-	globalB := 64*a + 8*bins + 8*batchGroups*coarse
+	globalB := 64*a + 8*bins + 8*batchGroups*coarse + coarseMaps
 	workerHistB := int64(2*nw) * 8 * bins
 	poolsB := int64(nw) * int64(len(w.m.pools)) * int64(pool) * 8
 	seriesB := int64(0)
@@ -431,8 +432,9 @@ func (w *Workspace) allocGroups() {
 		}
 		a := w.accum(q)
 		a.Groups = make([]*stats.LogHist, batchGroups)
-		for g := range a.Groups {
-			a.Groups[g] = stats.NewCoarse(h, groupRes)
+		a.Groups[0] = stats.NewCoarse(h, groupRes)
+		for g := 1; g < batchGroups; g++ {
+			a.Groups[g] = a.Groups[0].Empty()
 		}
 		a.GroupN = make([]int64, batchGroups)
 	}
@@ -447,7 +449,7 @@ func (w *Workspace) slotCoarse() []*stats.LogHist {
 	coarse := make([]*stats.LogHist, w.l.width)
 	for q, h := range w.hists {
 		if h != nil {
-			coarse[q] = stats.NewCoarse(h, groupRes)
+			coarse[q] = w.accum(q).Groups[0].Empty()
 		}
 	}
 	return coarse

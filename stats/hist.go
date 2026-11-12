@@ -1,6 +1,9 @@
 package stats
 
-import "math"
+import (
+	"math"
+	"math/bits"
+)
 
 // LogHist is a histogram with bins of fixed relative width over
 // [lo, hi): bin k covers [lo·(1+res)^k, lo·(1+res)^(k+1)). Exact zeros,
@@ -17,7 +20,52 @@ type LogHist struct {
 	Zero      int64
 	Under     int64
 	Over      int64
-	N         int64 // every Add
+	N         int64      // every Add
+	pair      *coarseMap // on a coarse copy: its bin for each bin of the fine histogram
+}
+
+// coarseMap maps the bins of a fine histogram onto its coarse copy's.
+type coarseMap struct {
+	exact []int32 // the coarse bin of each exact bucket
+	div   int     // fine log bins per coarse bin
+	inv   uint64  // ⌊2⁶⁴/div⌋ + 1, 0 when div is 1
+	off   int     // the coarse bin of the first fine log bin
+}
+
+// bin is the coarse bin of fine log bin k: off + k/div, the division
+// done as a multiplication by the reciprocal, exact for k below 2⁶⁴/div.
+func (m *coarseMap) bin(k int) int {
+	if m.inv == 0 {
+		return m.off + k
+	}
+	q, _ := bits.Mul64(uint64(k), m.inv) //nolint:gosec // k is a bin index, not negative
+	return m.off + int(q)                //nolint:gosec // q ≤ k
+}
+
+// AddPair counts x in h and in c, a coarse copy of h from NewCoarse,
+// finding c's bin from h's.
+func (h *LogHist) AddPair(x float64, c *LogHist) {
+	h.N++
+	c.N++
+	switch {
+	case x == 0:
+		h.Zero++
+		c.Zero++
+	case h.exact != nil && x < float64(len(h.exact)):
+		j := int(x)
+		h.exact[j]++
+		c.bins[c.pair.exact[j]]++
+	case x < h.lo:
+		h.Under++
+		c.Under++
+	case x >= h.hi:
+		h.Over++
+		c.Over++
+	default:
+		k := h.index(x)
+		h.bins[k]++
+		c.bins[c.pair.bin(k)]++
+	}
 }
 
 // Add counts x.
@@ -89,6 +137,15 @@ func (h *LogHist) Edge(k int) float64 {
 		e = math.Nextafter(e, math.Inf(1))
 	}
 	return e
+}
+
+// MapBytes returns the size of a coarse copy's bin map, which every copy
+// made from it by Empty shares.
+func (h *LogHist) MapBytes() int64 {
+	if h.pair == nil {
+		return 0
+	}
+	return 4 * int64(len(h.pair.exact))
 }
 
 // Bins returns the number of log bins.

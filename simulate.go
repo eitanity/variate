@@ -367,19 +367,20 @@ func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHi
 // fold adds the row's quantities lo to hi to the slot statistics and
 // their histograms.
 func (w *Workspace) fold(sl *slot, row []float64, lo, hi int, hs []*stats.LogHist) {
-	// bound: row width
-	for i := lo; i < hi; i++ {
-		sl.stats[i].add(row[i])
-		if h := hs[i]; h != nil {
-			h.Add(row[i])
+	if sl.coarse != nil {
+		// bound: row width
+		for i := lo; i < hi; i++ {
+			sl.stats[i].add(row[i])
+			if h := hs[i]; h != nil {
+				h.AddPair(row[i], sl.coarse[i])
+			}
 		}
-	}
-	if sl.coarse == nil {
 		return
 	}
 	// bound: row width
 	for i := lo; i < hi; i++ {
-		if h := sl.coarse[i]; h != nil {
+		sl.stats[i].add(row[i])
+		if h := hs[i]; h != nil {
 			h.Add(row[i])
 		}
 	}
