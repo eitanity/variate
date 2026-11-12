@@ -1,10 +1,6 @@
 package variate
 
-import (
-	"math"
-
-	"code.eitanity.com/variate/stats"
-)
+import "math"
 
 // Stat summarises one per-period quantity.
 type Stat struct {
@@ -19,9 +15,9 @@ type Stat struct {
 	// Per level of QuantileLevels(): the quantile's 95% interval, from the
 	// order statistics, and its standard error, the interval's width over
 	// 2·1.96. The interval is asymmetric in a skewed tail; quote it rather
-	// than the quantile ± 1.96 standard errors. NaN in a model with
-	// delays, whose correlated periods widen the interval past what
-	// independent periods give.
+	// than the quantile ± 1.96 standard errors. With delays, correlated
+	// periods widen it by the batch-means inflation at the quantile, and
+	// it is NaN below 16 full blocks.
 	QLo, QHi, QSE [5]float64
 }
 
@@ -35,7 +31,8 @@ const quantileZ = 1.959963984540054
 type Prop struct{ P, StdErr float64 }
 
 // ECPoint is one point of the exceedance curve: P(T ≥ X) with its
-// binomial standard error.
+// standard error, binomial for independent periods and from batch means
+// with delays.
 type ECPoint struct{ X, P, StdErr float64 }
 
 // PlanRow is one convergence criterion: planned against observed.
@@ -132,11 +129,8 @@ func (w *Workspace) stat(a *Accum, total float64) Stat {
 			var c, ci bool
 			q[i], c = a.Hist.Quantile(p)
 			s.Clipped = s.Clipped || c
-			if w.delays {
-				s.QLo[i], s.QHi[i], s.QSE[i] = math.NaN(), math.NaN(), math.NaN()
-				continue
-			}
-			s.QLo[i], s.QHi[i], ci = a.Hist.QuantileInterval(p, quantileZ)
+			d := quantileZ * a.Inflation(q[i]) * math.Sqrt(p*(1-p)/float64(a.Hist.N))
+			s.QLo[i], s.QHi[i], ci = a.Hist.QuantileInterval(p, d)
 			s.QSE[i] = (s.QHi[i] - s.QLo[i]) / (2 * quantileZ)
 			s.Clipped = s.Clipped || ci
 		}
@@ -169,20 +163,23 @@ func (w *Workspace) exceedanceOf(a *Accum, dst []ECPoint) []ECPoint {
 	}
 	hi := a.Max
 	if hi <= lo {
-		return append(dst, ecPoint(h, lo))
+		return append(dst, ecPoint(a, lo))
 	}
 	step := math.Log(hi/lo) / float64(exceedancePoints-1)
 	// bound: exceedancePoints
 	for i := 0; i < exceedancePoints; i++ {
-		dst = append(dst, ecPoint(h, lo*math.Exp(float64(i)*step)))
+		dst = append(dst, ecPoint(a, lo*math.Exp(float64(i)*step)))
 	}
 	return dst
 }
 
-func ecPoint(h *stats.LogHist, x float64) ECPoint {
+// ecPoint is P(T ≥ x) with its binomial standard error, widened by the
+// batch-means inflation where periods are correlated.
+func ecPoint(a *Accum, x float64) ECPoint {
+	h := a.Hist
 	n := float64(h.N)
 	p := h.Exceedance(x)
-	return ECPoint{X: x, P: p, StdErr: math.Sqrt(p * (1 - p) / n)}
+	return ECPoint{X: x, P: p, StdErr: a.Inflation(x) * math.Sqrt(p*(1-p)/n)}
 }
 
 // summarizeReach fills the proportions: reach and terminal per source and

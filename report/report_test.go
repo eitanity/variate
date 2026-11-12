@@ -314,13 +314,13 @@ func TestPercentilesOnlyWithHistogram(t *testing.T) {
 
 // runReport runs a model file for a fixed number of periods on one
 // worker and returns its report.
-func runReport(t *testing.T, path string, periods int64) *report.Report {
+func runReport(t *testing.T, path string, periods, block int64) *report.Report {
 	t.Helper()
 	m, err := config.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.Config.Periods, m.Config.Workers = periods, 1
+	m.Config.Periods, m.Config.Workers, m.Config.BlockPeriods = periods, 1, int(block)
 	c, _, err := m.Graph.Compile(m.Config)
 	if err != nil {
 		t.Fatal(err)
@@ -339,20 +339,21 @@ func runReport(t *testing.T, path string, periods int64) *report.Report {
 	return &report.Report{C: c, R: r, Sum: &sum}
 }
 
-// TestQuantileIntervals: without delays each quantile lies in its
-// interval and has a positive standard error, in the Stat, the JSON, the
-// CSV and the table; with delays the interval and standard error are
-// NaN, as independent periods would understate them.
+// TestQuantileIntervals: each quantile lies in its interval and has a
+// positive standard error, in the Stat, the JSON, the CSV and the table,
+// with delays as without; with delays and fewer than 16 full blocks the
+// interval and standard error are NaN, as the mean's error is.
 func TestQuantileIntervals(t *testing.T) {
 	for _, tc := range []struct {
-		path   string
-		delays bool
-	}{{"../examples/compound.yaml", false}, {"../examples/delays.yaml", true}} {
-		rep := runReport(t, tc.path, 20000)
+		path  string
+		block int64
+		nan   bool
+	}{{"../examples/compound.yaml", 0, false}, {"../examples/delays.yaml", 0, false}, {"../examples/delays.yaml", 2500, true}} {
+		rep := runReport(t, tc.path, 20000, tc.block)
 		s := rep.Sum.Total
 		q := [5]float64{s.P50, s.P90, s.P95, s.P99, s.P999}
 		for i := range q {
-			if tc.delays {
+			if tc.nan {
 				if !math.IsNaN(s.QLo[i]) || !math.IsNaN(s.QHi[i]) || !math.IsNaN(s.QSE[i]) {
 					t.Errorf("%s level %d: got [%g, %g] se %g, want NaN", tc.path, i, s.QLo[i], s.QHi[i], s.QSE[i])
 				}
@@ -381,11 +382,11 @@ func TestQuantileIntervals(t *testing.T) {
 		}
 		for _, k := range []string{"p95_stderr", "p95_lo", "p95_hi", "p999_hi"} {
 			v, ok := got.Total[k]
-			if !ok || (v == nil) != tc.delays {
+			if !ok || (v == nil) != tc.nan {
 				t.Errorf("%s: json total %s = %v, present %v", tc.path, k, v, ok)
 			}
 		}
-		if v, _ := got.Total["p95_stderr"].(float64); !tc.delays && v != s.QSE[2] {
+		if v, _ := got.Total["p95_stderr"].(float64); !tc.nan && v != s.QSE[2] {
 			t.Errorf("%s: json p95_stderr %g, Stat %g", tc.path, v, s.QSE[2])
 		}
 		lines := strings.Split(strings.TrimSpace(csv.String()), "\n")

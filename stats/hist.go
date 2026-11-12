@@ -132,16 +132,16 @@ func (h *LogHist) Quantile(p float64) (x float64, clipped bool) {
 }
 
 // QuantileInterval returns the order-statistic interval of the
-// p-quantile: the quantiles at p ∓ z·√(p(1−p)/N), clamped to [0, 1].
-// It needs no density estimate, and it is asymmetric where the
+// p-quantile: the quantiles at p ∓ d, clamped to [0, 1], where d is the
+// interval's half-width in probability, z·√(p(1−p)/N) for independent
+// values. It needs no density estimate, and it is asymmetric where the
 // distribution is skewed, so it holds its coverage in the tail where a
-// symmetric interval of the same width falls short. Periods are taken as
-// independent. clipped is set when either end falls in Under or Over.
-func (h *LogHist) QuantileInterval(p, z float64) (lo, hi float64, clipped bool) {
-	if h.N == 0 {
+// symmetric interval of the same width falls short. clipped is set when
+// either end falls in Under or Over.
+func (h *LogHist) QuantileInterval(p, d float64) (lo, hi float64, clipped bool) {
+	if h.N == 0 || math.IsNaN(d) {
 		return math.NaN(), math.NaN(), false
 	}
-	d := z * math.Sqrt(p*(1-p)/float64(h.N))
 	lo, c1 := h.Quantile(math.Max(p-d, 0))
 	hi, c2 := h.Quantile(math.Min(p+d, 1))
 	return lo, hi, c1 || c2

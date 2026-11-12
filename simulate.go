@@ -374,6 +374,15 @@ func (w *Workspace) fold(sl *slot, row []float64, lo, hi int, hs []*stats.LogHis
 			h.Add(row[i])
 		}
 	}
+	if sl.coarse == nil {
+		return
+	}
+	// bound: row width
+	for i := lo; i < hi; i++ {
+		if h := sl.coarse[i]; h != nil {
+			h.Add(row[i])
+		}
+	}
 }
 
 // keepSeries copies a closed period's row into the series, if one is kept.

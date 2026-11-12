@@ -39,6 +39,20 @@ func NewIntHist(mean, res float64) *LogHist {
 	return newHist(exactBuckets, hi, res, exact)
 }
 
+// NewCoarse allocates a continuous histogram over h's range with
+// relative bin width res. An integer histogram's range starts above its
+// exact buckets, so its coarse copy starts at 0.5, below the count 1.
+func NewCoarse(h *LogHist, res float64) *LogHist {
+	lo, hi := h.lo, h.hi
+	if h.exact != nil {
+		lo = 0.5
+	}
+	if !(lo < hi) || math.IsInf(lo, 0) {
+		return &LogHist{lo: lo, hi: hi}
+	}
+	return newHist(lo, hi, res, nil)
+}
+
 func newHist(lo, hi, res float64, exact []int64) *LogHist {
 	logRes := math.Log1p(res)
 	n := int(math.Ceil(math.Log(hi/lo) / logRes))

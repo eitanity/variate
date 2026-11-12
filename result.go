@@ -15,6 +15,12 @@ type Accum struct {
 	Max   float64
 	Zero  int64          // periods with exactly 0
 	Hist  *stats.LogHist // nil when the quantity has no histogram
+
+	// With delays, coarse histograms of the full blocks in batchGroups
+	// groups, block b in group b mod batchGroups, and the periods each
+	// holds; nil without delays or a histogram.
+	Groups []*stats.LogHist
+	GroupN []int64
 }
 
 // N is the number of periods accumulated.
@@ -41,6 +47,52 @@ func (a *Accum) StdErr(delays bool) float64 {
 // minBlocks is the number of full blocks the batch-means error needs.
 const minBlocks = 16
 
+const (
+	// batchGroups is the number of groups the full blocks are dealt into
+	// for the batch-means error of a proportion.
+	batchGroups = 32
+	// groupRes is the relative bin width of the group histograms.
+	groupRes = 0.1
+)
+
+// Inflation is the ratio of the batch-means standard error of the share
+// of periods at or above x to its binomial standard error: 1 for
+// independent periods, and with delays measured from the group
+// histograms at the coarse bin holding x. NaN below minBlocks full
+// blocks. Where every or no full-block period reaches x, the groups
+// cannot measure it, and it is 1.
+func (a *Accum) Inflation(x float64) float64 {
+	if a.Groups == nil {
+		return 1
+	}
+	if a.Block.N < minBlocks {
+		return math.NaN()
+	}
+	var n, c int64
+	var used float64
+	for g, h := range a.Groups {
+		if a.GroupN[g] > 0 {
+			n += a.GroupN[g]
+			c += h.AtOrAbove(x)
+			used++
+		}
+	}
+	p := float64(c) / float64(n)
+	if c == 0 || c == n {
+		return 1
+	}
+	var ss float64
+	for g, h := range a.Groups {
+		if ng := a.GroupN[g]; ng > 0 {
+			wgt := float64(ng) / float64(n)
+			d := float64(h.AtOrAbove(x))/float64(ng) - p
+			ss += wgt * wgt * d * d
+		}
+	}
+	batch := math.Sqrt(ss * used / (used - 1))
+	return batch / math.Sqrt(p*(1-p)/float64(n))
+}
+
 func (a *Accum) reset() {
 	a.Sum = stats.Neumaier{}
 	a.W = stats.Welford{}
@@ -50,6 +102,10 @@ func (a *Accum) reset() {
 	if a.Hist != nil {
 		a.Hist.Reset()
 	}
+	for _, h := range a.Groups {
+		h.Reset()
+	}
+	clear(a.GroupN)
 }
 
 // Result is the outcome of a run.

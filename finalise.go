@@ -56,6 +56,11 @@ func (w *Workspace) mergeSlot(sl *slot) {
 		a.Zero += q.zero
 		if sl.closed == w.block {
 			a.Block.Add(q.w.Mean)
+			if a.Groups != nil {
+				g := sl.task % batchGroups
+				a.Groups[g].Merge(sl.coarse[i])
+				a.GroupN[g] += sl.closed
+			}
 		}
 	}
 	nodes, outs := len(w.m.nodes), len(w.m.outs)

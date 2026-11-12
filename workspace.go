@@ -110,6 +110,9 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if err := w.allocResult(); err != nil {
 		return nil, err
 	}
+	if w.delays {
+		w.allocGroups()
+	}
 	nw, nslots, err := w.fitWorkers(pool)
 	if err != nil {
 		return nil, err
@@ -121,7 +124,9 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	// bound: workers or slots, fixed at construction
 	// bound: slots
 	for i := 0; i < nslots; i++ {
-		w.slots = append(w.slots, newSlot(w.l, w.s, len(m.srcs), len(m.nodes), len(m.outs), len(m.tailThresholds)))
+		sl := newSlot(w.l, w.s, len(m.srcs), len(m.nodes), len(m.outs), len(m.tailThresholds))
+		sl.coarse = w.slotCoarse()
+		w.slots = append(w.slots, sl)
 	}
 	if err := w.setupStream(nw); err != nil {
 		return nil, err
@@ -313,9 +318,19 @@ func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
 	// Each slot also counts events, reach and outcomes per source, and
 	// the rows summed per tail threshold.
 	counters := int64(len(w.m.srcs))*int64(1+len(w.m.nodes)+len(w.m.outs)) + int64(len(w.m.tailThresholds))*int64(w.l.tailWidth()+1)
-	slotsB := int64(nslots) * (8*a*int64(2*w.s+1) + 64*a + 8*counters)
+	// With delays, each quantity with a histogram has batch-group
+	// histograms, and each slot a coarse copy of one.
+	coarse := int64(0)
+	for q, h := range w.hists {
+		if h != nil {
+			if g := w.accum(q).Groups; g != nil {
+				coarse += int64(g[0].Bins())
+			}
+		}
+	}
+	slotsB := int64(nslots) * (8*a*int64(2*w.s+1) + 64*a + 8*counters + 8*coarse)
 	carryB := 8 * a * int64(w.s)
-	globalB := 64*a + 8*bins
+	globalB := 64*a + 8*bins + 8*batchGroups*coarse
 	workerHistB := int64(2*nw) * 8 * bins
 	poolsB := int64(nw) * int64(len(w.m.pools)) * int64(pool) * 8
 	seriesB := int64(0)
@@ -405,6 +420,37 @@ func (w *Workspace) allocResult() error {
 		}
 	}
 	return nil
+}
+
+// allocGroups gives each quantity with a histogram its batch-group
+// histograms, for the batch-means error of its exceedance shares.
+func (w *Workspace) allocGroups() {
+	for q, h := range w.hists {
+		if h == nil {
+			continue
+		}
+		a := w.accum(q)
+		a.Groups = make([]*stats.LogHist, batchGroups)
+		for g := range a.Groups {
+			a.Groups[g] = stats.NewCoarse(h, groupRes)
+		}
+		a.GroupN = make([]int64, batchGroups)
+	}
+}
+
+// slotCoarse returns a slot's coarse histograms, one for each quantity
+// with a histogram, in a model with delays; nil otherwise.
+func (w *Workspace) slotCoarse() []*stats.LogHist {
+	if !w.delays {
+		return nil
+	}
+	coarse := make([]*stats.LogHist, w.l.width)
+	for q, h := range w.hists {
+		if h != nil {
+			coarse[q] = stats.NewCoarse(h, groupRes)
+		}
+	}
+	return coarse
 }
 
 // accum returns the Accum of row quantity i.

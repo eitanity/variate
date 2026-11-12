@@ -44,6 +44,7 @@ type slot struct {
 	window []float64
 	head   []float64
 	stats  []qstat
+	coarse []*stats.LogHist // with delays, the block's group histogram per quantity; nil entries without one
 	events []uint64
 	reach  []uint64 // [source×nodes]
 	outs   []uint64 // [source×outcomes]
@@ -69,6 +70,11 @@ func (sl *slot) reset() {
 	clear(sl.head)
 	for i := range sl.stats {
 		sl.stats[i].reset()
+	}
+	for _, h := range sl.coarse {
+		if h != nil {
+			h.Reset()
+		}
 	}
 	clear(sl.events)
 	clear(sl.reach)

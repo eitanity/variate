@@ -112,7 +112,7 @@ func intervalCoverage(t *testing.T, n, seeds int, z float64, stream uint64, leve
 			h.Add(draw(r))
 		}
 		for i, p := range levels {
-			lo, hi, clipped := h.QuantileInterval(p, z)
+			lo, hi, clipped := h.QuantileInterval(p, z*math.Sqrt(p*(1-p)/float64(n)))
 			if clipped {
 				t.Fatalf("p%g: interval clipped", p)
 			}
@@ -132,20 +132,20 @@ func intervalCoverage(t *testing.T, n, seeds int, z float64, stream uint64, leve
 
 func TestQuantileIntervalEdges(t *testing.T) {
 	h := NewLogHist(1, 1e-3)
-	if lo, hi, _ := h.QuantileInterval(0.5, 2); !math.IsNaN(lo) || !math.IsNaN(hi) {
+	if lo, hi, _ := h.QuantileInterval(0.5, 0.1); !math.IsNaN(lo) || !math.IsNaN(hi) {
 		t.Fatalf("empty histogram: got [%g, %g], want NaN", lo, hi)
 	}
 	for range 10 {
 		h.Add(1)
 	}
 	// Every value equal: the interval collapses onto it, clamped at p 1.
-	lo, hi, clipped := h.QuantileInterval(0.999, 2)
+	lo, hi, clipped := h.QuantileInterval(0.999, 0.01)
 	q, _ := h.Quantile(0.999)
 	if lo != q || hi != q || clipped {
 		t.Fatalf("constant sample: got [%g, %g] clipped %v, want [%g, %g]", lo, hi, clipped, q, q)
 	}
 	h.Add(1e12) // past hi
-	if _, _, clipped := h.QuantileInterval(0.99, 2); !clipped {
+	if _, _, clipped := h.QuantileInterval(0.99, 0.02); !clipped {
 		t.Fatal("interval reaching Over: clipped not set")
 	}
 }
