@@ -15,7 +15,21 @@ type Stat struct {
 	Quantiles                bool // the percentiles exist: the quantity has a histogram
 	Clipped                  bool
 	Share                    float64
+
+	// Per level of QuantileLevels(): the quantile's 95% interval, from the
+	// order statistics, and its standard error, the interval's width over
+	// 2·1.96. The interval is asymmetric in a skewed tail; quote it rather
+	// than the quantile ± 1.96 standard errors. NaN in a model with
+	// delays, whose correlated periods widen the interval past what
+	// independent periods give.
+	QLo, QHi, QSE [5]float64
 }
+
+// QuantileLevels returns the levels of P50, P90, P95, P99 and P999.
+func QuantileLevels() [5]float64 { return [5]float64{0.5, 0.9, 0.95, 0.99, 0.999} }
+
+// quantileZ is the normal quantile of the two-sided 95% interval.
+const quantileZ = 1.959963984540054
 
 // Prop is a proportion with its binomial standard error.
 type Prop struct{ P, StdErr float64 }
@@ -113,17 +127,20 @@ func (w *Workspace) stat(a *Accum, total float64) Stat {
 	}
 	if a.Hist != nil {
 		s.Quantiles = true
-		var c bool
-		s.P50, c = a.Hist.Quantile(0.5)
-		s.Clipped = s.Clipped || c
-		s.P90, c = a.Hist.Quantile(0.9)
-		s.Clipped = s.Clipped || c
-		s.P95, c = a.Hist.Quantile(0.95)
-		s.Clipped = s.Clipped || c
-		s.P99, c = a.Hist.Quantile(0.99)
-		s.Clipped = s.Clipped || c
-		s.P999, c = a.Hist.Quantile(0.999)
-		s.Clipped = s.Clipped || c
+		var q [5]float64
+		for i, p := range QuantileLevels() {
+			var c, ci bool
+			q[i], c = a.Hist.Quantile(p)
+			s.Clipped = s.Clipped || c
+			if w.delays {
+				s.QLo[i], s.QHi[i], s.QSE[i] = math.NaN(), math.NaN(), math.NaN()
+				continue
+			}
+			s.QLo[i], s.QHi[i], ci = a.Hist.QuantileInterval(p, quantileZ)
+			s.QSE[i] = (s.QHi[i] - s.QLo[i]) / (2 * quantileZ)
+			s.Clipped = s.Clipped || ci
+		}
+		s.P50, s.P90, s.P95, s.P99, s.P999 = q[0], q[1], q[2], q[3], q[4]
 	}
 	return s
 }

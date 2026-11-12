@@ -254,22 +254,13 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 	}
 	fmt.Fprintf(w, "\nsteps %d  beyond horizon %.6g  tail periods %d\n\n", r.Steps, r.BeyondHorizon, r.TailPeriods)
 	fmt.Fprintf(w, "%-28s %12s %12s %12s %12s %12s %12s %12s %12s %8s\n", "quantity", "mean", "stderr", "sd", "p50", "p90", "p95", "p99", "p999", "share")
-	statRow(w, "total", rep.Sum.Total, false)
-	for _, name := range sortedKeys(rep.Sum.ByCategory) {
-		statRow(w, "category "+name, rep.Sum.ByCategory[name], true)
-	}
-	for _, name := range sortedKeys(rep.Sum.BySource) {
-		statRow(w, "source "+name, rep.Sum.BySource[name], true)
-	}
-	for _, name := range sortedKeys(rep.Sum.EntriesPer) {
-		statRow(w, "entries "+name, rep.Sum.EntriesPer[name], false)
-	}
-	for _, y := range rep.C.Layers() {
-		statRow(w, "layer "+y.ID, rep.Sum.Layers[y.ID], true)
-	}
-	for _, name := range sortedKeys(rep.Sum.Triggers) {
-		statRow(w, "trigger "+name, rep.Sum.Triggers[name], false)
-	}
+	rep.eachStat(func(name string, s variate.Stat, share bool) { statRow(w, name, s, share) })
+	fmt.Fprintf(w, "\n%-28s %12s %12s %12s %12s %12s\n", "quantile stderr", "p50", "p90", "p95", "p99", "p999")
+	rep.eachStat(func(name string, s variate.Stat, _ bool) {
+		if s.Quantiles {
+			fmt.Fprintf(w, "%-28s %12.4g %12.4g %12.4g %12.4g %12.4g\n", name, s.QSE[0], s.QSE[1], s.QSE[2], s.QSE[3], s.QSE[4])
+		}
+	})
 	rep.writeReachTable(w)
 	fmt.Fprintf(w, "\n%-12s %-32s %12s %12s %12s %5s\n", "criterion", "driver", "per period", "periods", "observed", "met")
 	for _, row := range rep.Sum.Plan {
@@ -297,6 +288,27 @@ func observed(x float64) string {
 		return "not yet"
 	}
 	return strconv.FormatFloat(x, 'g', 6, 64)
+}
+
+// eachStat visits the table's quantities in its order, with whether the
+// row shows a share.
+func (rep *Report) eachStat(f func(name string, s variate.Stat, share bool)) {
+	f("total", rep.Sum.Total, false)
+	for _, name := range sortedKeys(rep.Sum.ByCategory) {
+		f("category "+name, rep.Sum.ByCategory[name], true)
+	}
+	for _, name := range sortedKeys(rep.Sum.BySource) {
+		f("source "+name, rep.Sum.BySource[name], true)
+	}
+	for _, name := range sortedKeys(rep.Sum.EntriesPer) {
+		f("entries "+name, rep.Sum.EntriesPer[name], false)
+	}
+	for _, y := range rep.C.Layers() {
+		f("layer "+y.ID, rep.Sum.Layers[y.ID], true)
+	}
+	for _, name := range sortedKeys(rep.Sum.Triggers) {
+		f("trigger "+name, rep.Sum.Triggers[name], false)
+	}
 }
 
 // statRow prints one quantity; quantiles only where a histogram exists.
@@ -506,6 +518,11 @@ func (j *jw) stat(k string, s variate.Stat) {
 		j.field("p95", s.P95)
 		j.field("p99", s.P99)
 		j.field("p999", s.P999)
+		for i, k := range [5]string{"p50", "p90", "p95", "p99", "p999"} {
+			j.field(k+"_stderr", s.QSE[i])
+			j.field(k+"_lo", s.QLo[i])
+			j.field(k+"_hi", s.QHi[i])
+		}
 		j.fieldBool("clipped", s.Clipped)
 	}
 	j.field("share", s.Share)
@@ -796,13 +813,18 @@ func CSVField(s string) string {
 	return s
 }
 
+// csvQuantileGap is the empty quantile-interval cells of a row that
+// carries none.
+const csvQuantileGap = ",,,,,,,,,,,,,,,"
+
 func csvNum(x float64) string { return strconv.FormatFloat(x, 'g', -1, 64) }
 
 // WriteCSV writes one row per quantity.
 func (rep *Report) WriteCSV(w *bufio.Writer) {
-	fmt.Fprintln(w, "quantity,name,n,mean,stderr,sd,min,max,p50,p90,p95,p99,p999,clipped,share")
+	fmt.Fprintln(w, "quantity,name,n,mean,stderr,sd,min,max,p50,p90,p95,p99,p999,clipped,share,"+
+		"p50_stderr,p90_stderr,p95_stderr,p99_stderr,p999_stderr,p50_lo,p90_lo,p95_lo,p99_lo,p999_lo,p50_hi,p90_hi,p95_hi,p99_hi,p999_hi")
 	if ph := rep.C.Phase(); ph.Index != 0 {
-		fmt.Fprintf(w, "phase,%d of %d,,,,,,,,,,,,,\n", ph.Index, ph.Cycle)
+		fmt.Fprintf(w, "phase,%d of %d,,,,,,,,,,,,,"+csvQuantileGap+"\n", ph.Index, ph.Cycle)
 	}
 	csvStat(w, "total", "", rep.Sum.Total)
 	for _, name := range sortedKeys(rep.Sum.ByCategory) {
@@ -819,16 +841,16 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 	}
 	if rep.Analytic {
 		e := rep.E
-		fmt.Fprintf(w, "analytic,total,,%s,,%s,,,,,,,,,\n", csvNum(e.Mean), csvNum(math.Sqrt(e.Var)))
+		fmt.Fprintf(w, "analytic,total,,%s,,%s,,,,,,,,,"+csvQuantileGap+"\n", csvNum(e.Mean), csvNum(math.Sqrt(e.Var)))
 		for i, name := range rep.C.Categories() {
-			fmt.Fprintf(w, "analytic category,%s,,%s,,,,,,,,,,,\n", CSVField(name), csvNum(e.MeanByCategory[i]))
+			fmt.Fprintf(w, "analytic category,%s,,%s,,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(name), csvNum(e.MeanByCategory[i]))
 		}
 		for i, name := range rep.C.SourceIDs() {
-			fmt.Fprintf(w, "analytic source,%s,,%s,,,,,,,,,,,\n", CSVField(name), csvNum(e.MeanBySource[i]))
+			fmt.Fprintf(w, "analytic source,%s,,%s,,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(name), csvNum(e.MeanBySource[i]))
 		}
 		for _, f := range e.Firing {
-			fmt.Fprintf(w, "analytic fire,%s,,%s,,,,,,,,,,,\n", CSVField(rep.C.SourceIDs()[f.Source]), csvNum((f.Lo+f.Hi)/2))
-			fmt.Fprintf(w, "analytic trigger sum,%s,,%s,,,,,,,,,,,\n", CSVField(rep.C.SourceIDs()[f.Source]), csvNum(f.SumMean))
+			fmt.Fprintf(w, "analytic fire,%s,,%s,,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(rep.C.SourceIDs()[f.Source]), csvNum((f.Lo+f.Hi)/2))
+			fmt.Fprintf(w, "analytic trigger sum,%s,,%s,,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(rep.C.SourceIDs()[f.Source]), csvNum(f.SumMean))
 		}
 	}
 }
@@ -843,7 +865,16 @@ func csvStat(w *bufio.Writer, kind, name string, s variate.Stat) {
 	} else {
 		fmt.Fprint(w, ",,,,,,")
 	}
-	fmt.Fprintln(w, csvNum(s.Share))
+	fmt.Fprint(w, csvNum(s.Share))
+	for _, a := range [3]*[5]float64{&s.QSE, &s.QLo, &s.QHi} {
+		for _, x := range a {
+			w.WriteByte(',')
+			if s.Quantiles {
+				w.WriteString(csvNum(x))
+			}
+		}
+	}
+	fmt.Fprintln(w)
 }
 
 // WriteExceedanceFile writes the curve as CSV: x, p, stderr, and the

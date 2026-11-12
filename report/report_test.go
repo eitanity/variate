@@ -306,8 +306,97 @@ func TestPercentilesOnlyWithHistogram(t *testing.T) {
 			}
 		}
 		cells := strings.Split(row, ",")
-		if len(cells) != 15 || (cells[8] == "") == nodeHist || (cells[13] == "") == nodeHist {
+		if len(cells) != 30 || (cells[8] == "") == nodeHist || (cells[13] == "") == nodeHist || (cells[15] == "") == nodeHist {
 			t.Errorf("node_hist %v: csv row %q", nodeHist, row)
+		}
+	}
+}
+
+// runReport runs a model file for a fixed number of periods on one
+// worker and returns its report.
+func runReport(t *testing.T, path string, periods int64) *report.Report {
+	t.Helper()
+	m, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Config.Periods, m.Config.Workers = periods, 1
+	c, _, err := m.Graph.Compile(m.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := c.NewWorkspace(m.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := w.Run(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sum variate.Summary
+	w.Summarize(&sum)
+	w.Close()
+	return &report.Report{C: c, R: r, Sum: &sum}
+}
+
+// TestQuantileIntervals: without delays each quantile lies in its
+// interval and has a positive standard error, in the Stat, the JSON, the
+// CSV and the table; with delays the interval and standard error are
+// NaN, as independent periods would understate them.
+func TestQuantileIntervals(t *testing.T) {
+	for _, tc := range []struct {
+		path   string
+		delays bool
+	}{{"../examples/compound.yaml", false}, {"../examples/delays.yaml", true}} {
+		rep := runReport(t, tc.path, 20000)
+		s := rep.Sum.Total
+		q := [5]float64{s.P50, s.P90, s.P95, s.P99, s.P999}
+		for i := range q {
+			if tc.delays {
+				if !math.IsNaN(s.QLo[i]) || !math.IsNaN(s.QHi[i]) || !math.IsNaN(s.QSE[i]) {
+					t.Errorf("%s level %d: got [%g, %g] se %g, want NaN", tc.path, i, s.QLo[i], s.QHi[i], s.QSE[i])
+				}
+				continue
+			}
+			if !(s.QLo[i] <= q[i] && q[i] <= s.QHi[i] && s.QSE[i] > 0) {
+				t.Errorf("%s level %d: quantile %g, interval [%g, %g], se %g", tc.path, i, q[i], s.QLo[i], s.QHi[i], s.QSE[i])
+			}
+		}
+		var js, csv, tab bytes.Buffer
+		for _, out := range []struct {
+			buf   *bytes.Buffer
+			write func(*bufio.Writer)
+		}{{&js, rep.WriteJSON}, {&csv, rep.WriteCSV}, {&tab, rep.WriteTable}} {
+			bw := bufio.NewWriter(out.buf)
+			out.write(bw)
+			if err := bw.Flush(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var got struct {
+			Total map[string]any `json:"total"`
+		}
+		if err := json.Unmarshal(js.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		for _, k := range []string{"p95_stderr", "p95_lo", "p95_hi", "p999_hi"} {
+			v, ok := got.Total[k]
+			if !ok || (v == nil) != tc.delays {
+				t.Errorf("%s: json total %s = %v, present %v", tc.path, k, v, ok)
+			}
+		}
+		if v, _ := got.Total["p95_stderr"].(float64); !tc.delays && v != s.QSE[2] {
+			t.Errorf("%s: json p95_stderr %g, Stat %g", tc.path, v, s.QSE[2])
+		}
+		lines := strings.Split(strings.TrimSpace(csv.String()), "\n")
+		width := len(strings.Split(lines[0], ","))
+		for _, line := range lines {
+			if n := len(strings.Split(line, ",")); n != width {
+				t.Errorf("%s: csv row has %d cells, header %d: %q", tc.path, n, width, line)
+			}
+		}
+		if !strings.Contains(tab.String(), "quantile stderr") {
+			t.Errorf("%s: table lacks the quantile stderr section", tc.path)
 		}
 	}
 }

@@ -409,6 +409,10 @@ func statJSON(buf *bytes.Buffer, st variate.Stat) {
 	if st.Quantiles {
 		fmt.Fprintf(buf, "\"p50\":%s,\"p90\":%s,\"p95\":%s,\"p99\":%s,\"p999\":%s,",
 			num(st.P50), num(st.P90), num(st.P95), num(st.P99), num(st.P999))
+		for i, k := range [5]string{"p50", "p90", "p95", "p99", "p999"} {
+			fmt.Fprintf(buf, "\"%s_stderr\":%s,\"%s_lo\":%s,\"%s_hi\":%s,",
+				k, num(st.QSE[i]), k, num(st.QLo[i]), k, num(st.QHi[i]))
+		}
 	}
 	fmt.Fprintf(buf, "\"share\":%s}", num(st.Share))
 }
