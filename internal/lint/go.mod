@@ -3,7 +3,7 @@ module code.eitanity.com/variate/internal/lint
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.4
 
 require golang.org/x/tools v0.52.0
 
