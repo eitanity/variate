@@ -77,6 +77,11 @@ func (d Scaled) Laplace(s complex128) (complex128, bool) {
 	return d.d.Laplace(s * complex(d.f, 0))
 }
 
+// LogLaplace is X's at f·s.
+func (d Scaled) LogLaplace(s complex128) (complex128, bool) {
+	return d.d.LogLaplace(s * complex(d.f, 0))
+}
+
 // Nodes are X's nodes times f, with X's weights.
 func (d Scaled) Nodes(x, w []float64) bool {
 	if !d.d.Nodes(x, w) {

@@ -9,7 +9,8 @@ import (
 // Distribution is one family with fixed parameters. Fill writes len(dst)
 // independent draws and never allocates. Laplace is E[exp(−s·X)] for
 // complex s with Re(s) ≥ 0 in closed form; ok is false for a family
-// without one, and the caller integrates numerically instead. Nodes fills
+// without one, and the caller integrates numerically instead. LogLaplace
+// is a logarithm of it in closed form, where the family has one. Nodes fills
 // a Gauss rule for the family's own density (see nodes.go); false for a
 // family without one.
 //
@@ -26,6 +27,7 @@ type Distribution interface {
 	Support() (lo, hi float64)
 	CDF(x float64) float64
 	Laplace(s complex128) (value complex128, ok bool)
+	LogLaplace(s complex128) (value complex128, ok bool)
 	Nodes(x, w []float64) bool
 	LogDensity(x float64) float64
 	IsAtom(x float64) bool

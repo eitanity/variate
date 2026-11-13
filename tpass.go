@@ -423,11 +423,12 @@ func (p *pipeline) recurse(cat int32, srcs [][]complex128) ([]complex128, string
 	for j := range total {
 		total[j] = 1
 	}
-	// The constant-rate sources compound to exp(f·λ·(G − 1)) each: with
-	// two or more, their exponents are summed and taken once, unless each
+	// A constant-rate source compounds to exp(f·λ·(G − 1)), and one whose
+	// rate has a closed log transform to exp(ln L(f·(1 − G))): with two or
+	// more, their exponents are summed and taken once, unless each
 	// source's own function is wanted.
 	var expo []complex128
-	if srcs == nil && p.t.constN > 1 {
+	if srcs == nil && p.t.sumN > 1 {
 		expo = p.grid()
 		clear(expo)
 	}
@@ -465,8 +466,8 @@ func (p *pipeline) recurse(cat int32, srcs [][]complex128) ([]complex128, string
 
 // compoundAt compounds every source whose target is node v, now that
 // its generating function gv is complete, into total, and into srcs
-// when given; a constant-rate source adds its exponent to expo instead
-// when expo is given. Each source counts as one use of v.
+// when given; a source whose exponent can be summed adds it to expo
+// instead when expo is given. Each source counts as one use of v.
 func (p *pipeline) compoundAt(v, cat int32, gv, total, scratch, expo []complex128, srcs [][]complex128, uses []int32) string {
 	// bound: sources
 	for k, s := range p.t.m.srcs {
@@ -486,8 +487,8 @@ func (p *pipeline) compoundAt(v, cat int32, gv, total, scratch, expo []complex12
 		if cat != -1 && allOne(gv) {
 			continue
 		}
-		if lam := p.t.constRate[k]; expo != nil && !math.IsNaN(lam) {
-			if reason := p.addExponent(k, lam, gv, expo); reason != "" {
+		if expo != nil && p.t.summed(k) {
+			if reason := p.addExponent(k, gv, expo); reason != "" {
 				return reason
 			}
 			continue
@@ -505,15 +506,25 @@ func (p *pipeline) compoundAt(v, cat int32, gv, total, scratch, expo []complex12
 	return ""
 }
 
-// addExponent adds a constant-rate source's exponent f·λ·(G − 1) to
-// expo, counting the work as the closed form's.
-func (p *pipeline) addExponent(k int, lam float64, gv, expo []complex128) string {
+// addExponent adds source k's exponent to expo: f·λ·(G − 1) for a
+// constant rate, and the log transform of the rate at f·(1 − G) for one
+// with a closed logarithm, counting the work as the closed form's.
+func (p *pipeline) addExponent(k int, gv, expo []complex128) string {
 	if p.t.work+int64(p.m) > p.t.cfg.MaxWork {
 		return p.t.budgetReason(p.t.grid)
 	}
-	a := complex(lam*p.t.m.factorAt(k, p.mix.drawn), 0)
-	for j := range expo[:p.half] {
-		expo[j] += a * (gv[j] - 1)
+	f := p.t.m.factorAt(k, p.mix.drawn)
+	if lam := p.t.constRate[k]; !math.IsNaN(lam) {
+		a := complex(lam*f, 0)
+		for j := range expo[:p.half] {
+			expo[j] += a * (gv[j] - 1)
+		}
+	} else {
+		d := p.t.m.pools[p.t.m.srcs[k].pool]
+		for j := range expo[:p.half] {
+			l, _ := d.LogLaplace(complex(f, 0) * (1 - gv[j]))
+			expo[j] += l
+		}
 	}
 	p.t.work += int64(p.m)
 	return ""

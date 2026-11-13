@@ -24,17 +24,18 @@ func (o outageBound) Fill(_ *rand.Rand, dst []float64) {
 		dst[i] = o.mean
 	}
 }
-func (o outageBound) Mean() float64                       { return o.mean }
-func (outageBound) Var() float64                          { return math.NaN() }
-func (outageBound) Support() (lo, hi float64)             { return 0, math.Inf(1) }
-func (o outageBound) CDF(x float64) float64               { return 1 - o.Survival(x) }
-func (outageBound) Laplace(complex128) (complex128, bool) { return 0, false }
-func (outageBound) Nodes(_, _ []float64) bool             { return false }
-func (outageBound) LogDensity(float64) float64            { return math.NaN() }
-func (outageBound) IsAtom(float64) bool                   { return false }
-func (outageBound) LogSurvival(float64) float64           { return math.NaN() }
-func (o outageBound) Quantile(p float64) float64          { return -o.tail * math.Log1p(-p) }
-func (o outageBound) QuantileUpper(q float64) float64     { return -o.tail * math.Log(q) }
+func (o outageBound) Mean() float64                          { return o.mean }
+func (outageBound) Var() float64                             { return math.NaN() }
+func (outageBound) Support() (lo, hi float64)                { return 0, math.Inf(1) }
+func (o outageBound) CDF(x float64) float64                  { return 1 - o.Survival(x) }
+func (outageBound) Laplace(complex128) (complex128, bool)    { return 0, false }
+func (outageBound) LogLaplace(complex128) (complex128, bool) { return 0, false }
+func (outageBound) Nodes(_, _ []float64) bool                { return false }
+func (outageBound) LogDensity(float64) float64               { return math.NaN() }
+func (outageBound) IsAtom(float64) bool                      { return false }
+func (outageBound) LogSurvival(float64) float64              { return math.NaN() }
+func (o outageBound) Quantile(p float64) float64             { return -o.tail * math.Log1p(-p) }
+func (o outageBound) QuantileUpper(q float64) float64        { return -o.tail * math.Log(q) }
 func (o outageBound) Survival(x float64) float64 {
 	if x <= 0 {
 		return 1

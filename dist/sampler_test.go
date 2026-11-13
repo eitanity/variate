@@ -23,6 +23,9 @@ func (c countingDist) CDF(x float64) float64     { return c.inner.CDF(x) }
 func (c countingDist) Laplace(s complex128) (complex128, bool) {
 	return c.inner.Laplace(s)
 }
+func (c countingDist) LogLaplace(s complex128) (complex128, bool) {
+	return c.inner.LogLaplace(s)
+}
 func (c countingDist) Nodes(x, w []float64) bool     { return c.inner.Nodes(x, w) }
 func (c countingDist) LogDensity(x float64) float64  { return c.inner.LogDensity(x) }
 func (c countingDist) IsAtom(x float64) bool         { return c.inner.IsAtom(x) }

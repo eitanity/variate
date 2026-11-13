@@ -124,7 +124,8 @@ type transformer struct {
 	unit      float64   // a value every constant function is a multiple of; 0 if none
 	quadN     int
 	constRate []float64 // per source: its rate when constant and closed-form, else NaN
-	constN    int       // sources with a constant rate
+	logForm   []bool    // per source: a random rate whose transform has a closed logarithm
+	sumN      int       // sources whose exponents can be summed: constant rate or logForm
 	passes    int
 	lastEps   float64 // the last quadrature's difference between its final two node counts
 	order     []int32 // nodes in the order the recursion computes them
@@ -153,6 +154,35 @@ type transformer struct {
 	roots []complex128
 }
 
+// summable finds the sources whose exponents can be summed: a constant
+// rate with a closed form, or a random one whose transform has a closed
+// logarithm, compounded as a mixed Poisson and not a trigger's walk.
+func (t *transformer) summable() {
+	m := t.m
+	t.constRate = make([]float64, len(m.srcs))
+	t.logForm = make([]bool, len(m.srcs))
+	for k, s := range m.srcs {
+		d := m.pools[s.pool]
+		t.constRate[k] = math.NaN()
+		if m.countPMF[k] != nil || s.trigger != noIndex {
+			continue
+		}
+		_, closed := d.Laplace(0)
+		_, logClosed := d.LogLaplace(0)
+		switch {
+		case closed && d.Var() == 0:
+			t.constRate[k] = d.Mean()
+			t.sumN++
+		case logClosed:
+			t.logForm[k] = true
+			t.sumN++
+		}
+	}
+}
+
+// summed reports whether source k's exponent joins the sum.
+func (t *transformer) summed(k int) bool { return !math.IsNaN(t.constRate[k]) || t.logForm[k] }
+
 func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
 	if cfg.MaxGrid <= 0 {
 		cfg.MaxGrid = defaultMaxGrid
@@ -174,16 +204,7 @@ func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
 		t.tailP = m.crit.tailP
 	}
 	t.lam = m.countMean
-	t.constRate = make([]float64, len(m.srcs))
-	for k, s := range m.srcs {
-		d := m.pools[s.pool]
-		_, closed := d.Laplace(0)
-		t.constRate[k] = math.NaN()
-		if closed && d.Var() == 0 && m.countPMF[k] == nil && s.trigger == noIndex {
-			t.constRate[k] = d.Mean()
-			t.constN++
-		}
-	}
+	t.summable()
 	t.draws = make([]float64, len(m.fns))
 	for f := range m.fns {
 		t.draws[f] = t.e.EntriesPer[m.fnNode[f]]

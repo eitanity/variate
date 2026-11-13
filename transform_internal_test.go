@@ -564,15 +564,16 @@ func TestTransformOrder(t *testing.T) {
 	}
 	// Every node's buffer came back to the pool, and few were ever needed:
 	// the chain a1 → a2 → shared is the deepest, plus the scratch and the
-	// summed exponent of the two constant-rate sources.
+	// summed exponent of the sources.
 	if len(p.free) == 0 || len(p.free) > 5 {
 		t.Errorf("%d buffers in the pool after the recursion", len(p.free))
 	}
 }
 
 // TestTransformMergedExponent: with a shared factor, the total from the
-// recursion that sums the constant-rate sources' exponents equals the one
-// that compounds every source on its own, at every grid point.
+// recursion that sums the exponents of the constant-rate and gamma-rate
+// sources equals the one that compounds every source on its own, at
+// every grid point.
 func TestTransformMergedExponent(t *testing.T) {
 	ln, _ := dist.NewLognormal(0, 0.5)
 	e, _ := dist.NewExponential(2)
@@ -595,8 +596,8 @@ func TestTransformMergedExponent(t *testing.T) {
 	for i, totalOnly := range []bool{false, true} {
 		tr := newTransformer(m, TransformConfig{})
 		tr.totalOnly = totalOnly
-		if tr.constN != 2 {
-			t.Fatalf("%d constant-rate sources, want 2", tr.constN)
+		if tr.sumN != 3 {
+			t.Fatalf("%d sources with a summed exponent, want 3", tr.sumN)
 		}
 		p, reason := tr.newPipeline(0.05, minGrid, 0.9999, false)
 		if reason != "" {
