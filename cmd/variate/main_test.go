@@ -489,3 +489,53 @@ func TestRunCapacityCurve(t *testing.T) {
 		}
 	}
 }
+
+// TestOneTimelineWarning: a run kept as one timeline warns when its
+// burn-in outlasts a block, under --series and the round stream, and is
+// silent where it runs as independent timelines or the burn-in is short.
+func TestOneTimelineWarning(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, shape string) string {
+		p := filepath.Join(dir, name)
+		model := `period: { days: 1 }
+graphs:
+  - id: g
+    sources:
+      - { id: advisory, frequency: 0.2, to: open }
+    nodes:
+      - id: open
+        functions:
+          - { name: exposure, category: risk, basis: per_time, unit: days, constant: 10 }
+        outcomes:
+          - { to: patched, holding: ` + shape + ` }
+      - id: patched
+`
+		if err := os.WriteFile(p, []byte(model), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	heavy := write("heavy.yaml", "{ loglogistic: { shape: 2, scale: 5 }, unit: days }")
+	light := write("light.yaml", "{ lognormal: { median: 10, p90: 30 }, unit: days }")
+	cases := []struct {
+		model string
+		args  []string
+		want  string
+	}{
+		{heavy, nil, ""},
+		{heavy, []string{"--series"}, "--series keeps the run as one timeline"},
+		{heavy, []string{"--rounds", "jsonl", "--rounds-out", filepath.Join(dir, "r.jsonl")}, "the round stream keeps the run as one timeline"},
+		{light, []string{"--series"}, ""},
+	}
+	for _, tc := range cases {
+		args := append([]string{"run", "-f", tc.model, "-n", "65536", "--seed", "1"}, tc.args...)
+		_, stderr, code := invoke(t, args...)
+		if code != 0 {
+			t.Fatalf("%v: code %d stderr %q", args, code, stderr)
+		}
+		got := strings.Contains(stderr, "one-timeline")
+		if got != (tc.want != "") || (tc.want != "" && !strings.Contains(stderr, tc.want)) {
+			t.Errorf("%v: stderr %q, want %q", args, stderr, tc.want)
+		}
+	}
+}

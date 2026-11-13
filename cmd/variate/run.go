@@ -84,9 +84,7 @@ func runModel(args []string, stdout, stderr io.Writer, stream bool) error {
 	if err != nil {
 		return err
 	}
-	if n := runtime.GOMAXPROCS(0); m.Config.Workers <= 0 && w.Workers() < n {
-		fmt.Fprintf(stderr, "warning: workers: %d of %d, the most that fit max_memory; the workspace holds %d MB\n", w.Workers(), n, w.Footprint()>>20)
-	}
+	warnWorkspace(stderr, c, w, m.Config)
 	r, err := w.Run(context.Background(), m.Config.Seed)
 	if err != nil {
 		err = fmt.Errorf("run: %w", err)
@@ -105,6 +103,23 @@ func runModel(args []string, stdout, stderr io.Writer, stream bool) error {
 		rep.Curve = w.ExceedanceOf(curveRow, make([]variate.ECPoint, 0, 64))
 	}
 	return o.writeOutputs(rep, stdout, stderr, stream)
+}
+
+// warnWorkspace warns of what the workspace settled: fewer workers than
+// GOMAXPROCS, as max_memory allows no more, and a run kept as one
+// timeline whose burn-in outlasts a block, as its holding times then
+// correlate the blocks whose means give its standard errors.
+func warnWorkspace(stderr io.Writer, c *variate.Compiled, w *variate.Workspace, cfg variate.Config) {
+	if n := runtime.GOMAXPROCS(0); cfg.Workers <= 0 && w.Workers() < n {
+		fmt.Fprintf(stderr, "warning: workers: %d of %d, the most that fit max_memory; the workspace holds %d MB\n", w.Workers(), n, w.Footprint()>>20)
+	}
+	if c.HasDelays() && w.Timelines() == 1 && c.BurnIn() > w.BlockPeriods() {
+		why := "--series"
+		if cfg.Observer != nil {
+			why = "the round stream"
+		}
+		fmt.Fprintf(stderr, "warning: one-timeline: %s keeps the run as one timeline, and its burn-in of %d periods outlasts a block of %d, so the standard errors may fall short\n", why, c.BurnIn(), w.BlockPeriods())
+	}
 }
 
 // curveRow is the row of the quantity --exceedance-of names, as

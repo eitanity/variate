@@ -693,3 +693,11 @@ func (w *Workspace) Footprint() int64 { return w.footprint }
 // Workers is the number of workers the workspace runs: Workers when
 // set, else the most up to GOMAXPROCS that fit MaxMemory.
 func (w *Workspace) Workers() int { return len(w.workers) }
+
+// Timelines is the number of independent timelines the run's tasks are
+// dealt into: up to 32 in a model with holding times, one with a series,
+// an observer, or no holding times.
+func (w *Workspace) Timelines() int { return int(w.lines) }
+
+// BlockPeriods is the periods per task the workspace runs.
+func (w *Workspace) BlockPeriods() int64 { return w.block }
