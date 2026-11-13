@@ -66,6 +66,7 @@ func (LogUniform) Laplace(complex128) (complex128, bool)      { return 0, false 
 func (Triangular) Laplace(complex128) (complex128, bool)      { return 0, false }
 func (Lognormal) Laplace(complex128) (complex128, bool)       { return 0, false }
 func (Weibull) Laplace(complex128) (complex128, bool)         { return 0, false }
+func (LogLogistic) Laplace(complex128) (complex128, bool)     { return 0, false }
 func (Normal) Laplace(complex128) (complex128, bool)          { return 0, false }
 func (TruncatedNormal) Laplace(complex128) (complex128, bool) { return 0, false }
 func (Pareto) Laplace(complex128) (complex128, bool)          { return 0, false }
@@ -89,6 +90,7 @@ func (LogUniform) LogLaplace(complex128) (complex128, bool)       { return 0, fa
 func (Triangular) LogLaplace(complex128) (complex128, bool)       { return 0, false }
 func (Lognormal) LogLaplace(complex128) (complex128, bool)        { return 0, false }
 func (Weibull) LogLaplace(complex128) (complex128, bool)          { return 0, false }
+func (LogLogistic) LogLaplace(complex128) (complex128, bool)      { return 0, false }
 func (Normal) LogLaplace(complex128) (complex128, bool)           { return 0, false }
 func (TruncatedNormal) LogLaplace(complex128) (complex128, bool)  { return 0, false }
 func (Pareto) LogLaplace(complex128) (complex128, bool)           { return 0, false }

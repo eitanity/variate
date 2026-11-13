@@ -95,6 +95,7 @@ func warningCodes(ws []Warning) map[string]int {
 func TestCompileErrors(t *testing.T) {
 	normal, _ := dist.NewNormal(0, 1)
 	pareto1, _ := dist.NewPareto(1, 1)
+	loglogistic08, _ := dist.NewLogLogistic(0.8, 5)
 	cat, _ := dist.NewCategorical([]float64{1, 2}, []float64{0.5, 0.5})
 	cases := []struct {
 		name string
@@ -130,6 +131,7 @@ func TestCompileErrors(t *testing.T) {
 		{"holding categorical ok", func(g *Graph) { g.Nodes[0].Outcomes[0].Holding = cat }, ""},
 		{"frequency support", func(g *Graph) { g.Sources[0].Frequency = normal }, "does not fit"},
 		{"infinite mean", func(g *Graph) { g.Nodes[3].Functions[0].Model = pareto1 }, "infinite mean"},
+		{"infinite mean holding", func(g *Graph) { g.Nodes[0].Outcomes[0].Holding = loglogistic08 }, "infinite mean"},
 		{"cycle", func(g *Graph) { g.Nodes[3].Next = "a" }, "cycle: a -> b -> d -> a"},
 		{"no sources", func(g *Graph) { g.Sources = nil }, "no sources"},
 		{"no frequency", func(g *Graph) { g.Sources[0].Frequency = nil }, "no distribution"},

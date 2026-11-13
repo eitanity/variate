@@ -267,6 +267,7 @@ constant that takes a range is written `{ constant: 0.3, range: [0.2,
 | beta | `{ beta: [alpha, beta] }` or `{ beta: { mean, sd } }` | the natural uncertain probability |
 | Weibull | `{ weibull: { shape, scale } }` | |
 | Pareto | `{ pareto: { min, alpha } }` | mean finite only for `alpha > 1` |
+| log-logistic | `{ loglogistic: { shape, scale } }` | `scale` is the median; mean finite only for `shape > 1`, variance only for `shape > 2`; as a holding time its tail makes the path-duration bound huge, so give it a `truncate` |
 | generalised Pareto | `{ gpd: { loc, scale, shape } }` | |
 | Bernoulli | `{ bernoulli: p }` | |
 | binomial | `{ binomial: { n, p } }` | |

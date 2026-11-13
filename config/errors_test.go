@@ -84,6 +84,8 @@ func TestLoaderErrorPaths(t *testing.T) {
 		{"beta keys", funcModel("beta: { alpha: 1 }"), "beta takes"},
 		{"weibull invalid", funcModel("weibull: { shape: 0, scale: 1 }"), "weibull"},
 		{"pareto invalid", funcModel("pareto: { min: 1, alpha: 0 }"), "pareto"},
+		{"loglogistic invalid", funcModel("loglogistic: { shape: 0, scale: 1 }"), "loglogistic"},
+		{"loglogistic keys", funcModel("loglogistic: { shape: 2 }"), `missing "scale"`},
 		{"gpd invalid", funcModel("gpd: { loc: 0, scale: 0, shape: 0.1 }"), "gpd"},
 		{"bernoulli invalid", funcModel("bernoulli: 2"), "bernoulli"},
 		{"binomial invalid", funcModel("binomial: { n: -1, p: 0.5 }"), "binomial"},

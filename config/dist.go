@@ -40,6 +40,7 @@ const (
 	famBeta        = "beta"
 	famWeibull     = "weibull"
 	famPareto      = "pareto"
+	famLogLogistic = "loglogistic"
 	famGPD         = "gpd"
 	famBernoulli   = "bernoulli"
 	famBinomial    = "binomial"
@@ -55,7 +56,7 @@ const (
 // are unit, t, truncate, cap and scope.
 func families() []string {
 	return []string{famConstant, famUniform, famLogUniform, famTriangular, famPERT, famLogPERT, famNormal,
-		famTruncNormal, famLognormal, famExponential, famGamma, famBeta, famWeibull, famPareto, famGPD,
+		famTruncNormal, famLognormal, famExponential, famGamma, famBeta, famWeibull, famLogLogistic, famPareto, famGPD,
 		famBernoulli, famBinomial, famPoisson, famNegBin, famGeometric, famCategorical, famEmpirical}
 }
 
@@ -285,6 +286,8 @@ func (l *loader) construct(spec *distSpec, s float64) (dist.Distribution, error)
 		d, err = beta(v)
 	case famWeibull:
 		d, err = named2(v, "shape", "scale", 1, s, dist.NewWeibull)
+	case famLogLogistic:
+		d, err = named2(v, "shape", "scale", 1, s, dist.NewLogLogistic)
 	case famPareto:
 		d, err = named2(v, "min", "alpha", s, 1, dist.NewPareto)
 	case famGPD:

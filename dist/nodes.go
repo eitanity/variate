@@ -59,6 +59,7 @@ func (Triangular) Nodes(_, _ []float64) bool       { return false }
 func (Exponential) Nodes(_, _ []float64) bool      { return false }
 func (Lognormal) Nodes(_, _ []float64) bool        { return false }
 func (Weibull) Nodes(_, _ []float64) bool          { return false }
+func (LogLogistic) Nodes(_, _ []float64) bool      { return false }
 func (Normal) Nodes(_, _ []float64) bool           { return false }
 func (TruncatedNormal) Nodes(_, _ []float64) bool  { return false }
 func (Pareto) Nodes(_, _ []float64) bool           { return false }

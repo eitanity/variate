@@ -97,6 +97,27 @@ func (d Weibull) LogDensity(x float64) float64 {
 	return math.Log(d.shape) - math.Log(d.scale) + (d.shape-1)*math.Log(u) - math.Pow(u, d.shape)
 }
 
+// LogDensity is ln β − ln x + l − 2·ln(1 + e^l) with l the log odds,
+// the last term as a softplus so that neither tail overflows.
+func (d LogLogistic) LogDensity(x float64) float64 {
+	switch {
+	case outside(x, 0, math.Inf(1)):
+		return math.Inf(-1)
+	case x == 0:
+		return edgeLog(d.shape, -math.Log(d.scale))
+	}
+	l := d.logOdds(x)
+	return math.Log(d.shape) - math.Log(x) + l - 2*softplus(l)
+}
+
+// softplus is ln(1 + e^l), exact where e^l overflows.
+func softplus(l float64) float64 {
+	if l > 0 {
+		return l + math.Log1p(math.Exp(-l))
+	}
+	return math.Log1p(math.Exp(l))
+}
+
 func (d Gamma) LogDensity(x float64) float64 {
 	switch {
 	case outside(x, 0, math.Inf(1)):
@@ -299,6 +320,7 @@ func (Triangular) IsAtom(float64) bool           { return false }
 func (Exponential) IsAtom(float64) bool          { return false }
 func (Lognormal) IsAtom(float64) bool            { return false }
 func (Weibull) IsAtom(float64) bool              { return false }
+func (LogLogistic) IsAtom(float64) bool          { return false }
 func (Gamma) IsAtom(float64) bool                { return false }
 func (Beta) IsAtom(float64) bool                 { return false }
 func (PERT) IsAtom(float64) bool                 { return false }
@@ -339,6 +361,13 @@ func (d Weibull) LogSurvival(x float64) float64 {
 		return 0
 	}
 	return -math.Pow(x/d.scale, d.shape)
+}
+
+func (d LogLogistic) LogSurvival(x float64) float64 {
+	if x <= 0 {
+		return 0
+	}
+	return -softplus(d.logOdds(x))
 }
 
 func (d Pareto) LogSurvival(x float64) float64 {

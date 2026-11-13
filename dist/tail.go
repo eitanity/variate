@@ -6,11 +6,12 @@ import (
 )
 
 const (
-	familyPareto = "pareto"
-	familyGPD    = "gpd"
-	paramMin     = "min"
-	paramLoc     = "loc"
-	paramXi      = "shape"
+	familyPareto      = "pareto"
+	familyGPD         = "gpd"
+	familyLogLogistic = "loglogistic"
+	paramMin          = "min"
+	paramLoc          = "loc"
+	paramXi           = "shape"
 )
 
 // Pareto has minimum xm and tail index alpha.
@@ -181,3 +182,74 @@ func (d GPD) Quantile(p float64) float64 {
 }
 
 func (d GPD) QuantileUpper(q float64) float64 { return d.fromUpper(q) }
+
+// LogLogistic has shape β and scale α, its median: P(X > x) =
+// 1/(1 + (x/α)^β). Its hazard rises and then falls for β > 1.
+type LogLogistic struct{ shape, scale, invShape float64 }
+
+// NewLogLogistic validates shape > 0 and scale > 0.
+func NewLogLogistic(shape, scale float64) (LogLogistic, error) {
+	if !(shape > 0) || !finite(shape) {
+		return LogLogistic{}, paramError(familyLogLogistic, paramShape, shape)
+	}
+	if !(scale > 0) || !finite(scale) {
+		return LogLogistic{}, paramError(familyLogLogistic, paramScale, scale)
+	}
+	return LogLogistic{shape: shape, scale: scale, invShape: 1 / shape}, nil
+}
+
+// Fill inverts the survival function at a uniform in (0, 1], which gives
+// 0 rather than +Inf at its end.
+func (d LogLogistic) Fill(r *rand.Rand, dst []float64) {
+	for i := range dst {
+		dst[i] = d.QuantileUpper(unit(r))
+	}
+}
+
+// Mean is α·b/sin b with b = π/β, +Inf for β ≤ 1.
+func (d LogLogistic) Mean() float64 {
+	if d.shape <= 1 {
+		return math.Inf(1)
+	}
+	b := math.Pi * d.invShape
+	return d.scale * b / math.Sin(b)
+}
+
+// Var is α²·(2b/sin 2b − b²/sin² b), +Inf for β ≤ 2.
+func (d LogLogistic) Var() float64 {
+	if d.shape <= 2 {
+		return math.Inf(1)
+	}
+	b := math.Pi * d.invShape
+	sb := math.Sin(b)
+	return d.scale * d.scale * (2*b/math.Sin(2*b) - b*b/(sb*sb))
+}
+
+func (d LogLogistic) Support() (lo, hi float64) { return 0, math.Inf(1) }
+
+// logOdds is ln (x/α)^β, the log of the odds F/(1 − F) at x > 0.
+func (d LogLogistic) logOdds(x float64) float64 { return d.shape * math.Log(x/d.scale) }
+
+func (d LogLogistic) CDF(x float64) float64 {
+	if x <= 0 {
+		return 0
+	}
+	return 1 / (1 + math.Exp(-d.logOdds(x)))
+}
+
+func (d LogLogistic) Survival(x float64) float64 {
+	if x <= 0 {
+		return 1
+	}
+	return 1 / (1 + math.Exp(d.logOdds(x)))
+}
+
+// Quantile is α·(p/(1 − p))^(1/β), through logarithms so that neither
+// end of p loses precision.
+func (d LogLogistic) Quantile(p float64) float64 {
+	return d.scale * math.Exp(d.invShape*(math.Log(p)-math.Log1p(-p)))
+}
+
+func (d LogLogistic) QuantileUpper(q float64) float64 {
+	return d.scale * math.Exp(d.invShape*(math.Log1p(-q)-math.Log(q)))
+}

@@ -142,6 +142,7 @@ func TestUnits(t *testing.T) {
 		"gammamean":   "gamma: { mean: 2, sd: 1 }",
 		"weibull":     "weibull: { shape: 1.5, scale: 2 }",
 		"pareto":      "pareto: { min: 1, alpha: 3 }",
+		"loglogistic": "loglogistic: { shape: 2, scale: 5 }",
 		"gpd":         "gpd: { loc: 1, scale: 2, shape: 0.2 }",
 		"categorical": "categorical: { values: [1, 2, 5], p: [0.2, 0.3, 0.5] }",
 		"empirical":   "empirical: [1, 2, 2, 5]",
