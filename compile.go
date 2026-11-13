@@ -89,8 +89,9 @@ type Compiled struct {
 	periodSlots                                  int
 	topo                                         []int32
 	reach                                        [][]float64
-	burnIn                                       int64 // burn-in periods
-	pendCap                                      int   // pending bookings a slot or the finaliser holds
+	burnIn                                       int64        // burn-in periods
+	pendCap                                      int          // pending bookings a slot or the finaliser holds
+	resid                                        []residTable // per source with a repair time, its residual table
 	hasDelays                                    bool
 	renewal                                      bool        // a source with the Erlang or repair law
 	hasRepair                                    bool        // a source with the repair law or a reliability diagram: no closed variance
@@ -175,6 +176,7 @@ func (g Graph) flattenChecked(cfg Config) (*Compiled, *builder, []Warning, error
 	if err := m.setBurnIn(cfg.BurnIn, &warnings); err != nil {
 		return nil, nil, nil, err
 	}
+	m.buildResiduals()
 	return m, b, warnings, nil
 }
 

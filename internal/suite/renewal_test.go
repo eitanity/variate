@@ -142,3 +142,18 @@ func mustCompile(t *testing.T, g variate.Graph) *variate.Compiled {
 	}
 	return c
 }
+
+// TestRepairHeavyResidual: a repair time with a heavy tail starts each
+// block down for an equilibrium residual, so the source fires at
+// λ/(1 + λ·E[h]) whatever the block length.
+func TestRepairHeavyResidual(t *testing.T) {
+	ll, _ := dist.NewLogLogistic(2, 5)
+	want := 1 / (1 + ll.Mean())
+	for _, block := range []int{64, 4096} {
+		_, r := run(t, counting(C(1), 0, ll), variate.Config{Periods: 1 << 21, BlockPeriods: block}, 3)
+		se := r.Total.StdErr(true)
+		if z := (r.Total.Mean() - want) / se; math.Abs(z) > 5 || math.IsNaN(z) {
+			t.Errorf("block %d: %g ± %g firings per period, want %g: z %.2f", block, r.Total.Mean(), se, want, z)
+		}
+	}
+}

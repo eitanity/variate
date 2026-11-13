@@ -14,14 +14,12 @@ import (
 // elsewhere, and every block starts the state in equilibrium.
 
 const (
-	maxChainUnits    = 64
-	maxEvery         = 1 << 20
-	maxResidualDraws = 1 << 16
-	residualTail     = 1e-12
-	poissonSpread    = 12 // standard deviations of Poisson mass kept, plus 60
-	poissonSlack     = 60
-	maxErlangWork    = 1 << 28 // rate quadrature nodes × mass function length, at compile
-	maxEventsPeriod  = 1 << 24 // arrivals one source may draw in one period before the run fails
+	maxChainUnits   = 64
+	maxEvery        = 1 << 20
+	poissonSpread   = 12 // standard deviations of Poisson mass kept, plus 60
+	poissonSlack    = 60
+	maxErlangWork   = 1 << 28 // rate quadrature nodes × mass function length, at compile
+	maxEventsPeriod = 1 << 24 // arrivals one source may draw in one period before the run fails
 )
 
 // countLaws fills, per source, the mean and second factorial moment of
@@ -273,7 +271,7 @@ func (w *Workspace) startSources(wk *worker) {
 			wk.downUntil[k] = math.Inf(-1)
 			lam, h := m.poolMean[s.pool], m.poolMean[s.repair]
 			if lam > 0 && h > 0 && wk.ss.Control().Float64() < h/(1/lam+h) {
-				wk.downUntil[k] = w.residual(wk, s.repair)
+				wk.downUntil[k] = w.residual(wk, k, s.repair)
 			}
 		case s.every > 1:
 			wk.phase[k] = int32(wk.ss.Control().Float64() * float64(s.every))
@@ -281,28 +279,14 @@ func (w *Workspace) startSources(wk *worker) {
 	}
 }
 
-// residual draws the equilibrium residual of a repair time: a uniform
-// share of a length-biased draw, which rejection takes from the pool
-// against the support's end, or the far quantile of an unbounded one.
-// A constant needs no rejection.
-func (w *Workspace) residual(wk *worker, pool int32) float64 {
+// residual draws the equilibrium residual of source k's repair time: a
+// uniform share of a constant, else from the source's table.
+func (w *Workspace) residual(wk *worker, k int, pool int32) float64 {
 	d := w.m.pools[pool]
-	lo, hi := d.Support()
-	if lo == hi {
+	if lo, hi := d.Support(); lo == hi {
 		return wk.ss.Control().Float64() * hi
 	}
-	if math.IsInf(hi, 1) {
-		hi = d.Quantile(1 - residualTail)
-	}
-	x := 0.0
-	// bound: maxResidualDraws, after which the last draw stands
-	for i := 0; i < maxResidualDraws; i++ {
-		x = wk.ss.Sampler(int(pool)).Next()
-		if wk.ss.Control().Float64()*hi < x {
-			break
-		}
-	}
-	return wk.ss.Control().Float64() * x
+	return w.m.resid[k].draw(wk.ss.Control())
 }
 
 // runRenewalSource emits the period's rounds of a renewal source: the
