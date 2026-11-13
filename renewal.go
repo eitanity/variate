@@ -309,7 +309,7 @@ func (w *Workspace) residual(wk *worker, pool int32) float64 {
 // underlying arrivals come as exponential gaps at the period's rate,
 // and each either advances the Erlang phase, firing when it completes,
 // or fires when the source is up and silences it for a repair.
-func (w *Workspace) runRenewalSource(wk *worker, sl *slot, k int32, p, first int64) {
+func (w *Workspace) runRenewalSource(wk *worker, sl *slot, k int32, p int64) {
 	m := w.m
 	src := m.srcs[k]
 	lam := wk.period[m.poolPeriod[src.pool]]
@@ -342,6 +342,6 @@ func (w *Workspace) runRenewalSource(wk *worker, sl *slot, k int32, p, first int
 		if w.stream {
 			w.beginRound(wk, t)
 		}
-		w.walk(wk, sl, k, src.to, t, p, first)
+		w.walk(wk, sl, k, src.to, t, p)
 	}
 }

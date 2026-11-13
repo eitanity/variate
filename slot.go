@@ -34,24 +34,26 @@ func (q *qstat) add(x float64) {
 	}
 }
 
-// slot is the working state of one task: the window of S+1 rows, the head
-// of S rows awaiting the previous task's spill, the slot statistics, and
-// the task's integer counts.
+// slot is the working state of one task: a row per period of its block,
+// the bookings past the block, the slot statistics, and the task's
+// integer counts.
 type slot struct {
-	id     uint32 // the task's stream key half
-	task   int64
-	a, b   int64 // the block [a, b)
-	window []float64
-	head   []float64
-	stats  []qstat
-	coarse []*stats.LogHist // with delays, the block's group histogram per quantity; nil entries without one
-	events []uint64
-	reach  []uint64 // [source×nodes]
-	outs   []uint64 // [source×outcomes]
-	steps  uint64
-	base   int   // ring row of the period being simulated
-	closed int64 // periods closed by the task (excluding the head)
-	tail   int64 // closed periods with Total at or beyond the tail quantile bound
+	id       uint32 // the task's stream key half
+	task     int64
+	a, b     int64     // the block [a, b)
+	rows     []float64 // a row per period of [a, b)
+	far      []float64 // scratch row for a booking past the block
+	farAt    int64     // the period far holds, or below a when it holds none
+	pend     pending   // the bookings past the block
+	incoming []float64 // what the finaliser handed in, by distance back to the task that booked it
+	stats    []qstat
+	coarse   []*stats.LogHist // with delays, the block's group histogram per quantity; nil entries without one
+	events   []uint64
+	reach    []uint64 // [source×nodes]
+	outs     []uint64 // [source×outcomes]
+	steps    uint64
+	closed   int64 // periods closed by the task
+	tail     int64 // closed periods with Total at or beyond the tail quantile bound
 	// Per tail threshold, the periods that reached it and their rows summed.
 	tailCounts []int64
 	tailSums   []float64 // [threshold×width]
@@ -66,8 +68,11 @@ type slot struct {
 }
 
 func (sl *slot) reset() {
-	clear(sl.window)
-	clear(sl.head)
+	clear(sl.rows)
+	clear(sl.far)
+	sl.farAt = math.MinInt64
+	sl.pend.reset()
+	clear(sl.incoming)
 	for i := range sl.stats {
 		sl.stats[i].reset()
 	}
@@ -90,9 +95,8 @@ func (sl *slot) reset() {
 	sl.records = 0
 }
 
-// row returns the window row of period q for a task whose earliest period
-// is first.
-func (sl *slot) row(l layout, s int, first, q int64) []float64 {
-	r := int((q - first) % int64(s+1))
-	return sl.window[r*l.width : (r+1)*l.width]
+// rowAt returns the row of period q, within the block.
+func (sl *slot) rowAt(l layout, q int64) []float64 {
+	r := int(q - sl.a)
+	return sl.rows[r*l.width : (r+1)*l.width]
 }

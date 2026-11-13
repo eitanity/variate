@@ -127,9 +127,10 @@ func TestMutantTailPeriodsWithoutTransform(t *testing.T) {
 	}
 }
 
-// TestMutantShortBlocks: blocks shorter than the window route the rows
-// beyond the block into the spill, so the mean is kept (a mutant that
-// closed one row too many survived with the default block size).
+// TestMutantShortBlocks: blocks shorter than the holding time route the
+// bookings past the block through the pending lists, so the mean is kept
+// (a mutant that closed one row too many survived with the default block
+// size).
 func TestMutantShortBlocks(t *testing.T) {
 	g := variate.Graph{
 		Sources: []variate.Source{{ID: "s", Frequency: C(4), To: "a"}},
@@ -139,8 +140,8 @@ func TestMutantShortBlocks(t *testing.T) {
 		},
 	}
 	m, r := run(t, g, variate.Config{Periods: 20000, BlockPeriods: 2, Workers: 3}, 5)
-	if m.Spill() <= 2 {
-		t.Fatalf("window %d not longer than the block", m.Spill())
+	if m.BurnIn() <= 2 {
+		t.Fatalf("burn-in %d not longer than the block", m.BurnIn())
 	}
 	e, _ := m.Analytic()
 	if z := (r.Total.Mean() - e.Mean) / r.Total.StdErr(false); math.Abs(z) > 4.5 {

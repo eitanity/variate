@@ -147,8 +147,8 @@ func TestSweepHoldingAtWindow(t *testing.T) {
 		if !near(e.Mean, 3*(10*tau+1), 1e-12) || !near(e.Contrib[0], 3*10*tau, 1e-12) || !near(e.Contrib[1], 3, 1e-12) {
 			t.Errorf("%s: exact mean %g contributions %v", what, e.Mean, e.Contrib)
 		}
-		if c.Spill() < int(math.Ceil(tau)) {
-			t.Errorf("%s: window %d shorter than the holding time", what, c.Spill())
+		if c.BurnIn() < int64(math.Ceil(tau)) {
+			t.Errorf("%s: burn-in %d shorter than the holding time", what, c.BurnIn())
 		}
 		finiteStat(t, what, s.Total)
 		if math.Abs(s.Total.Mean-e.Mean) > 0.05*e.Mean {

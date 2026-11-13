@@ -105,7 +105,7 @@ func (w *Workspace) startChains(wk *worker, src csrc) {
 // outage for a holding that asks for it, and the period resumes from
 // there; a look-ahead past the period's end is where the period it ends
 // in resumes.
-func (w *Workspace) runChainSource(wk *worker, sl *slot, k int32, p, first int64) {
+func (w *Workspace) runChainSource(wk *worker, sl *slot, k int32, p int64) {
 	m := w.m
 	src := m.srcs[k]
 	end := 1.0
@@ -135,7 +135,7 @@ func (w *Workspace) runChainSource(wk *worker, sl *slot, k int32, p, first int64
 		fired := w.chainEvent(wk, src, wk.ss.Control().Float64()*total)
 		nowUp := w.chainsUp(wk, src)
 		if (up && !nowUp) || (fired && up) {
-			t = w.fireChain(wk, sl, k, src, t, p, first, nowUp)
+			t = w.fireChain(wk, sl, k, src, t, p, nowUp)
 			nowUp = true
 		}
 		up = nowUp
@@ -146,11 +146,11 @@ func (w *Workspace) runChainSource(wk *worker, sl *slot, k int32, p, first int64
 // outage the chains take to bring the system up when it is down, and
 // returns the time the period resumes from: the end of the outage, or
 // t itself for a unit replaced at once.
-func (w *Workspace) fireChain(wk *worker, sl *slot, k int32, src csrc, t float64, p, first int64, nowUp bool) float64 {
+func (w *Workspace) fireChain(wk *worker, sl *slot, k int32, src csrc, t float64, p int64, nowUp bool) float64 {
 	wk.outage = 0
 	resume := t
 	if !nowUp {
-		resume = w.lookAhead(wk, src, t, float64(w.s)+1)
+		resume = w.lookAhead(wk, src, t, maxBurnIn)
 		wk.outage = resume - t
 		if resume > 1 {
 			wk.chainT[k] = resume
@@ -162,7 +162,7 @@ func (w *Workspace) fireChain(wk *worker, sl *slot, k int32, src csrc, t float64
 	if w.stream {
 		w.beginRound(wk, t)
 	}
-	w.walk(wk, sl, k, src.to, t, p, first)
+	w.walk(wk, sl, k, src.to, t, p)
 	return resume
 }
 

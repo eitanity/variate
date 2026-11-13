@@ -172,7 +172,7 @@ type Config struct {
 	Series       bool
 	NoBreakdown  bool
 	NodeHist     bool
-	Spill        int
+	BurnIn       int
 	MaxMemory    int64
 	Observer     Observer
 	Watch        Watch

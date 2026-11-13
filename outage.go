@@ -8,12 +8,11 @@ import (
 // An outage holding: an outcome whose holding time is the time the
 // reliability block that fired the round stays down. The walk takes
 // it from the block's own repairs, so a per-time cost over the outage
-// follows the repair that caused it. For the analytics and the spill
+// follows the repair that caused it. For the analytics and the burn-in
 // the outcome carries an outageBound in place of a holding
 // distribution: its mean is the block's exact mean down time, its
 // variance unknown, and its tail an exponential at twice the slowest
-// repair, which sizes the window; an outage beyond the window fails the
-// run with the window error, as any holding would.
+// repair, which bounds the burn-in.
 type outageBound struct {
 	mean float64 // u/f: the block's mean down time per failure
 	tail float64 // mean of the exponential that bounds the tail

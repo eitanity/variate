@@ -45,7 +45,8 @@ func TestTimesWithinPeriodAtAnyPeriodNumber(t *testing.T) {
 	sl := w.slots[0]
 	simulate := func(a int64) ([]qstat, []uint64) {
 		sl.id, sl.task, sl.a, sl.b = 1, 1, a, a+w.block
-		w.runTask(wk, sl, 7, wk.hists[0])
+		w.runTask(wk, sl, 7)
+		w.closeRows(sl, wk.hists[0])
 		if sl.err != nil {
 			t.Fatalf("block at %d: %v", a, sl.err)
 		}

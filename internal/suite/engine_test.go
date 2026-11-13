@@ -3,7 +3,6 @@ package suite
 import (
 	"context"
 	"math"
-	"strings"
 	"testing"
 
 	"code.eitanity.com/variate"
@@ -195,26 +194,36 @@ func TestEngineTimeAccounting(t *testing.T) {
 	}
 }
 
-func TestEngineWindowError(t *testing.T) {
+// TestEngineFarBooking: a holding time of 7 periods with blocks of 2
+// books every round three blocks and more ahead of its arrival, through
+// the pending lists, yet each lands in its own period: b's entries in
+// period p equal a's in period p − 7, burn-in rounds included.
+func TestEngineFarBooking(t *testing.T) {
 	g := variate.Graph{
 		Sources: []variate.Source{{ID: "s", Frequency: C(2), To: "a"}},
 		Nodes: []variate.Node{
-			{ID: "a", Next: "b", NextHolding: C(5)},
+			{ID: "a", Next: "b", NextHolding: C(7)},
 			{ID: "b", Functions: []variate.Function{Fn("v", "k", C(1))}},
 		},
 	}
-	m, _, err := g.Compile(variate.Config{Spill: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	w, err := m.NewWorkspace(variate.Config{Periods: 100, Spill: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	_, err = w.Run(context.Background(), 1)
-	if err == nil || !strings.Contains(err.Error(), "beyond the window") {
-		t.Errorf("got %v", err)
+	for _, workers := range []int{1, 4} {
+		m, r := run(t, g, variate.Config{Periods: 1000, BlockPeriods: 2, Workers: workers, Series: true}, 9)
+		if m.BurnIn() < 7 {
+			t.Fatalf("burn-in %d", m.BurnIn())
+		}
+		for p := int64(7); p < 1000; p++ {
+			if a, b := r.Series.Entries(0, p-7), r.Series.Entries(1, p); a != b || b != r.Series.Total(p) {
+				t.Fatalf("workers %d: period %d: b entered %g times, a %g times seven periods before, total %g", workers, p, b, a, r.Series.Total(p))
+			}
+		}
+		// Rounds arriving in the last seven periods book beyond the horizon.
+		beyond := 0.0
+		for p := int64(993); p < 1000; p++ {
+			beyond += r.Series.Entries(0, p)
+		}
+		if r.BeyondHorizon != beyond {
+			t.Errorf("workers %d: beyond the horizon %g, want %g", workers, r.BeyondHorizon, beyond)
+		}
 	}
 }
 
@@ -272,13 +281,13 @@ func TestEnginePeriodSharing(t *testing.T) {
 	}
 }
 
-// TestEngineBurnInAndSpill: with a holding time of exactly 1, every round
-// arriving in [−1, 0) books into [0, 1), every round arriving in [H−1, H)
-// books beyond the horizon, and every booking crosses a period boundary.
-// With blocks of 3 periods the spill crosses a block boundary every third
-// period. The sum of all bookings is then exactly 10 per round arriving in
+// TestEngineBurnInAndHandoff: with a holding time of exactly 1, every
+// round arriving in [−1, 0) books into [0, 1), every round arriving in
+// [H−1, H) books beyond the horizon, and every booking crosses a period
+// boundary. With blocks of 3 periods a booking crosses a block boundary
+// every third period. The sum of all bookings is then exactly 10 per round arriving in
 // [−1, H), burn-in rounds included.
-func TestEngineBurnInAndSpill(t *testing.T) {
+func TestEngineBurnInAndHandoff(t *testing.T) {
 	g := variate.Graph{
 		Sources: []variate.Source{{ID: "s", Frequency: C(4), To: "a"}},
 		Nodes: []variate.Node{
@@ -288,8 +297,8 @@ func TestEngineBurnInAndSpill(t *testing.T) {
 	}
 	for _, block := range []int{3, 7, 1000} {
 		m, r := run(t, g, variate.Config{Periods: 1000, BlockPeriods: block, Series: true}, 21)
-		if m.Spill() != 1 {
-			t.Fatalf("spill %d", m.Spill())
+		if m.BurnIn() < 1 {
+			t.Fatalf("burn-in %d", m.BurnIn())
 		}
 		burnIn := r.Steps/2 - r.Events[0]
 		want := 10 * float64(r.Events[0]+burnIn)

@@ -217,8 +217,8 @@ graphs:
 	if math.Abs(ey.Mean-ew.Mean) > 1e-9*ey.Mean || math.Abs(ey.Mean-2*100*(1+3*4+10)/6.0) > 1e-9*ey.Mean {
 		t.Errorf("means %g %g", ey.Mean, ew.Mean)
 	}
-	if cw.Spill() <= cy.Spill() {
-		t.Errorf("windows year %d week %d", cy.Spill(), cw.Spill())
+	if cw.BurnIn() <= cy.BurnIn() {
+		t.Errorf("burn-in year %d week %d", cy.BurnIn(), cw.BurnIn())
 	}
 }
 

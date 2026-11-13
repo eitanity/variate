@@ -328,7 +328,7 @@ func unitHours(unit string) float64 {
 func settingKeys() []string {
 	return []string{unitPeriods, "allow_unconverged", keyTransform, "transform_grid", "transform_tol", "transform_work", "transform_bytes", "min_hits", "contrib_rse", "target_rse",
 		"tail", "tail_hits", "max_periods", "max_steps", "batch", "hist_res", "seed", "workers",
-		"block_periods", "pool_size", "series", "no_breakdown", "node_hist", "spill", "max_memory",
+		"block_periods", "pool_size", "series", "no_breakdown", "node_hist", "burn_in", "max_memory",
 		"pace", "round_scratch", "record_buffer"}
 }
 
@@ -407,8 +407,8 @@ func setSetting(c *variate.Config, key string, v node) error {
 		c.NoBreakdown, err = v.boolean()
 	case "node_hist":
 		c.NodeHist, err = v.boolean()
-	case "spill":
-		c.Spill, err = smallInt(v)
+	case "burn_in":
+		c.BurnIn, err = smallInt(v)
 	case "max_memory":
 		c.MaxMemory, err = v.integer(0, 1<<62)
 	case "pace":

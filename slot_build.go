@@ -1,9 +1,11 @@
 package variate
 
-func newSlot(l layout, s int, srcs, nodes, outs, thresholds int) *slot {
+func newSlot(l layout, block int64, pendCap, nslots, srcs, nodes, outs, thresholds int) *slot {
 	sl := &slot{
-		window:     make([]float64, (s+1)*l.width),
-		head:       make([]float64, s*l.width),
+		rows:       make([]float64, int(block)*l.width),
+		far:        make([]float64, l.width),
+		pend:       newPending(pendCap),
+		incoming:   make([]float64, nslots+1),
 		stats:      make([]qstat, l.width),
 		events:     make([]uint64, srcs),
 		reach:      make([]uint64, srcs*nodes),

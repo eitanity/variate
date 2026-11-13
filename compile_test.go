@@ -67,7 +67,7 @@ func TestCompileDiamond(t *testing.T) {
 	if got := strings.Join(m.Categories(), ","); got != "labour,parts" {
 		t.Errorf("categories %s", got)
 	}
-	if m.Spill() != 0 || m.HasDelays() {
+	if m.BurnIn() != 0 || m.HasDelays() {
 		t.Error("no delays expected")
 	}
 	// Reach: d is reached with certainty, b with 0.3.
@@ -153,8 +153,8 @@ func TestCompileErrors(t *testing.T) {
 	if _, _, err := diamond().Compile(Config{Watch: Watch{Nodes: []string{"zz"}}}); err == nil || !strings.Contains(err.Error(), "not a node") {
 		t.Errorf("watch: %v", err)
 	}
-	if _, _, err := diamond().Compile(Config{Spill: -1}); err == nil {
-		t.Error("negative spill accepted")
+	if _, _, err := diamond().Compile(Config{BurnIn: -1}); err == nil {
+		t.Error("negative burn-in accepted")
 	}
 }
 
@@ -199,34 +199,37 @@ func TestCompileSelections(t *testing.T) {
 	}
 }
 
-func TestCompileSpillAndDelays(t *testing.T) {
+func TestCompileBurnInAndDelays(t *testing.T) {
 	g := diamond()
 	g.Nodes[0].Outcomes[0].Holding = c(2)
 	g.Nodes[1].NextHolding = c(3)
 	m, ws := mustCompile(t, g, Config{})
-	// Longest weighted path: a→b (2) then b→d (3).
-	if !m.HasDelays() || m.Spill() != 5 {
-		t.Errorf("spill %d", m.Spill())
+	// d's entry follows two holding times; its delay reaches B only if one
+	// of them reaches B/2, and the constant 3 stops doing so at B = 6.
+	if !m.HasDelays() || m.BurnIn() != 6 {
+		t.Errorf("burn-in %d", m.BurnIn())
 	}
-	if codes := warningCodes(ws); codes["wide-window"] != 0 {
-		t.Error("unexpected wide-window warning")
+	if codes := warningCodes(ws); codes["long-burn-in"] != 0 {
+		t.Error("unexpected long-burn-in warning")
 	}
-	m, _ = mustCompile(t, g, Config{Spill: 7})
-	if m.Spill() != 7 {
-		t.Errorf("override spill %d", m.Spill())
+	m, _ = mustCompile(t, g, Config{BurnIn: 7})
+	if m.BurnIn() != 7 {
+		t.Errorf("override burn-in %d", m.BurnIn())
 	}
-	// A heavy-tailed holding time drives S past the warning threshold.
-	pa, _ := dist.NewPareto(1, 3)
+	// A rate over a Pareto(1, 1.5) holding time leaves 2/√(B/2) out of
+	// its mean 3, which needs B near 8.9e7: a warning.
+	g.Nodes[1].Functions[0].Basis = PerTime
+	pa, _ := dist.NewPareto(1, 1.5)
 	g.Nodes[1].NextHolding = pa
 	m, ws = mustCompile(t, g, Config{})
-	if m.Spill() <= spillWarn || warningCodes(ws)["wide-window"] != 1 {
-		t.Errorf("pareto holding: spill %d warnings %v", m.Spill(), ws)
+	if b := float64(m.BurnIn()); math.Abs(b-2*(2/3e-4)*(2/3e-4)) > 1e-3*b || warningCodes(ws)["long-burn-in"] != 1 {
+		t.Errorf("pareto 1.5 rate: burn-in %d warnings %v", m.BurnIn(), ws)
 	}
-	// A heavier tail puts S beyond any window: refused, not wrapped.
-	pa, _ = dist.NewPareto(1, 1.5)
+	// At tail index 1.2 the burn-in would pass 2^31 periods: refused.
+	pa, _ = dist.NewPareto(1, 1.2)
 	g.Nodes[1].NextHolding = pa
 	if _, _, err := g.Compile(Config{}); err == nil || !strings.Contains(err.Error(), "add a cap") {
-		t.Errorf("pareto 1.5 holding: %v", err)
+		t.Errorf("pareto 1.2 rate: %v", err)
 	}
 }
 

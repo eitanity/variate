@@ -13,12 +13,6 @@ const (
 
 	// probSumTol is the tolerance on fixed probabilities summing to 1.
 	probSumTol = 1e-12
-	// pathLevel is the tail probability the path-duration bound allows.
-	pathLevel = 1e-15
-	// spillWarn is the window width above which Compile warns.
-	spillWarn = 1000
-	// maxSpill is the widest window, the largest Spill a config may set.
-	maxSpill = 1<<31 - 1
 	// aliasThreshold is the number of fixed outcomes above which a node
 	// selects with an alias table.
 	aliasThreshold = 8
@@ -95,7 +89,8 @@ type Compiled struct {
 	periodSlots                                  int
 	topo                                         []int32
 	reach                                        [][]float64
-	spill                                        int
+	burnIn                                       int64 // burn-in periods
+	pendCap                                      int   // pending bookings a slot or the finaliser holds
 	hasDelays                                    bool
 	renewal                                      bool        // a source with the Erlang or repair law
 	hasRepair                                    bool        // a source with the repair law or a reliability diagram: no closed variance
@@ -177,7 +172,7 @@ func (g Graph) flattenChecked(cfg Config) (*Compiled, *builder, []Warning, error
 	warnings := b.warnings
 	warnings = append(warnings, m.unreachableWarnings()...)
 	warnings = append(warnings, m.workWarning())
-	if err := m.setSpill(cfg.Spill, &warnings); err != nil {
+	if err := m.setBurnIn(cfg.BurnIn, &warnings); err != nil {
 		return nil, nil, nil, err
 	}
 	return m, b, warnings, nil
@@ -264,8 +259,8 @@ func (m *Compiled) OutcomeNames() []string { return m.outcomeNames }
 // Categories returns the category names in index order.
 func (m *Compiled) Categories() []string { return m.categories }
 
-// Spill returns the window width S.
-func (m *Compiled) Spill() int { return m.spill }
+// BurnIn returns the burn-in in periods.
+func (m *Compiled) BurnIn() int64 { return m.burnIn }
 
 // HasDelays reports whether any outcome has a holding time.
 func (m *Compiled) HasDelays() bool { return m.hasDelays }
@@ -382,98 +377,6 @@ func (m *Compiled) workWarning() Warning {
 		msg += ", arrivals drawn per period " + figure(arrivals)
 	}
 	return Warning{Code: "expected-work", Subject: "model", Message: msg}
-}
-
-// setSpill computes the path-duration bound S, or takes the override.
-func (m *Compiled) setSpill(override int, ws *[]Warning) error {
-	if override < 0 {
-		return modelError("config", "Spill", "must be >= 0")
-	}
-	if !m.hasDelays {
-		m.spill = 0
-		return nil
-	}
-	if override > 0 {
-		m.spill = override
-		return nil
-	}
-	// L: the largest number of non-zero holding times on any path.
-	counts := make([]float64, len(m.nodes))
-	m.longestPath(counts, func(cout) float64 { return 1 })
-	maxL := 0.0
-	for _, s := range m.srcs {
-		maxL = math.Max(maxL, counts[s.to])
-	}
-	level := pathLevel / maxL
-	weights := make([]float64, len(m.nodes))
-	driver := m.longestPath(weights, func(o cout) float64 {
-		return m.pools[o.hold].QuantileUpper(level)
-	})
-	q := 0.0
-	for _, s := range m.srcs {
-		q = math.Max(q, weights[s.to])
-	}
-	if math.IsInf(q, 0) || math.IsNaN(q) {
-		return modelError("outcome", m.outcomeNames[driver], "holding time has no finite quantile at the path-duration level; add a cap")
-	}
-	if q > maxSpill {
-		return modelError("outcome", m.outcomeNames[driver], "path-duration bound S = "+ftoa(math.Ceil(q))+" periods is above "+itoa(maxSpill)+"; add a cap")
-	}
-	m.spill = int(math.Ceil(q))
-	if m.spill > spillWarn {
-		*ws = append(*ws, Warning{Code: "wide-window", Subject: m.outcomeNames[driver], Message: "path-duration bound S = " + itoa(m.spill) + " periods; a cap on this holding time would shorten it"})
-	}
-	return nil
-}
-
-// longestPath fills best[v] with the heaviest path from v to a leaf, where
-// an outcome with a holding time weighs w(o) and others 0, by a backward
-// pass in reverse topological order. It returns the outcome that starts the
-// heaviest path from any source target.
-func (m *Compiled) longestPath(best []float64, w func(cout) float64) int32 {
-	via := make([]int32, len(m.nodes))
-	for i := len(m.topo) - 1; i >= 0; i-- {
-		v := m.topo[i]
-		via[v] = noIndex
-		n := m.nodes[v]
-		// bound: outcomes of one node
-		for j := n.outStart; j < n.outEnd; j++ {
-			o := m.outs[j]
-			c := best[o.to]
-			if o.hold != noIndex {
-				c += w(o)
-			}
-			if c > best[v] || via[v] == noIndex {
-				best[v], via[v] = c, j
-			}
-		}
-	}
-	driver := noIndex
-	top := -1.0
-	for _, s := range m.srcs {
-		if best[s.to] > top && via[s.to] != noIndex {
-			top = best[s.to]
-			driver = m.heaviestOutcome(via, s.to)
-		}
-	}
-	return driver
-}
-
-// heaviestOutcome follows via from v to the first outcome with a holding
-// time on the heaviest path.
-func (m *Compiled) heaviestOutcome(via []int32, v int32) int32 {
-	// bound: a path visits each node at most once
-	for step := 0; step < len(m.nodes); step++ {
-		j := via[v]
-		if j == noIndex {
-			return noIndex
-		}
-		if m.outs[j].hold != noIndex {
-			return j
-		}
-		v = m.outs[j].to
-	}
-	return noIndex
 }
 
 // sortOutcomesDesc orders fixed outcomes by descending probability,

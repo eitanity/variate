@@ -8,10 +8,15 @@ import (
 	"code.eitanity.com/variate/stats"
 )
 
-// Slot states.
+// Slot states. A slot goes free → running (simulating its block) →
+// simulated → handed (the finaliser has added what earlier tasks booked
+// into its block) → closing (its rows being closed) → done → free.
 const (
 	slotFree int8 = iota
 	slotRunning
+	slotSimulated
+	slotHanded
+	slotClosing
 	slotDone
 )
 
@@ -42,8 +47,10 @@ type worker struct {
 }
 
 // sched is the shared state of the worker pool and the finaliser, guarded
-// by one mutex and one condition variable. Workers claim a free slot, then
-// the next task index; the finaliser takes slots in task order.
+// by one mutex and one condition variable. Workers close a handed slot's
+// rows, or claim a free slot and the next task index; the finaliser hands
+// slots their bookings and folds them, each in task order. Burn-in tasks
+// have negative indices.
 type sched struct {
 	mu        sync.Mutex
 	cv        *sync.Cond
@@ -53,12 +60,13 @@ type sched struct {
 	batch     int64 // tasks per histogram batch
 	tasks     int64 // tasks in the run
 	next      int64 // next task index to claim
+	handNext  int64 // next task index to hand its bookings
 	finalNext int64 // next task index to finalise
 	seed      uint64
 	ctx       context.Context
 	slotState []int8
 	slotTask  []int64
-	running   int
+	running   int // slots being simulated or closed
 	err       error
 	stop      bool // claim no more tasks
 	done      bool // the finaliser has finished the run
@@ -69,7 +77,18 @@ type sched struct {
 // workers' histograms alternate by batch, so a task two batches ahead
 // would write into the set the finaliser is merging.
 func (s *sched) canClaim() bool {
-	return s.active && !s.stop && s.next < s.tasks && s.next/s.batch <= s.finalNext/s.batch+1 && s.freeSlot() >= 0
+	ahead := s.next < 0 || s.next/s.batch <= max(s.finalNext, 0)/s.batch+1
+	return s.active && !s.stop && s.next < s.tasks && ahead && s.freeSlot() >= 0
+}
+
+// canClose: a run is active, not stopped, and a slot is handed.
+func (s *sched) canClose() bool {
+	return s.active && !s.stop && s.slotIn(slotHanded) >= 0
+}
+
+// canHand: the next task to hand has been simulated.
+func (s *sched) canHand() bool {
+	return s.active && !s.stop && !s.done && s.slotOf(s.handNext, slotSimulated) >= 0
 }
 
 // canFinalise: the next task's slot is done, or the run is stopped with
@@ -81,41 +100,54 @@ func (s *sched) canFinalise() bool {
 	if s.stop {
 		return s.running == 0
 	}
-	return s.slotOf(s.finalNext) >= 0
+	return s.slotOf(s.finalNext, slotDone) >= 0
 }
 
-func (s *sched) freeSlot() int {
-	for i, st := range s.slotState {
-		if st == slotFree {
+func (s *sched) freeSlot() int { return s.slotIn(slotFree) }
+
+// slotIn returns the first slot in state st, or −1.
+func (s *sched) slotIn(st int8) int {
+	for i, x := range s.slotState {
+		if x == st {
 			return i
 		}
 	}
 	return -1
 }
 
-func (s *sched) slotOf(task int64) int {
-	for i, st := range s.slotState {
-		if st == slotDone && s.slotTask[i] == task {
+// slotOf returns the slot of task in state st, or −1.
+func (s *sched) slotOf(task int64, st int8) int {
+	for i, x := range s.slotState {
+		if x == st && s.slotTask[i] == task {
 			return i
 		}
 	}
 	return -1
 }
 
-// workerLoop runs until Close. Within a run it claims a slot and a task,
-// simulates, and marks the slot done.
+// workerLoop runs until Close. Within a run it closes a handed slot's
+// rows, or else claims a slot and a task and simulates it.
 func (w *Workspace) workerLoop(wk *worker) {
 	s := &w.sched
 	// bound: until Close
 	for {
 		s.mu.Lock()
-		// bound: wakes until a task or Close
-		for !s.closing && !s.canClaim() {
+		// bound: wakes until a slot to close, a task or Close
+		for !s.closing && !s.canClose() && !s.canClaim() {
 			s.cv.Wait()
 		}
 		if s.closing {
 			s.mu.Unlock()
 			return
+		}
+		if i := s.slotIn(slotHanded); i >= 0 && s.canClose() {
+			s.slotState[i] = slotClosing
+			s.running++
+			s.mu.Unlock()
+			sl := w.slots[i]
+			w.closeRows(sl, wk.hists[(sl.task/w.batch)&1])
+			w.endJob(i, slotDone, sl.err)
+			continue
 		}
 		i := s.freeSlot()
 		j := s.next
@@ -130,49 +162,61 @@ func (w *Workspace) workerLoop(wk *worker) {
 		s.mu.Unlock()
 
 		sl := w.slots[i]
-		sl.id = uint32(j & (maxTasks - 1)) // j < maxTasks by construction
+		sl.id = uint32(j & (maxTasks - 1)) //nolint:gosec // distinct for burn-in and run tasks while they number below maxTasks
 		sl.task = j
-		sl.a = j * w.block
-		sl.b = min(sl.a+w.block, w.horizon)
-		w.runTask(wk, sl, seed, wk.hists[(j/w.batch)&1])
-
-		s.mu.Lock()
-		s.slotState[i] = slotDone
-		s.running--
-		if sl.err != nil && s.err == nil {
-			s.err = sl.err
-			s.stop = true
-		}
-		s.cv.Broadcast()
-		s.mu.Unlock()
+		sl.a = max(j*w.block, -w.m.burnIn)
+		sl.b = min(j*w.block+w.block, w.horizon)
+		w.runTask(wk, sl, seed)
+		w.endJob(i, slotSimulated, sl.err)
 	}
 }
 
-// finaliserLoop folds done slots into the result in task order, merging
-// each batch's worker histograms when the batch completes, and, on an
-// adaptive run, deciding at each batch boundary whether to stop. Once
-// stopped, slots still done are abandoned.
+// endJob moves slot i to state st after a worker's job on it, recording
+// the first error, which stops the run.
+func (w *Workspace) endJob(i int, st int8, err error) {
+	s := &w.sched
+	s.mu.Lock()
+	s.slotState[i] = st
+	s.running--
+	if err != nil && s.err == nil {
+		s.err = err
+		s.stop = true
+	}
+	s.cv.Broadcast()
+	s.mu.Unlock()
+}
+
+// finaliserLoop hands each simulated slot, in task order, what the tasks
+// before it booked into its block, and folds closed slots into the
+// result, also in task order, merging each batch's worker histograms when
+// the batch completes and, on an adaptive run, deciding at each batch
+// boundary whether to stop. Once stopped, slots not yet folded are
+// abandoned.
 func (w *Workspace) finaliserLoop() {
 	s := &w.sched
 	// bound: until Close
 	for {
 		s.mu.Lock()
-		// bound: wakes until the next task is done, the run is stopped, or Close
-		for !s.closing && !s.canFinalise() {
+		// bound: wakes until a slot to hand or fold, the run is stopped, or Close
+		for !s.closing && !s.canHand() && !s.canFinalise() {
 			s.cv.Wait()
 		}
 		if s.closing {
 			s.mu.Unlock()
 			return
 		}
+		if s.canHand() {
+			w.handNextSlot()
+			continue
+		}
 		if s.stop {
-			w.endRun(s.finalNext * w.block)
+			w.endRun(s.finalNext)
 			s.done = true
 			s.cv.Broadcast()
 			s.mu.Unlock()
 			continue
 		}
-		i := s.slotOf(s.finalNext)
+		i := s.slotOf(s.finalNext, slotDone)
 		s.mu.Unlock()
 
 		stopNow, last := w.finaliseOne(i)
@@ -183,7 +227,7 @@ func (w *Workspace) finaliserLoop() {
 		if stopNow || last {
 			s.stop = true
 			if s.running == 0 {
-				w.endRun(s.finalNext * w.block)
+				w.endRun(s.finalNext)
 				s.done = true
 			}
 		}
@@ -192,12 +236,37 @@ func (w *Workspace) finaliserLoop() {
 	}
 }
 
+// handNextSlot hands the next task's slot its bookings. It is called with
+// the scheduler's lock held and returns with it released.
+func (w *Workspace) handNextSlot() {
+	s := &w.sched
+	i := s.slotOf(s.handNext, slotSimulated)
+	s.mu.Unlock()
+	sl := w.slots[i]
+	err := w.handOff(sl)
+	s.mu.Lock()
+	s.slotState[i] = slotHanded
+	if sl.task < 0 {
+		s.slotState[i] = slotDone // a burn-in task has no rows to close
+	}
+	s.handNext++
+	if err != nil && s.err == nil {
+		s.err = err
+		s.stop = true
+	}
+	s.cv.Broadcast()
+	s.mu.Unlock()
+}
+
 // finaliseOne folds the slot's task into the result and, at a batch
 // boundary, merges the batch's histograms and applies the criteria. It
 // reports whether the run should stop and whether this was the last task.
 func (w *Workspace) finaliseOne(i int) (stopNow, last bool) {
 	sl := w.slots[i]
 	w.finalise(sl)
+	if sl.task < 0 {
+		return false, false
+	}
 	if w.stream && !w.stopped {
 		stop, err := w.deliver(sl)
 		if err != nil {
@@ -231,12 +300,14 @@ func (w *Workspace) finaliseOne(i int) (stopNow, last bool) {
 	return stopNow, last
 }
 
-// endRun closes the run at the given number of finalised periods.
-func (w *Workspace) endRun(periods int64) {
+// endRun closes the run once the tasks before stop are folded, adding
+// what they booked past the folded periods to BeyondHorizon.
+func (w *Workspace) endRun(stop int64) {
+	periods := max(stop, 0) * w.block
 	if !w.adaptive && !w.stopped {
 		periods = w.horizon
 	}
-	w.flushCarry(periods)
+	w.flushPending(stop)
 	w.result.Periods = periods
 }
 

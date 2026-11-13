@@ -618,8 +618,7 @@ func checkSlot(kind, subject string, d dist.Distribution, lo, hi float64, allowN
 }
 
 // checkHolding validates a holding time: non-negative support and a
-// finite mean. Its quantile function, needed for the path-duration bound,
-// is guaranteed by the type.
+// finite mean, which the burn-in bound needs.
 func checkHolding(subject string, d dist.Continuous) error {
 	if d == nil {
 		return nil

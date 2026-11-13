@@ -630,11 +630,11 @@ func (w *Workspace) count(wk *worker, v int32) {
 // above its level. The sources walk before the triggers, and each
 // trigger after those whose walks feed it, so the sum is the period's
 // whole.
-func (w *Workspace) runTrigger(wk *worker, sl *slot, k int32, p, first int64) {
+func (w *Workspace) runTrigger(wk *worker, sl *slot, k int32, p int64) {
 	i := w.m.srcs[k].trigger
 	tr := w.m.trigs[i]
 	// The sum the trigger tests is a quantity of the period, kept in its row.
-	sl.row(w.l, w.s, first, p)[w.l.trig(int(i))] = wk.sums[i]
+	sl.rowAt(w.l, p)[w.l.trig(int(i))] = wk.sums[i]
 	if !(wk.sums[i] > tr.over) {
 		return
 	}
@@ -644,7 +644,7 @@ func (w *Workspace) runTrigger(wk *worker, sl *slot, k int32, p, first int64) {
 	if w.stream {
 		w.beginRound(wk, periodEnd)
 	}
-	w.walk(wk, sl, k, tr.node, periodEnd, p, first)
+	w.walk(wk, sl, k, tr.node, periodEnd, p)
 }
 
 // triggerInputs lists the nodes whose functions or entries feed

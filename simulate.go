@@ -7,31 +7,39 @@ import (
 	"code.eitanity.com/variate/stats"
 )
 
-// runTask simulates the block [a, b) into the slot: task 0 also the
-// burn-in arrivals in [−S, 0). Rows close as the task leaves them, except
-// the first S periods of the block, which move to the head.
-func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64, hs []*stats.LogHist) {
+// runTask simulates the block [a, b) into the slot's rows; a booking past
+// the block goes to the slot's pending list. A burn-in task's block is
+// before period 0. The rows are closed later, once the finaliser has
+// handed the slot what earlier tasks booked into its block.
+func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64) {
 	m := w.m
 	sl.reset()
 	wk.ss.Reset(seed, sl.id)
-	first := sl.a
-	if sl.task == 0 {
-		first = -int64(w.s)
-	}
 	if m.renewal {
 		w.startSources(wk)
 	}
-	// bound: the block plus the burn-in
-	for p := first; p < sl.b && sl.err == nil; p++ {
-		sl.base = int((p - first) % int64(w.s+1))
+	// bound: the block
+	for p := sl.a; p < sl.b && sl.err == nil; p++ {
 		w.drawPeriod(wk, p)
 		for k := range m.srcs {
-			w.runSource(wk, sl, index(k), p, first)
+			w.runSource(wk, sl, index(k), p)
 		}
 		if w.stream {
 			w.flushPeriod(wk, sl)
 		}
-		w.leavePeriod(sl, p, first, hs)
+	}
+}
+
+// closeRows closes the block's rows in period order, once the slot holds
+// everything booked into them; a burn-in task's are dropped.
+func (w *Workspace) closeRows(sl *slot, hs []*stats.LogHist) {
+	if sl.task < 0 {
+		return
+	}
+	// bound: the block
+	for p := sl.a; p < sl.b && sl.err == nil; p++ {
+		w.closeRow(sl, sl.rowAt(w.l, p), p, hs)
+		sl.closed++
 	}
 }
 
@@ -60,22 +68,22 @@ func (w *Workspace) draw(wk *worker, pool int32) float64 {
 }
 
 // runSource emits the period's rounds of source k and walks each one.
-func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p, first int64) {
+func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p int64) {
 	m := w.m
 	src := m.srcs[k]
 	if src.trigger != noIndex {
-		w.runTrigger(wk, sl, k, p, first)
+		w.runTrigger(wk, sl, k, p)
 		return
 	}
 	// The times a source carries are from the period's start; they move
 	// to the next period's start by one exact subtraction.
 	if src.chainEnd > src.chainStart {
-		w.runChainSource(wk, sl, k, p, first)
+		w.runChainSource(wk, sl, k, p)
 		wk.chainT[k]--
 		return
 	}
 	if src.every > 1 || src.repair != noIndex {
-		w.runRenewalSource(wk, sl, k, p, first)
+		w.runRenewalSource(wk, sl, k, p)
 		wk.downUntil[k]--
 		return
 	}
@@ -96,7 +104,7 @@ func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p, first int64) {
 		if w.stream {
 			w.beginRound(wk, t)
 		}
-		w.walk(wk, sl, k, src.to, t, p, first)
+		w.walk(wk, sl, k, src.to, t, p)
 	}
 }
 
@@ -104,7 +112,7 @@ func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p, first int64) {
 // goes. The round's arrival period is p, and t is from its start, so a
 // time within a period keeps its resolution at any p; counts are kept
 // for p ≥ 0.
-func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p, first int64) {
+func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p int64) {
 	m := w.m
 	nodes := len(m.nodes)
 	// bound: a path visits each node at most once
@@ -113,14 +121,15 @@ func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p, first i
 		if p >= 0 {
 			sl.reach[int(k)*nodes+int(v)]++
 		}
-		row, ok := w.rowFor(sl, t, p, noIndex)
-		if !ok {
-			return
-		}
+		row := w.rowFor(sl, t, p)
 		row[w.l.entry(v)]++
 		w.count(wk, v)
 		n := m.nodes[v]
 		booked := w.bookEntry(wk, row, k, v, n)
+		w.flushFar(sl)
+		if sl.err != nil {
+			return
+		}
 		if w.stream && wk.live {
 			w.prune(wk, v)
 		}
@@ -131,7 +140,7 @@ func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p, first i
 			}
 			return
 		}
-		next, tau, booked2, ok := w.advance(wk, sl, k, v, n, t, p, first, booked)
+		next, tau, booked2, ok := w.advance(wk, sl, k, v, n, t, p, booked)
 		if !ok {
 			return
 		}
@@ -169,8 +178,8 @@ type hop struct{ out, to int32 }
 
 // advance selects the outcome out of node v, counts it, draws the holding
 // time and books the PerTime functions over it. It returns the hop, the
-// holding time and the value booked so far; ok is false on a window error.
-func (w *Workspace) advance(wk *worker, sl *slot, k, v int32, n cnode, t float64, p, first int64, booked float64) (hop, float64, float64, bool) {
+// holding time and the value booked so far; ok is false on an error.
+func (w *Workspace) advance(wk *worker, sl *slot, k, v int32, n cnode, t float64, p int64, booked float64) (hop, float64, float64, bool) {
 	m := w.m
 	j := w.choose(wk, v, n)
 	if p >= 0 {
@@ -185,11 +194,10 @@ func (w *Workspace) advance(wk *worker, sl *slot, k, v int32, n cnode, t float64
 		tau = w.draw(wk, o.hold)
 	}
 	if n.rateStart != n.rateEnd && tau > 0 {
-		rated, ok := w.bookRate(wk, sl, k, v, n, t, t+tau, p, first, j)
-		if !ok {
+		booked += w.bookRate(wk, sl, k, v, n, t, t+tau, p)
+		if sl.err != nil {
 			return hop{}, 0, 0, false
 		}
-		booked += rated
 	}
 	return hop{out: j, to: o.to}, tau, booked, true
 }
@@ -216,22 +224,15 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode) fl
 	return booked
 }
 
-// rowFor returns the window row for a booking at time t from the start
-// of arrival period p, or ok = false after recording a window error: the
-// booking lands more than S periods after the arrival period.
-func (w *Workspace) rowFor(sl *slot, t float64, p int64, via int32) ([]float64, bool) {
-	if !(t < float64(w.s)+1) {
-		sl.err = w.windowError(p, t, via)
-		return nil, false
+// rowFor returns the row for a booking at time t from the start of
+// arrival period p: the period's row within the block, else the scratch
+// row, which the caller flushes to the pending list.
+func (w *Workspace) rowFor(sl *slot, t float64, p int64) []float64 {
+	q := p + int64(math.Floor(t))
+	if q < sl.b {
+		return sl.rowAt(w.l, q)
 	}
-	// The booking's period lies d = ⌊t⌋ rows past the arrival period's
-	// own row in the ring; d is within [0, S] by the check above, so one
-	// subtraction wraps it.
-	r := sl.base + int(math.Floor(t))
-	if r > w.s {
-		r -= w.s + 1
-	}
-	return sl.window[r*w.l.width : (r+1)*w.l.width], true
+	return sl.farRow(q)
 }
 
 // book adds a value to a row's total, category, source and node
@@ -244,29 +245,38 @@ func (w *Workspace) book(row []float64, k, v, cat int32, x float64) {
 	row[l.contrib(v)] += x
 }
 
-// bookRate spreads each PerTime rate of node v over [a, b), one row per
-// period overlapped, and returns the value booked.
-func (w *Workspace) bookRate(wk *worker, sl *slot, k, v int32, n cnode, a, b float64, p, first int64, via int32) (float64, bool) {
+// bookRate spreads each PerTime rate of node v over [a, b), times from
+// the start of arrival period p: a row per period overlapped within the
+// block, and the rest past it as one pending segment. It returns the
+// value booked.
+func (w *Workspace) bookRate(wk *worker, sl *slot, k, v int32, n cnode, a, b float64, p int64) float64 {
 	m := w.m
 	total := 0.0
+	end := float64(sl.b - p)
 	// bound: functions of one node
 	for f := n.rateStart; f < n.rateEnd; f++ {
 		rate := w.draw(wk, m.fns[f].pool)
-		// bound: the periods the holding time spans, within the window
-		for q := math.Floor(a); q < b; q++ {
-			row, ok := w.rowFor(sl, q, p, via)
-			if !ok {
-				return total, false
-			}
+		cat := m.fns[f].category
+		// bound: the periods the holding time spans within the block
+		for q := math.Floor(a); q < math.Min(b, end); q++ {
 			lo := math.Max(a, q)
 			hi := math.Min(b, q+1)
 			x := rate * (hi - lo)
-			w.book(row, k, v, m.fns[f].category, x)
+			w.book(sl.rowAt(w.l, p+int64(q)), k, v, cat, x)
+			w.feed(wk, f, x)
+			total += x
+		}
+		if b > end {
+			lo := math.Max(a, end)
+			x := rate * (b - lo)
+			if !sl.pend.addSeg(pendSeg{p0: p, from: sl.task, lo: lo, hi: b, rate: rate, k: k, v: v, cat: cat}) && sl.err == nil {
+				sl.err = pendingError(len(sl.pend.segs), sl.b)
+			}
 			w.feed(wk, f, x)
 			total += x
 		}
 	}
-	return total, true
+	return total
 }
 
 // choose selects an outcome of node v by its selection mode.
@@ -305,22 +315,6 @@ func (w *Workspace) choose(wk *worker, v int32, n cnode) int32 {
 		}
 		return n.outEnd - 1
 	}
-}
-
-// leavePeriod closes the row of period p, or parks it in the head when it
-// may still receive the previous task's spill, or drops it in the burn-in.
-func (w *Workspace) leavePeriod(sl *slot, p, first int64, hs []*stats.LogHist) {
-	row := sl.row(w.l, w.s, first, p)
-	switch {
-	case p < 0:
-	case p < sl.a+int64(w.s):
-		h := int(p-sl.a) * w.l.width
-		copy(sl.head[h:h+w.l.width], row)
-	default:
-		w.closeRow(sl, row, p, hs)
-		sl.closed++
-	}
-	clear(row)
 }
 
 // closeRow folds a finished period into the slot statistics and the

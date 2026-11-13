@@ -267,7 +267,7 @@ constant that takes a range is written `{ constant: 0.3, range: [0.2,
 | beta | `{ beta: [alpha, beta] }` or `{ beta: { mean, sd } }` | the natural uncertain probability |
 | Weibull | `{ weibull: { shape, scale } }` | |
 | Pareto | `{ pareto: { min, alpha } }` | mean finite only for `alpha > 1` |
-| log-logistic | `{ loglogistic: { shape, scale } }` | `scale` is the median; mean finite only for `shape > 1`, variance only for `shape > 2`; as a holding time its tail makes the path-duration bound huge, so give it a `truncate` |
+| log-logistic | `{ loglogistic: { shape, scale } }` | `scale` is the median; mean finite only for `shape > 1`, variance only for `shape > 2`; as a holding time, the heavier its tail the longer the burn-in, and a tail that would need more than 2³¹ periods of it is refused: give that one a `truncate` |
 | generalised Pareto | `{ gpd: { loc, scale, shape } }` | |
 | Bernoulli | `{ bernoulli: p }` | |
 | binomial | `{ binomial: { n, p } }` | |
@@ -495,7 +495,7 @@ flag wins.
 | `allow_unconverged` | run to the caps when the plan exceeds them, instead of refusing. |
 | `transform` | also compute the exact distribution by FFT at compile, where the model allows it; `transform_grid`, `transform_tol`, `transform_work` and `transform_bytes` set its largest grid, tolerance, work budget and the memory a pass may allocate (in the browser, unless set, a tolerance of 0.01 and 640 MB). The tolerance is met at a point when either P(T ≥ x) or the quantiles there are bracketed within it, relatively. |
 | `block_periods` | periods per task; the default is 4096, or a thirty-second of `periods` in a fixed run. |
-| `batch`, `pool_size`, `spill`, `max_memory`, `round_scratch`, `record_buffer` | sizing of the run's buffers; the defaults suit nearly every model. |
+| `batch`, `pool_size`, `burn_in`, `max_memory`, `round_scratch`, `record_buffer` | sizing of the run's buffers; the defaults suit nearly every model. |
 | `hist_res` | the relative width of the histogram bins the quantiles come from (default 0.001). |
 | `series` | keep every period's totals for output. |
 | `no_breakdown` | skip the per-category, per-source and per-node contribution figures, their precision criteria and the tail shares, so the run is sized by the total alone: much faster when a breakdown sets the length. |

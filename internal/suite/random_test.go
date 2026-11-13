@@ -432,7 +432,7 @@ func TestRandomDAGsAgainstOracle(t *testing.T) {
 		name := g.ID
 		const h = 6000
 		m, r := run(t, g, variate.Config{Periods: h, BlockPeriods: 500, Series: true}, seed+100)
-		o := oracle.Run(g, h, m.Spill(), seed+200)
+		o := oracle.Run(g, h, int(m.BurnIn()), seed+200)
 		buf := make([]float64, h)
 		if _, p := ks2(r.Series.TotalColumn(buf), o.Total); p < 1e-4 {
 			t.Errorf("%s total distribution differs from the oracle, p=%.3g", name, p)

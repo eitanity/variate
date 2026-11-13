@@ -15,10 +15,12 @@ import (
 
 const (
 	defaultBlockPeriods = 4096
-	defaultPoolSize     = 1024
-	defaultHistRes      = 1e-3
-	defaultBatch        = 64
-	defaultMaxMemory    = 4 << 30
+	// maxSlotValues bounds a slot's rows under the default block.
+	maxSlotValues    = 1 << 19
+	defaultPoolSize  = 1024
+	defaultHistRes   = 1e-3
+	defaultBatch     = 64
+	defaultMaxMemory = 4 << 30
 	// maxTasks keeps the stream key injective.
 	maxTasks = 1 << 32
 )
@@ -39,14 +41,13 @@ type Workspace struct {
 	m           *Compiled
 	cfg         Config
 	l           layout
-	s           int
+	burnIn      int64 // burn-in tasks, before task 0
 	block       int64
 	batch       int64
 	horizon     int64
 	workers     []*worker
 	slots       []*slot
-	carry       []float64 // S rows of spill from the last finalised task
-	carryAt     int64     // first period the carry buffer holds
+	store       pending // what finished tasks booked past the blocks handed so far
 	result      Result
 	hists       []*stats.LogHist // global, by row quantity; nil without a histogram
 	delays      bool
@@ -81,7 +82,7 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if cfg.Periods == 0 && cfg.Series {
 		return nil, errors.New("config: Series needs a fixed Periods")
 	}
-	w := &Workspace{m: m, cfg: cfg, l: newLayout(m), s: m.spill, delays: m.hasDelays || m.renewal}
+	w := &Workspace{m: m, cfg: cfg, l: newLayout(m), delays: m.hasDelays || m.renewal}
 	w.rows = m.Plan()
 	w.labels = make([]string, len(w.rows))
 	for i, r := range w.rows {
@@ -91,13 +92,14 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	w.planBinding = "plan: " + crit + " " + driver
 	w.unmet = make([]string, 0, len(w.rows))
 	w.result.Unmet = make([]string, 0, len(w.rows))
-	w.block = blockPeriods(cfg, int64(w.s))
+	w.block = blockPeriods(cfg, w.l.width)
+	w.burnIn = (m.burnIn + w.block - 1) / w.block
 	horizon := cfg.Periods
 	if horizon == 0 {
 		horizon = m.crit.maxPeriods
 	}
-	if (horizon+w.block-1)/w.block >= maxTasks {
-		return nil, errors.New("config: more than 2^32 tasks; raise BlockPeriods or lower MaxPeriods")
+	if (horizon+w.block-1)/w.block+w.burnIn >= maxTasks {
+		return nil, errors.New("config: more than 2^32 tasks with the burn-in; raise BlockPeriods or lower MaxPeriods")
 	}
 	w.batch = int64(cfg.Batch)
 	if w.batch <= 0 {
@@ -117,14 +119,14 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	w.carry = make([]float64, w.s*w.l.width)
+	w.store = newPending(m.pendCap)
 	if cfg.Series {
 		w.result.Series = &Series{l: w.l, rows: make([]float64, int(cfg.Periods)*w.l.width), n: cfg.Periods}
 	}
 	// bound: workers or slots, fixed at construction
 	// bound: slots
 	for i := 0; i < nslots; i++ {
-		sl := newSlot(w.l, w.s, len(m.srcs), len(m.nodes), len(m.outs), len(m.tailThresholds))
+		sl := newSlot(w.l, w.block, m.pendCap, nslots, len(m.srcs), len(m.nodes), len(m.outs), len(m.tailThresholds))
 		sl.coarse = w.slotCoarse()
 		w.slots = append(w.slots, sl)
 	}
@@ -329,8 +331,11 @@ func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
 			}
 		}
 	}
-	slotsB := int64(nslots) * (8*a*int64(2*w.s+1) + 64*a + 8*counters + 8*coarse)
-	carryB := 8 * a * int64(w.s)
+	// Each slot holds a row per period of its block, a scratch row and its
+	// pending list; the finaliser holds one more pending list.
+	pendB := int64(w.m.pendCap) * (pendPointBytes + pendSegBytes)
+	slotsB := int64(nslots) * (8*a*(w.block+1) + 64*a + 8*counters + 8*coarse + pendB + 8*int64(nslots+1))
+	carryB := pendB
 	globalB := 64*a + 8*bins + 8*batchGroups*coarse + coarseMaps
 	workerHistB := int64(2*nw) * 8 * bins
 	poolsB := int64(nw) * int64(len(w.m.pools)) * int64(pool) * 8
@@ -501,8 +506,7 @@ func (w *Workspace) resetResult(seed uint64) {
 			}
 		}
 	}
-	clear(w.carry)
-	w.carryAt = 0
+	w.store.reset()
 	if r.Series != nil {
 		clear(r.Series.rows)
 	}
@@ -547,7 +551,7 @@ func (w *Workspace) Run(ctx context.Context, seed uint64) (*Result, error) {
 	clear(s.slotState)
 	s.running = 0
 	s.active, s.done, s.stop, s.err = true, false, false, nil
-	s.next, s.finalNext = 0, 0
+	s.next, s.handNext, s.finalNext = -w.burnIn, -w.burnIn, -w.burnIn
 	s.seed = seed
 	s.ctx = ctx
 	s.cv.Broadcast()
@@ -604,16 +608,18 @@ func (w *Workspace) Close() {
 // blockPeriods is the periods per task: the setting, else the default,
 // which a fixed run lowers so that it has at least twice minBlocks
 // blocks where it can, since a model with delays estimates its error
-// from them; never below the spill.
-func blockPeriods(cfg Config, spill int64) int64 {
+// from them, and which a wide row lowers so that a slot's rows hold at
+// most maxSlotValues values.
+func blockPeriods(cfg Config, width int) int64 {
 	block := max(int64(cfg.BlockPeriods), 0)
 	if block == 0 {
 		block = defaultBlockPeriods
 		if cfg.Periods > 0 {
 			block = min(block, max(cfg.Periods/(2*minBlocks), 1))
 		}
+		block = min(block, maxSlotValues/int64(max(width, 1)))
 	}
-	return max(block, spill, 1)
+	return max(block, 1)
 }
 
 // Bands fills dst[i] with P(edges[i] ≤ T < edges[i+1]) for the period

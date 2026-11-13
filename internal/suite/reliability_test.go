@@ -176,12 +176,11 @@ func TestOutageHolding(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		chains []variate.Chain
-		spill  int
 	}{
-		{"one unit, down as long as up", []variate.Chain{{K: 1, N: 1, Fail: 10, Repair: 10}}, 0},
-		{"one of two", []variate.Chain{{K: 1, N: 2, Fail: 3, Repair: 6}}, 0},
-		{"series", []variate.Chain{{K: 1, N: 2, Fail: 3, Repair: 40}, {K: 1, N: 1, Fail: 1, Repair: 5}}, 0},
-		{"one unit, down five periods", []variate.Chain{{K: 1, N: 1, Fail: 0.5, Repair: 0.2}}, 200},
+		{"one unit, down as long as up", []variate.Chain{{K: 1, N: 1, Fail: 10, Repair: 10}}},
+		{"one of two", []variate.Chain{{K: 1, N: 2, Fail: 3, Repair: 6}}},
+		{"series", []variate.Chain{{K: 1, N: 2, Fail: 3, Repair: 40}, {K: 1, N: 1, Fail: 1, Repair: 5}}},
+		{"one unit, down five periods", []variate.Chain{{K: 1, N: 1, Fail: 0.5, Repair: 0.2}}},
 	} {
 		f, u := variate.ChainFigures(tc.chains)
 		g := variate.Graph{
@@ -193,7 +192,7 @@ func TestOutageHolding(t *testing.T) {
 			},
 		}
 		for _, block := range []int{1, 0} {
-			c, r := run(t, g, variate.Config{Periods: 100000, Workers: 4, BlockPeriods: block, Spill: tc.spill}, 13)
+			c, r := run(t, g, variate.Config{Periods: 100000, Workers: 4, BlockPeriods: block}, 13)
 			e, _ := c.Analytic()
 			if math.Abs(e.Mean-u) > 1e-9*u {
 				t.Errorf("%s: exact mean %g, want the unavailability %g", tc.name, e.Mean, u)
