@@ -1,5 +1,7 @@
 package variate
 
+import "code.eitanity.com/variate/stats"
+
 // finalise folds a closed task into the result, strictly in task order.
 // A burn-in task adds only its steps.
 func (w *Workspace) finalise(sl *slot) {
@@ -8,6 +10,22 @@ func (w *Workspace) finalise(sl *slot) {
 		return
 	}
 	w.mergeSlot(sl)
+}
+
+// addGroup adds a full block's quantity i to its batch group: its
+// periods, its coarse histogram and its sum, each where the Accum keeps
+// it.
+func addGroup(a *Accum, sl *slot, q *qstat, coarse []*stats.LogHist, i int) {
+	g := sl.task % batchGroups
+	if a.GroupN != nil {
+		a.GroupN[g] += sl.closed
+	}
+	if a.Groups != nil {
+		a.Groups[g].Merge(coarse[i])
+	}
+	if a.GroupSum != nil {
+		a.GroupSum[g].Merge(q.sum)
+	}
 }
 
 // mergeSlot adds the slot's statistics and counts into the result.
@@ -27,11 +45,7 @@ func (w *Workspace) mergeSlot(sl *slot) {
 		a.Zero += q.zero
 		if sl.closed == w.block {
 			a.Block.Add(q.w.Mean)
-			if a.Groups != nil {
-				g := sl.task % batchGroups
-				a.Groups[g].Merge(sl.coarse[i])
-				a.GroupN[g] += sl.closed
-			}
+			addGroup(a, sl, q, sl.coarse, i)
 		}
 	}
 	nodes, outs := len(w.m.nodes), len(w.m.outs)

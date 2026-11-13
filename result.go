@@ -18,9 +18,12 @@ type Accum struct {
 
 	// With delays, coarse histograms of the full blocks in batchGroups
 	// groups, block b in group b mod batchGroups, and the periods each
-	// holds; nil without delays or a histogram.
-	Groups []*stats.LogHist
-	GroupN []int64
+	// holds; nil without delays or a histogram. Where the groups are
+	// independent timelines, GroupSum is each one's sum over its full
+	// blocks, and GroupN is kept for every quantity.
+	Groups   []*stats.LogHist
+	GroupN   []int64
+	GroupSum []stats.Neumaier
 }
 
 // N is the number of periods accumulated.
@@ -33,7 +36,8 @@ func (a *Accum) Mean() float64 { return a.W.Mean }
 func (a *Accum) StdDev() float64 { return a.W.StdDev() }
 
 // StdErr is the standard error of the mean: from the periods without
-// delays, from the block means with delays; NaN below 16 full blocks.
+// delays; with delays, from the means of the independent timelines where
+// the run has them, else from the block means; NaN below 16 full blocks.
 func (a *Accum) StdErr(delays bool) float64 {
 	if !delays {
 		return a.W.StdErr()
@@ -41,7 +45,39 @@ func (a *Accum) StdErr(delays bool) float64 {
 	if a.Block.N < minBlocks {
 		return math.NaN()
 	}
+	if a.GroupSum != nil {
+		return groupErr(a.GroupN, func(g int) float64 { return a.GroupSum[g].Value() })
+	}
 	return a.Block.StdErr()
+}
+
+// groupErr is the standard error of the ratio Σx/Σn over independent
+// groups, group g holding x(g) over n[g] periods, by the delta method:
+// with G groups in use, the square root of G/(G−1) · Σ (n_g/N)² (x_g/n_g −
+// x/N)². It is NaN with fewer than two groups in use.
+func groupErr(n []int64, x func(g int) float64) float64 {
+	var total int64
+	var sum, used float64
+	for g, ng := range n {
+		if ng > 0 {
+			total += ng
+			sum += x(g)
+			used++
+		}
+	}
+	if used < 2 {
+		return math.NaN()
+	}
+	mean := sum / float64(total)
+	var ss float64
+	for g, ng := range n {
+		if ng > 0 {
+			wgt := float64(ng) / float64(total)
+			d := x(g)/float64(ng) - mean
+			ss += wgt * wgt * d * d
+		}
+	}
+	return math.Sqrt(ss * used / (used - 1))
 }
 
 // minBlocks is the number of full blocks the batch-means error needs.
@@ -69,27 +105,15 @@ func (a *Accum) Inflation(x float64) float64 {
 		return math.NaN()
 	}
 	var n, c int64
-	var used float64
 	for g, h := range a.Groups {
-		if a.GroupN[g] > 0 {
-			n += a.GroupN[g]
-			c += h.AtOrAbove(x)
-			used++
-		}
+		n += a.GroupN[g]
+		c += h.AtOrAbove(x)
 	}
-	p := float64(c) / float64(n)
 	if c == 0 || c == n {
 		return 1
 	}
-	var ss float64
-	for g, h := range a.Groups {
-		if ng := a.GroupN[g]; ng > 0 {
-			wgt := float64(ng) / float64(n)
-			d := float64(h.AtOrAbove(x))/float64(ng) - p
-			ss += wgt * wgt * d * d
-		}
-	}
-	batch := math.Sqrt(ss * used / (used - 1))
+	p := float64(c) / float64(n)
+	batch := groupErr(a.GroupN, func(g int) float64 { return float64(a.Groups[g].AtOrAbove(x)) })
 	return batch / math.Sqrt(p*(1-p)/float64(n))
 }
 
@@ -106,6 +130,7 @@ func (a *Accum) reset() {
 		h.Reset()
 	}
 	clear(a.GroupN)
+	clear(a.GroupSum)
 }
 
 // Result is the outcome of a run.

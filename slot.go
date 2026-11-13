@@ -40,7 +40,8 @@ func (q *qstat) add(x float64) {
 type slot struct {
 	id       uint32 // the task's stream key half
 	task     int64
-	a, b     int64     // the block [a, b)
+	line     int64     // the timeline the task's block belongs to
+	a, b     int64     // the block [a, b), in the timeline's periods
 	rows     []float64 // a row per period of [a, b)
 	far      []float64 // scratch row for a booking past the block
 	farAt    int64     // the period far holds, or below a when it holds none

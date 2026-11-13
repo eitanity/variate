@@ -183,7 +183,7 @@ func (m *Compiled) setBurnIn(override int, ws *[]Warning) error {
 	m.burnIn = hi
 	if hi > burnInWarn {
 		_, driver = m.burnInBound(ph, float64(hi))
-		*ws = append(*ws, Warning{Code: "long-burn-in", Subject: m.outcomeNames[driver], Message: "burn-in of " + itoa(int(hi)) + " periods; a cap on this holding time would shorten it"})
+		*ws = append(*ws, Warning{Code: "long-burn-in", Subject: m.outcomeNames[driver], Message: "burn-in of " + itoa(int(hi)) + " periods, run once for each of the " + itoa(batchGroups) + " independent timelines that measure the error; a cap on this holding time would shorten it"})
 	}
 	return nil
 }

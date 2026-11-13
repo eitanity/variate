@@ -164,11 +164,25 @@ func (w *Workspace) workerLoop(wk *worker) {
 		sl := w.slots[i]
 		sl.id = uint32(j & (maxTasks - 1)) //nolint:gosec // distinct for burn-in and run tasks while they number below maxTasks
 		sl.task = j
-		sl.a = max(j*w.block, -w.m.burnIn)
-		sl.b = min(j*w.block+w.block, w.horizon)
+		w.placeTask(sl, j)
 		w.runTask(wk, sl, seed)
 		w.endJob(i, slotSimulated, sl.err)
 	}
+}
+
+// placeTask sets task j's timeline and block. Task j is block ⌊j/n⌋ of
+// timeline j mod n, for n timelines, so the tasks of each timeline are
+// every nth; a timeline's burn-in tasks are its negative blocks. A run
+// task holds the periods [j·L, j·L + L) of the run's count, the last cut
+// at the horizon.
+func (w *Workspace) placeTask(sl *slot, j int64) {
+	pos := j / w.lines
+	if j%w.lines < 0 {
+		pos--
+	}
+	sl.line = j - pos*w.lines
+	sl.a = max(pos*w.block, -w.m.burnIn)
+	sl.b = pos*w.block + min(w.block, w.horizon-j*w.block)
 }
 
 // endJob moves slot i to state st after a worker's job on it, recording

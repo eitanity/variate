@@ -91,12 +91,14 @@ func (w *Workspace) flushFar(sl *slot) {
 
 // handOff gives slot sl what the tasks before it booked into its block,
 // in the order they booked it, and keeps the rest; then it takes the
-// slot's own pending bookings. It runs on the finaliser in task order. A
+// slot's own pending bookings. Each timeline has its own store, so a
+// slot sees only what its timeline booked. It runs on the finaliser in
+// task order. A
 // burn-in task's rows are never closed, so what lands in them is
 // dropped. The slot records, by the task each came from, the total it
 // was handed, which an early stop counts beyond the horizon.
 func (w *Workspace) handOff(sl *slot) error {
-	st := &w.store
+	st := &w.stores[sl.line]
 	keep := 0
 	// bound: the store's points
 	for i := 0; i < st.nPts; i++ {
@@ -185,21 +187,24 @@ func (sl *slot) beyond(stop int64) float64 {
 }
 
 // flushPending adds to BeyondHorizon what the tasks before stop booked at
-// or after its first period and no slot closed: what the store still
-// holds, and what was handed to slots that were never finalised.
+// or after its timeline's first period from task stop on, and no slot
+// closed: what the stores still hold, and what was handed to slots that
+// were never finalised.
 func (w *Workspace) flushPending(stop int64) {
-	st := &w.store
 	r := &w.result
-	// bound: the store's points
-	for i := 0; i < st.nPts; i++ {
-		if pt := st.pts[i]; pt.from < stop && pt.col == int32(w.l.total()) { //nolint:gosec // column 0
-			r.BeyondHorizon += pt.x
+	for i := range w.stores {
+		st := &w.stores[i]
+		// bound: the store's points
+		for i := 0; i < st.nPts; i++ {
+			if pt := st.pts[i]; pt.from < stop && pt.col == int32(w.l.total()) { //nolint:gosec // column 0
+				r.BeyondHorizon += pt.x
+			}
 		}
-	}
-	// bound: the store's segments
-	for i := 0; i < st.nSeg; i++ {
-		if s := st.segs[i]; s.from < stop {
-			r.BeyondHorizon += s.rate * (s.hi - s.lo)
+		// bound: the store's segments
+		for i := 0; i < st.nSeg; i++ {
+			if s := st.segs[i]; s.from < stop {
+				r.BeyondHorizon += s.rate * (s.hi - s.lo)
+			}
 		}
 	}
 	for i, sl := range w.slots {

@@ -149,13 +149,16 @@ func TestStreamFiltering(t *testing.T) {
 	}
 }
 
-// TestStreamNoEffectAndDeterminism: the Result is bit-identical with no
-// observer, a Counter, a collector and a slow observer; the delivered
-// bytes are identical across worker counts.
+// TestStreamNoEffectAndDeterminism: the Result is bit-identical with a
+// Counter, a collector and a slow observer, and to the run that keeps a
+// series, the other run kept as one timeline; the delivered bytes are
+// identical across worker counts.
 func TestStreamNoEffectAndDeterminism(t *testing.T) {
 	g := genGraph(t, 6, true)
 	cfg := variate.Config{Periods: 600, BlockPeriods: 50, Workers: 4}
-	_, _, base := runStream(t, g, cfg, 5)
+	series := cfg
+	series.Series = true
+	_, _, base := runStream(t, g, series, 5)
 	ref := fingerprint(base)
 	m, _, err := g.Compile(cfg)
 	if err != nil {

@@ -41,13 +41,14 @@ type Workspace struct {
 	m           *Compiled
 	cfg         Config
 	l           layout
-	burnIn      int64 // burn-in tasks, before task 0
+	burnIn      int64 // burn-in tasks, before task 0, over every timeline
+	lines       int64 // independent timelines the tasks are dealt into
 	block       int64
 	batch       int64
 	horizon     int64
 	workers     []*worker
 	slots       []*slot
-	store       pending // what finished tasks booked past the blocks handed so far
+	stores      []pending // per timeline, what its finished tasks booked past the blocks handed so far
 	result      Result
 	hists       []*stats.LogHist // global, by row quantity; nil without a histogram
 	delays      bool
@@ -93,12 +94,14 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	w.unmet = make([]string, 0, len(w.rows))
 	w.result.Unmet = make([]string, 0, len(w.rows))
 	w.block = blockPeriods(cfg, w.l.width)
-	w.burnIn = (m.burnIn + w.block - 1) / w.block
 	horizon := cfg.Periods
 	if horizon == 0 {
 		horizon = m.crit.maxPeriods
 	}
-	if (horizon+w.block-1)/w.block+w.burnIn >= maxTasks {
+	tasks := (horizon + w.block - 1) / w.block
+	w.lines = timelines(m, cfg, tasks)
+	w.burnIn = w.lines * ((m.burnIn + w.block - 1) / w.block)
+	if tasks+w.burnIn >= maxTasks {
 		return nil, errors.New("config: more than 2^32 tasks with the burn-in; raise BlockPeriods or lower MaxPeriods")
 	}
 	w.batch = int64(cfg.Batch)
@@ -119,22 +122,31 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	w.store = newPending(m.pendCap)
 	if cfg.Series {
 		w.result.Series = &Series{l: w.l, rows: make([]float64, int(cfg.Periods)*w.l.width), n: cfg.Periods}
 	}
-	// bound: workers or slots, fixed at construction
-	// bound: slots
-	for i := 0; i < nslots; i++ {
-		sl := newSlot(w.l, w.block, m.pendCap, nslots, len(m.srcs), len(m.nodes), len(m.outs), len(m.tailThresholds))
-		sl.coarse = w.slotCoarse()
-		w.slots = append(w.slots, sl)
-	}
+	w.allocSlots(nslots)
 	if err := w.setupStream(nw); err != nil {
 		return nil, err
 	}
 	w.startPool(nw, pool)
 	return w, nil
+}
+
+// allocSlots allocates the finaliser's pending list per timeline and the
+// ring of slots.
+func (w *Workspace) allocSlots(nslots int) {
+	m := w.m
+	w.stores = make([]pending, w.lines)
+	for i := range w.stores {
+		w.stores[i] = newPending(m.pendCap)
+	}
+	// bound: slots, fixed at construction
+	for i := 0; i < nslots; i++ {
+		sl := newSlot(w.l, w.block, m.pendCap, nslots, len(m.srcs), len(m.nodes), len(m.outs), len(m.tailThresholds))
+		sl.coarse = w.slotCoarse()
+		w.slots = append(w.slots, sl)
+	}
 }
 
 // setupStream sizes the round-stream buffers and opens one temporary file
@@ -332,11 +344,14 @@ func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
 		}
 	}
 	// Each slot holds a row per period of its block, a scratch row and its
-	// pending list; the finaliser holds one more pending list.
+	// pending list; the finaliser holds one more pending list per timeline.
 	pendB := int64(w.m.pendCap) * (pendPointBytes + pendSegBytes)
 	slotsB := int64(nslots) * (8*a*(w.block+1) + 64*a + 8*counters + 8*coarse + pendB + 8*int64(nslots+1))
-	carryB := pendB
+	carryB := w.lines * pendB
 	globalB := 64*a + 8*bins + 8*batchGroups*coarse + coarseMaps
+	if w.lines > 1 {
+		globalB += 24 * batchGroups * a // the group sums and counts
+	}
 	workerHistB := int64(2*nw) * 8 * bins
 	poolsB := int64(nw) * int64(len(w.m.pools)) * int64(pool) * 8
 	seriesB := int64(0)
@@ -429,20 +444,41 @@ func (w *Workspace) allocResult() error {
 }
 
 // allocGroups gives each quantity with a histogram its batch-group
-// histograms, for the batch-means error of its exceedance shares.
+// histograms, for the batch-means error of its exceedance shares, and,
+// where the groups are independent timelines, each quantity its group
+// sums, for the error of its mean.
 func (w *Workspace) allocGroups() {
-	for q, h := range w.hists {
-		if h == nil {
-			continue
-		}
+	// bound: row width
+	for q := 0; q < w.l.width; q++ {
 		a := w.accum(q)
-		a.Groups = make([]*stats.LogHist, batchGroups)
-		a.Groups[0] = stats.NewCoarse(h, groupRes)
-		for g := 1; g < batchGroups; g++ {
-			a.Groups[g] = a.Groups[0].Empty()
+		if w.lines > 1 {
+			a.GroupSum = make([]stats.Neumaier, batchGroups)
 		}
-		a.GroupN = make([]int64, batchGroups)
+		h := w.hists[q]
+		if h != nil {
+			a.Groups = make([]*stats.LogHist, batchGroups)
+			a.Groups[0] = stats.NewCoarse(h, groupRes)
+			for g := 1; g < batchGroups; g++ {
+				a.Groups[g] = a.Groups[0].Empty()
+			}
+		}
+		if h != nil || w.lines > 1 {
+			a.GroupN = make([]int64, batchGroups)
+		}
 	}
+}
+
+// timelines is the number of independent timelines a run's tasks are
+// dealt into: one per batch group in a model with holding times, so the
+// groups' errors hold however long the holding times' correlations
+// last; one for a run that keeps its periods as one history, the series
+// and the round stream, and for a model without holding times, whose
+// blocks share nothing. A run of fewer tasks has one timeline per task.
+func timelines(m *Compiled, cfg Config, tasks int64) int64 {
+	if !m.hasDelays || cfg.Series || cfg.Observer != nil {
+		return 1
+	}
+	return min(batchGroups, tasks)
 }
 
 // slotCoarse returns a slot's coarse histograms, one for each quantity
@@ -506,7 +542,9 @@ func (w *Workspace) resetResult(seed uint64) {
 			}
 		}
 	}
-	w.store.reset()
+	for i := range w.stores {
+		w.stores[i].reset()
+	}
 	if r.Series != nil {
 		clear(r.Series.rows)
 	}
