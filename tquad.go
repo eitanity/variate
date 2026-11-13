@@ -1,6 +1,7 @@
 package variate
 
 import (
+	"math"
 	"math/cmplx"
 
 	"code.eitanity.com/variate/dist"
@@ -155,6 +156,40 @@ func quantileNodes(q dist.Quantiler, x, w []float64) {
 		x[2*i+1] = q.QuantileUpper(0.5 * tk)
 		w[2*i] = gw[i] * jac * 0.5
 		w[2*i+1] = w[2*i]
+	}
+}
+
+// tsSpan is the half-width of the tanh-sinh rule's range of t. From 32
+// nodes up the outermost node lies past ±3.18, beyond which is under
+// 1e-16 of the probability at either end, which an integrand bounded by
+// 1, as a generating function inside the unit disc is, cannot raise to
+// the tolerance; a wider range spends the same nodes on a coarser step.
+const tsSpan = 3.4
+
+// tanhSinhNodes fills a rule of len(x) = n − 1 nodes, n a multiple of 4:
+// the trapezoid rule of step 2·tsSpan/n at the interior points of
+// t ∈ (−tsSpan, tsSpan), after the substitution
+// u = ½(1 + tanh(½π·sinh t)) to the quantile function, whose weights
+// fall off doubly exponentially towards either end. Each halving of the
+// step keeps every node and halves its weight, so a sum over the rule
+// extends the one over half as many: fresh marks the nodes that rule
+// does not have. Below the median the node is the quantile at u, above
+// it the upper quantile at 1 − u, each without the other's cancellation.
+func tanhSinhNodes(q dist.Quantiler, x, w []float64, fresh []bool) {
+	half := (len(x) + 1) / 2
+	h := tsSpan / float64(half)
+	for j := range x {
+		k := j + 1 - half
+		t := float64(k) * h
+		s := math.Pi * math.Sinh(t)
+		c := math.Cosh(0.5 * s)
+		w[j] = h * 0.25 * math.Pi * math.Cosh(t) / (c * c)
+		if k <= 0 {
+			x[j] = q.Quantile(1 / (1 + math.Exp(-s)))
+		} else {
+			x[j] = q.QuantileUpper(1 / (1 + math.Exp(s)))
+		}
+		fresh[j] = k%2 != 0
 	}
 }
 

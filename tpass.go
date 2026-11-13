@@ -233,7 +233,13 @@ func (p *pipeline) graph() (*graphResult, string) {
 			return prev, ""
 		}
 		last = append(last[:0], counts...)
-		g, reason := p.tensor()
+		var g *graphResult
+		var reason string
+		if d, ok := p.mix.nestedStep(); ok && prev != nil {
+			g, reason = p.tensorFrom(prev, math.Ldexp(1, -d))
+		} else {
+			g, reason = p.tensor()
+		}
 		if reason != "" {
 			return nil, reason
 		}
@@ -289,11 +295,28 @@ func (p *pipeline) tensor() (*graphResult, string) {
 	if p.t.walkFn != nil {
 		out.walk = make([]complex128, p.m)
 	}
+	return p.sumPoints(out, false)
+}
+
+// tensorFrom is tensor where the nested rules have halved their step
+// since prev: prev's sum, its weights now scale times what they were,
+// plus the points with a fresh node.
+func (p *pipeline) tensorFrom(prev *graphResult, scale float64) (*graphResult, string) {
+	out := prev.scaled(complex(scale, 0))
+	return p.sumPoints(out, true)
+}
+
+// sumPoints adds the conditional results at the period draws to out:
+// every point, or only those with a fresh node.
+func (p *pipeline) sumPoints(out *graphResult, onlyFresh bool) (*graphResult, string) {
 	if p.mix.passes() > 1 && p.fnG == nil {
-		p.fnG = make([][]complex128, len(m.fns))
+		p.fnG = make([][]complex128, len(p.t.m.fns))
 	}
 	// bound: maxPasses
 	for ok := p.mix.start(); ok; ok = p.mix.next() {
+		if onlyFresh && !p.mix.fresh() {
+			continue
+		}
 		w := p.mix.weight()
 		if p.beyondGrid() {
 			p.beta += w
@@ -344,6 +367,31 @@ func (p *pipeline) beyondGrid() bool {
 		}
 	}
 	return false
+}
+
+// scaled returns a copy of g times s.
+func (g *graphResult) scaled(s complex128) *graphResult {
+	cp := func(a []complex128) []complex128 {
+		if a == nil {
+			return nil
+		}
+		out := make([]complex128, len(a))
+		for j, v := range a {
+			out[j] = s * v
+		}
+		return out
+	}
+	out := &graphResult{total: cp(g.total), walk: cp(g.walk), cats: make([][]complex128, len(g.cats))}
+	for c := range g.cats {
+		out.cats[c] = cp(g.cats[c])
+	}
+	if g.srcs != nil {
+		out.srcs = make([][]complex128, len(g.srcs))
+		for k := range g.srcs {
+			out.srcs[k] = cp(g.srcs[k])
+		}
+	}
+	return out
 }
 
 // add adds w times o's first n points, the half the recursion computes.

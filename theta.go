@@ -2,6 +2,7 @@ package variate
 
 import (
 	"math"
+	"slices"
 
 	"code.eitanity.com/variate/dist"
 )
@@ -34,6 +35,13 @@ type thetaQuantity struct {
 	cycle  *jointCycle // the schedules' joint cycle, its nodes the indices of its points; nil otherwise
 	nodes  []float64
 	weight []float64
+	// fresh marks the nodes a nested rule adds to the one of half as many;
+	// nil for a rule that is not nested. last holds the rule before the
+	// latest setProbNodes, to tell whether a rule that is not nested
+	// changed.
+	fresh                 []bool
+	lastNodes, lastWeight []float64
+	lastNested            bool
 }
 
 // thetaMix enumerates the tensor product of the quantities' nodes,
@@ -115,17 +123,19 @@ func (x *thetaMix) probabilities() int {
 	return n
 }
 
-// setProbNodes gives every probability n quadrature nodes; false when a
-// probability has no rule.
+// setProbNodes gives every probability its rule at n: n nodes of the
+// family's own, or n − 1 of the nested one through the quantile
+// function; false when a probability has no rule.
 func (x *thetaMix) setProbNodes(m *Compiled, n int) bool {
 	for i := range x.q {
 		q := &x.q[i]
 		if q.fn != noIndex || q.cycle != nil {
 			continue
 		}
-		q.nodes = make([]float64, n)
-		q.weight = make([]float64, n)
-		if !probNodes(m.pools[q.pool], q.nodes, q.weight) {
+		q.lastNodes, q.lastWeight, q.lastNested = q.nodes, q.weight, q.fresh != nil
+		var ok bool
+		q.nodes, q.weight, q.fresh, ok = probNodes(m.pools[q.pool], n)
+		if !ok {
 			return false
 		}
 		q.trim()
@@ -133,16 +143,55 @@ func (x *thetaMix) setProbNodes(m *Compiled, n int) bool {
 	return true
 }
 
-// trim drops nodes of zero weight, which a finite rule pads with.
+// nestedStep reports whether the rules at the latest setProbNodes extend
+// the ones before it: every probability's rule nested at both, or the
+// same nodes and weights at both. d is the number of nested rules, each
+// of which halved its step, so every node already summed now weighs
+// 2^−d of what it did; ok is false when there is none.
+func (x *thetaMix) nestedStep() (d int, ok bool) {
+	for _, q := range x.q {
+		if q.fn != noIndex || q.cycle != nil {
+			continue
+		}
+		switch {
+		case q.fresh != nil && q.lastNested:
+			d++
+		case q.fresh == nil && !q.lastNested && slices.Equal(q.nodes, q.lastNodes) && slices.Equal(q.weight, q.lastWeight):
+		default:
+			return 0, false
+		}
+	}
+	return d, d > 0
+}
+
+// fresh reports whether the current point has a node a nested rule has
+// just added.
+func (x *thetaMix) fresh() bool {
+	for i, q := range x.q {
+		if q.fresh != nil && q.fresh[x.idx[i]] {
+			return true
+		}
+	}
+	return false
+}
+
+// trim drops nodes of zero weight, which a finite rule pads with and
+// where a nested rule's weights underflow.
 func (q *thetaQuantity) trim() {
 	kept := 0
 	for i := range q.nodes {
 		if q.weight[i] != 0 {
 			q.nodes[kept], q.weight[kept] = q.nodes[i], q.weight[i]
+			if q.fresh != nil {
+				q.fresh[kept] = q.fresh[i]
+			}
 			kept++
 		}
 	}
 	q.nodes, q.weight = q.nodes[:kept], q.weight[:kept]
+	if q.fresh != nil {
+		q.fresh = q.fresh[:kept]
+	}
 }
 
 // probCounts returns the node count of every probability quantity.
@@ -218,17 +267,20 @@ func (x *thetaMix) weight() float64 {
 	return w
 }
 
-// probNodes fills a quadrature rule for a probability: the family's own
-// Gauss rule, else Gauss–Legendre through the quantile function.
-func probNodes(d dist.Distribution, x, w []float64) bool {
+// probNodes returns a quadrature rule for a probability at n: the
+// family's own Gauss rule of n nodes, else the nested tanh-sinh rule of
+// n − 1 through the quantile function, with its fresh nodes.
+func probNodes(d dist.Distribution, n int) (x, w []float64, fresh []bool, ok bool) {
+	x, w = make([]float64, n), make([]float64, n)
 	if d.Nodes(x, w) {
-		return true
+		return x, w, nil, true
 	}
-	if len(x) < 2 {
-		return false
+	if n < probNodesStart {
+		return nil, nil, nil, false
 	}
-	quantileNodes(d, x, w)
-	return true
+	x, w, fresh = make([]float64, n-1), make([]float64, n-1), make([]bool, n-1)
+	tanhSinhNodes(d, x, w, fresh)
+	return x, w, fresh, true
 }
 
 // zeroProbability is the exact P(T = 0): every source's rounds book

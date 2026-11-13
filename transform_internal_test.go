@@ -646,3 +646,123 @@ func TestTransformHalfGrid(t *testing.T) {
 		}
 	}
 }
+
+// TestTanhSinhNested: the rule of 2n − 1 nodes holds every node of the
+// rule of n − 1 bit for bit with exactly half its weight, fresh marks the
+// rest, and the rule gives a lognormal's first two moments.
+func TestTanhSinhNested(t *testing.T) {
+	ln, _ := dist.NewLognormal(-0.1058, 0.46)
+	rule := func(n int) ([]float64, []float64, []bool) {
+		x, w, f := make([]float64, n-1), make([]float64, n-1), make([]bool, n-1)
+		tanhSinhNodes(ln, x, w, f)
+		return x, w, f
+	}
+	for n := probNodesStart; n <= 256; n *= 2 {
+		x, w, _ := rule(n)
+		x2, w2, f2 := rule(2 * n)
+		// Node j of the finer rule is at t = (j + 1 − n)·h/2, so the odd j
+		// are the coarser rule's node (j − 1)/2.
+		for j := range x2 {
+			if f2[j] != (j%2 == 0) {
+				t.Fatalf("n %d: node %d fresh %v", 2*n, j, f2[j])
+			}
+			if j%2 == 1 && (x2[j] != x[(j-1)/2] || w2[j] != w[(j-1)/2]/2) {
+				t.Fatalf("n %d: node %d is (%g, %g), want (%g, %g)", 2*n, j, x2[j], w2[j], x[(j-1)/2], w[(j-1)/2]/2)
+			}
+		}
+	}
+	x, w, _ := rule(128)
+	var m0, m1, m2 float64
+	for j := range x {
+		m0 += w[j]
+		m1 += w[j] * x[j]
+		m2 += w[j] * x[j] * x[j]
+	}
+	for _, c := range []struct {
+		what      string
+		got, want float64
+	}{{"mass", m0, 1}, {"mean", m1, ln.Mean()}, {"second moment", m2, ln.Var() + ln.Mean()*ln.Mean()}} {
+		if math.Abs(c.got-c.want) > 1e-13*c.want {
+			t.Errorf("%s %.17g, want %.17g", c.what, c.got, c.want)
+		}
+	}
+}
+
+// TestTransformNestedMixture: a mixture over the period draws extended
+// from half the nodes, the sum before scaled by 2^−d plus the fresh
+// points, equals the one summed afresh over every point, with one nested
+// rule and with two. A probability on its own Gauss rule is no
+// extension, and graph sums every level afresh; with the factor alone,
+// what graph accepts equals the sum afresh at its nodes.
+func TestTransformNestedMixture(t *testing.T) {
+	ln, _ := dist.NewLognormal(-0.1058, 0.46)
+	tn, _ := dist.NewTruncatedNormal(0.3, 0.05, 0, 1)
+	g2, _ := dist.NewGamma(2, 1.5)
+	e, _ := dist.NewExponential(2)
+	for _, tc := range []struct {
+		name string
+		p    dist.Distribution
+		d    int
+	}{
+		{"factor", c(0.3), 1},
+		{"factor and probability", tn, 2},
+		{"factor and a Gauss probability", beta(2, 5), 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := Graph{
+				Factors: []Factor{{ID: "f", Model: ln}},
+				Sources: []Source{
+					{ID: "s1", Frequency: c(1.5), To: "a", Factor: "f"},
+					{ID: "s2", Frequency: g2, To: "a", Factor: "f"},
+				},
+				Nodes: []Node{
+					{ID: "a", Outcomes: []Outcome{{To: "x", P: tc.p}, {To: "y"}}},
+					{ID: "x", Functions: []Function{fn("fx", "k", e)}},
+					{ID: "y", Functions: []Function{fn("fy", "k", g2)}},
+				},
+			}
+			tr := newTransformer(compiled(t, g), TransformConfig{})
+			p, reason := tr.newPipeline(0.05, minGrid, 0.9999, false)
+			if reason != "" {
+				t.Fatal(reason)
+			}
+			p.mix.setProbNodes(tr.m, 8)
+			coarse, reason := p.tensor()
+			if reason != "" {
+				t.Fatal(reason)
+			}
+			p.mix.setProbNodes(tr.m, 16)
+			d, ok := p.mix.nestedStep()
+			if d != tc.d || ok != (tc.d > 0) {
+				t.Fatalf("nested step %d, %v; want %d", d, ok, tc.d)
+			}
+			full, reason := p.tensor()
+			if reason != "" {
+				t.Fatal(reason)
+			}
+			if ok {
+				ext, reason := p.tensorFrom(coarse, math.Ldexp(1, -d))
+				if reason != "" {
+					t.Fatal(reason)
+				}
+				if diff := ext.maxDiff(full); diff > 1e-15 {
+					t.Errorf("extended and afresh differ by %g", diff)
+				}
+			}
+			if tc.d != 1 {
+				return
+			}
+			r, reason := p.graph()
+			if reason != "" {
+				t.Fatal(reason)
+			}
+			full, reason = p.tensor()
+			if reason != "" {
+				t.Fatal(reason)
+			}
+			if diff := r.maxDiff(full); diff > 1e-14 {
+				t.Errorf("accepted and afresh at its nodes differ by %g", diff)
+			}
+		})
+	}
+}
