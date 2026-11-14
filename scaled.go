@@ -17,6 +17,8 @@ const (
 	InputFunction    = "function"
 	InputProbability = "probability"
 	InputHolding     = "holding"
+	InputMTBF        = "mtbf"
+	InputMTTR        = "mttr"
 )
 
 // InputRange is how uncertain an input is: its mean at the low and the
@@ -30,10 +32,12 @@ type InputRange struct {
 
 // Input is one distribution of a graph that a sweep can scale, named as
 // the report names things: "source <id> frequency", "source <id> repair",
-// "node <id> function <name>", "node <id> outcome <target> p", "node
-// <id> outcome <target> holding", "node <id> next holding", "factor
-// <id>", "schedule <id>". A repeated target carries its #n as in the
-// outcome names. Constants are inputs too.
+// "source <id> block <n> mtbf", "source <id> block <n> mttr", "node <id>
+// function <name>", "node <id> outcome <target> p", "node <id> outcome
+// <target> holding", "node <id> next holding", "factor <id>", "schedule
+// <id>". A block's n counts its chains from 1 in the order they were
+// written. A repeated target carries its #n as in the outcome names.
+// Constants are inputs too.
 type Input struct {
 	Name  string
 	Kind  string
@@ -41,7 +45,8 @@ type Input struct {
 }
 
 // inputRef locates an input: the factor, schedule, source or node i, and
-// within a node the function or outcome j (−1 for Next).
+// within a source the chain j, within a node the function or outcome j
+// (−1 for Next).
 type inputRef struct {
 	Input
 	i, j int
@@ -49,7 +54,8 @@ type inputRef struct {
 
 // Inputs lists the graph's inputs in a fixed order: factors, schedules,
 // sources, then per node its functions and outcomes. A source standing
-// on chains has no frequency input, a remainder outcome no probability,
+// on chains has no frequency input but each chain's up time, and its
+// repair time when it has one; a remainder outcome has no probability,
 // and a node's only outcome in absolute mode no probability either.
 func (g Graph) Inputs() []Input {
 	refs := g.inputRefs()
@@ -77,6 +83,13 @@ func (g Graph) inputRefs() []inputRef {
 		}
 		if s.Repair != nil {
 			add("source "+s.ID+" repair", InputRepair, s.RepairRange, i, 0)
+		}
+		for j, c := range s.Chains {
+			block := "source " + s.ID + " block " + itoa(j+1)
+			add(block+" mtbf", InputMTBF, c.MTBFRange, i, j)
+			if c.Repair > 0 {
+				add(block+" mttr", InputMTTR, c.MTTRRange, i, j)
+			}
 		}
 	}
 	for i, n := range g.Nodes {
@@ -131,6 +144,10 @@ func (g Graph) mean(r inputRef) float64 {
 		return g.Sources[r.i].Frequency.Mean()
 	case InputRepair:
 		return g.Sources[r.i].Repair.Mean()
+	case InputMTBF:
+		return 1 / g.Sources[r.i].Chains[r.j].Fail
+	case InputMTTR:
+		return 1 / g.Sources[r.i].Chains[r.j].Repair
 	}
 	n := g.Nodes[r.i]
 	switch {
@@ -211,6 +228,16 @@ func (g Graph) scale(r inputRef, f float64) (Graph, bool, error) {
 	case InputRepair:
 		g.Sources = slices.Clone(g.Sources)
 		g.Sources[r.i].Repair, err = scaleDist(g.Sources[r.i].Repair, f)
+	case InputMTBF, InputMTTR:
+		// A time f times as long is a rate f times as slow.
+		g.Sources = slices.Clone(g.Sources)
+		s := &g.Sources[r.i]
+		s.Chains = slices.Clone(s.Chains)
+		if r.Kind == InputMTBF {
+			s.Chains[r.j].Fail /= f
+		} else {
+			s.Chains[r.j].Repair /= f
+		}
 	default:
 		return g.scaleNode(r, f)
 	}

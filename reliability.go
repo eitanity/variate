@@ -11,6 +11,8 @@ import "math"
 type Chain struct {
 	K, N         int
 	Fail, Repair float64
+	MTBFRange    *InputRange // how uncertain a unit's mean up time 1/Fail is, in periods, for a sweep; nil = not swept
+	MTTRRange    *InputRange // how uncertain a unit's mean repair time 1/Repair is, in periods; nil = not swept
 }
 
 // The stationary figures of chains in series, from the frequency and

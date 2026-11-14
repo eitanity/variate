@@ -393,7 +393,13 @@ spread stay; the range must hold the input's mean. `range: { times:
 [low, high] }` gives the factors instead, which suits an input without
 a natural unit, and is the form to use on a demo knob, whose mean
 moves. A schedule takes `range` beside its `values`, for the mean of
-the cycle; a factor beside its family. A probability moved past 1 is
+the cycle; a factor beside its family; a block's `mtbf` or `mttr` as
+`{ constant: 6000, range: [4000, 9000] }`, in the block's unit, named in
+the sweep `source <id> block <n> mtbf` with `n` counting the block's
+components and k-of-n groups from 1 in the order written. A k-of-n
+group's units move together. A block whose components all lack a
+repair time is a Poisson source at its rate, so its times take no
+range: give the source a frequency with one instead. A probability moved past 1 is
 held there, and a node's other probabilities make room so that it
 still sums to 1.
 
@@ -438,6 +444,7 @@ block:
 | form | meaning |
 |---|---|
 | `{ mtbf: m, mttr: r }` | one component: mean time between failures (its mean up time) and mean repair time. `mttr` omitted means replaced at once. |
+| `{ constant: c, range: ... }` | in place of a number for `mtbf` or `mttr`: the time with a range for `variate sweep`, in the block's unit, as below. |
 | `kofn: { k, n, mtbf, mttr }` | `n` identical components of which `k` must be working. |
 | `series: [ ... ]` | blocks that must all be up; may nest. |
 

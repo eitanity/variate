@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"math"
 	"strings"
 	"testing"
@@ -139,5 +140,64 @@ graphs:
 	}
 	if math.Abs(means[0]-means[1]) > 1e-12*means[0] || math.Abs(vars[0]-vars[1]) > 1e-12*vars[0] {
 		t.Errorf("block mean %g var %g, sources mean %g var %g", means[0], vars[0], means[1], vars[1])
+	}
+}
+
+// TestBlockRanges: a block's mtbf and mttr take { constant, range }, the
+// range in the block's unit read into periods as the times are, as ends
+// or as factors; a plain number has none.
+func TestBlockRanges(t *testing.T) {
+	text := strings.Replace(blockModel, "{ mtbf: 30000, mttr: 8 }", "{ mtbf: { constant: 30000, range: [20000, 60000] }, mttr: { constant: 8, range: { times: [0.5, 3] } } }", 1)
+	text = strings.Replace(text, "mtbf: 12000, mttr: 24", "mtbf: { constant: 12000 }, mttr: 24", 1)
+	m, err := Parse([]byte(text), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := m.Graph.Sources[0].Chains
+	if c[0].MTBFRange != nil || c[0].MTTRRange != nil || c[1].MTBFRange != nil || math.Abs(c[1].Fail-8760.0/12000) > 1e-12 {
+		t.Errorf("chains without ranges: %+v %+v", c[0], c[1])
+	}
+	up, rep := c[2].MTBFRange, c[2].MTTRRange
+	if up == nil || up.Factors || math.Abs(up.Low-20000.0/8760) > 1e-12 || math.Abs(up.High-60000.0/8760) > 1e-12 {
+		t.Errorf("mtbf range %+v, want [20000, 60000] hours in years", up)
+	}
+	if rep == nil || !rep.Factors || rep.Low != 0.5 || rep.High != 3 {
+		t.Errorf("mttr range %+v", rep)
+	}
+	sw, err := m.Graph.Sweep(context.Background(), variate.SweepConfig{})
+	if err != nil || len(sw.Rows) != 2 || sw.Rows[0].Method != variate.MethodExact {
+		t.Fatalf("sweep %+v, %v", sw, err)
+	}
+	for _, row := range sw.Rows {
+		if row.Input.Name == "source cooling block 3 mtbf" && (math.Abs(row.Low-2.0/3) > 1e-12 || math.Abs(row.High-2) > 1e-12) {
+			t.Errorf("mtbf factors %g, %g, want 2/3 and 2", row.Low, row.High)
+		}
+	}
+}
+
+// TestBlockRangeErrors: a block's time is a number or a constant with a
+// range, never a distribution; an mttr of 0 has no time to move; and a
+// block with no repair, a Poisson source, has no units to sweep.
+func TestBlockRangeErrors(t *testing.T) {
+	cases := []struct{ text, want string }{
+		{strings.Replace(blockModel, "mtbf: 30000", "mtbf: { pert: [1, 2, 3] }", 1), `unknown key "pert"`},
+		{strings.Replace(blockModel, "mtbf: 30000", "mtbf: { range: [1, 2] }", 1), "a number or { constant"},
+		{strings.Replace(blockModel, "mttr: 8", "mttr: { constant: 0, range: [1, 2] }", 1), "replaced at once"},
+		{strings.Replace(blockModel, "mtbf: 30000", "mtbf: { constant: 30000, range: [1] }", 1), "a range is"},
+		{`
+period: { hours: 1000 }
+graphs:
+  - id: g
+    sources:
+      - { id: line, block: { unit: hours, series: [ { mtbf: { constant: 400, range: [300, 500] } } ] }, to: down }
+    nodes:
+      - { id: down }
+`, "Poisson source"},
+	}
+	for _, c := range cases {
+		_, err := Parse([]byte(c.text), "")
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("want %q, got %v", c.want, err)
+		}
 	}
 }

@@ -6,8 +6,8 @@ graphs:
         block:
           unit: hours
           series:
-            - { kofn: { k: 2, n: 3, mtbf: {{chiller_mtbf}}, mttr: {{chiller_mttr}} } }
-            - { kofn: { k: 1, n: 2, mtbf: {{pump_mtbf}}, mttr: 24 } }
+            - { kofn: { k: 2, n: 3, mtbf: { constant: {{chiller_mtbf}}, range: { times: [0.67, 1.5] } }, mttr: { constant: {{chiller_mttr}}, range: { times: [0.67, 2] } } } }
+            - { kofn: { k: 1, n: 2, mtbf: { constant: {{pump_mtbf}}, range: { times: [0.67, 1.67] } }, mttr: 24 } }
             - { mtbf: {{control_mtbf}}, mttr: 8 }
         to: outage
     nodes:

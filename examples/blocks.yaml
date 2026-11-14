@@ -8,6 +8,9 @@
 # unavailability. Each outage costs a callout and production per day
 # for as long as the plant is down: the outcome's holding is the
 # outage itself, the time the chain takes to bring the plant back.
+# The chillers' and pumps' times carry a range, how far each could be
+# off, for variate sweep, which ranks them by how far they move the
+# mean exactly at each end.
 period: { days: 365 }
 graphs:
   - id: cooling
@@ -16,8 +19,8 @@ graphs:
         block:
           unit: hours
           series:
-            - { kofn: { k: 2, n: 3, mtbf: 6000, mttr: 36 } }
-            - { kofn: { k: 1, n: 2, mtbf: 12000, mttr: 24 } }
+            - { kofn: { k: 2, n: 3, mtbf: { constant: 6000, range: [4000, 9000] }, mttr: { constant: 36, range: [24, 72] } } }
+            - { kofn: { k: 1, n: 2, mtbf: { constant: 12000, range: [8000, 20000] }, mttr: 24 } }
             - { mtbf: 30000, mttr: 8 }
         to: outage
     nodes:

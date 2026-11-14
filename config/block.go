@@ -163,27 +163,60 @@ func (l *loader) leafChain(x, mtbf, mttr node, unit string, k, n int) (variate.C
 	if unit == "" {
 		return variate.Chain{}, x.errorf("a block needs unit: hours, days or weeks")
 	}
-	up, err := mtbf.float()
+	toPeriods := unitHours(unit) / l.periodHours
+	up, upRange, err := blockTime(mtbf, toPeriods)
 	if err != nil {
 		return variate.Chain{}, err
 	}
 	if !(up > 0) || math.IsInf(up, 1) {
 		return variate.Chain{}, mtbf.errorf("mtbf must be positive")
 	}
-	ch := variate.Chain{K: k, N: n, Fail: l.periodHours / (up * unitHours(unit))}
+	ch := variate.Chain{K: k, N: n, Fail: l.periodHours / (up * unitHours(unit)), MTBFRange: upRange}
 	if mttr.n != nil {
-		down, err := mttr.float()
+		down, downRange, err := blockTime(mttr, toPeriods)
 		if err != nil {
 			return variate.Chain{}, err
 		}
 		if down < 0 || math.IsInf(down, 1) || math.IsNaN(down) {
 			return variate.Chain{}, mttr.errorf("mttr must be zero or positive")
 		}
+		if down == 0 && downRange != nil {
+			return variate.Chain{}, mttr.errorf("an mttr of 0 is a unit replaced at once, with no repair time for a range to move")
+		}
 		if down > 0 {
 			ch.Repair = l.periodHours / (down * unitHours(unit))
+			ch.MTTRRange = downRange
 		}
 	}
 	return ch, nil
+}
+
+// blockTime reads a block's mtbf or mttr: a number, or { constant: c,
+// range: ... } for a sweep, the range in the block's time unit, which
+// toPeriods converts.
+func blockTime(x node, toPeriods float64) (float64, *variate.InputRange, error) {
+	if x.isScalar() {
+		v, err := x.float()
+		return v, nil, err
+	}
+	m, err := x.mapping("constant", "range")
+	if err != nil {
+		return 0, nil, err
+	}
+	c, ok := m["constant"]
+	if !ok {
+		return 0, nil, x.errorf("a block's time is a number or { constant: c, range: [low, high] }")
+	}
+	v, err := c.float()
+	if err != nil {
+		return 0, nil, err
+	}
+	r, ok := m["range"]
+	if !ok {
+		return v, nil, nil
+	}
+	rng, err := parseRange(r, toPeriods)
+	return v, rng, err
 }
 
 // kofnChain reads n identical components of which k must be working.
@@ -230,6 +263,11 @@ func (l *loader) blockSource(id string, x node, s *variate.Source) error {
 		repaired = repaired || ch.Repair > 0
 	}
 	if !repaired {
+		for _, ch := range chains {
+			if ch.MTBFRange != nil {
+				return x.errorf("a block with no repair time is a Poisson source at its rate, with no units' times to sweep: give the source a frequency with a range instead")
+			}
+		}
 		d, err := dist.NewConstant(rate)
 		if err != nil {
 			return x.errorf("block rate: %v", err)

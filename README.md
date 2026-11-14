@@ -52,8 +52,8 @@ convergence criterion needs and what the run will cost; `stream`
 writes the rounds, the path each event takes with the values it
 books, filtered to a node or a leaf; `sweep` moves each input the
 model gives a range, how far its frequency, value, probability, holding
-time, factor or schedule could plausibly be off, to the two ends of
-that range and ranks the inputs by how far they move a figure: the
+time, factor, schedule or block component's MTBF or MTTR could
+plausibly be off, to the two ends of that range and ranks the inputs by how far they move a figure: the
 mean, a quantile, a return period's loss, P(T = 0), or a layer's,
 category's or source's mean (`--screen 0.1` moves every input by a
 tenth instead, to see which deserve a range). Its rows are exact where

@@ -299,7 +299,7 @@ func TestTornadoSimulatedRows(t *testing.T) {
 	g := chainModel(variate.Chain{K: 1, N: 2, Fail: 3, Repair: 40})
 	g.Nodes[0].Functions = []variate.Function{Fn("cost", "c", Pert(1, 2, 6))}
 	g.Layers = []variate.Layer{{ID: "xs", Attachment: 1}}
-	cfg := variate.SweepConfig{Figure: "layer:xs", Screen: 0.1, Run: variate.Config{Periods: 100000, Seed: 5, Workers: 4}}
+	cfg := variate.SweepConfig{Figure: "layer:xs", Screen: 0.1, Inputs: []string{"function"}, Run: variate.Config{Periods: 100000, Seed: 5, Workers: 4}}
 	sw, err := g.Sweep(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -416,5 +416,87 @@ func TestTornadoUnknownMeanNotExact(t *testing.T) {
 	}
 	if len(sw.Rows) == 0 {
 		t.Error("no rows")
+	}
+}
+
+// TestTornadoBlockInputs: a block's chains are inputs, each unit's up
+// time and, when it has one, its repair time, numbered in the order
+// written; a move scales a time, so the rows are the closed-form
+// unavailability at each end, and the swept graph is not changed.
+func TestTornadoBlockInputs(t *testing.T) {
+	chains := []variate.Chain{
+		{K: 1, N: 1, Fail: 5, Repair: 6},
+		{K: 1, N: 1, Fail: 10, Repair: 6},
+		{K: 2, N: 2, Fail: 0.5},
+	}
+	g := variate.Graph{
+		Sources: []variate.Source{{ID: "s", To: "down", Chains: chains}},
+		Nodes: []variate.Node{
+			{ID: "down", Functions: []variate.Function{{Name: "hours", Category: "c", Model: C(1), Basis: variate.PerTime}},
+				Outcomes: []variate.Outcome{{To: "up", OutageHolding: true}}},
+			{ID: "up"},
+		},
+	}
+	inputs := g.Inputs()
+	names := make([]string, 0, len(inputs))
+	for _, in := range inputs {
+		names = append(names, in.Kind+": "+in.Name)
+	}
+	want := []string{
+		"mtbf: source s block 1 mtbf",
+		"mttr: source s block 1 mttr",
+		"mtbf: source s block 2 mtbf",
+		"mttr: source s block 2 mttr",
+		"mtbf: source s block 3 mtbf",
+		"function: node down function hours",
+	}
+	if !slices.Equal(names, want) {
+		t.Fatalf("inputs\n%s\nwant\n%s", strings.Join(names, "\n"), strings.Join(want, "\n"))
+	}
+	// The share of time down, from each unit's share 1/(1 + up/repair):
+	// the third chain's units are replaced at once and never down.
+	down := func(up1, rep1 float64) float64 {
+		return 1 - (up1/(up1+rep1))*((1.0/10)/(1.0/10+1.0/6))
+	}
+	g.Sources[0].Chains = slices.Clone(chains)
+	g.Sources[0].Chains[0].MTBFRange = &variate.InputRange{Low: 0.1, High: 0.4}
+	g.Sources[0].Chains[0].MTTRRange = &variate.InputRange{Low: 0.5, High: 2, Factors: true}
+	sw, err := g.Sweep(context.Background(), variate.SweepConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sw.Rows) != 2 {
+		t.Fatalf("%d rows", len(sw.Rows))
+	}
+	ends := map[string][2]float64{
+		"source s block 1 mtbf": {down(0.1, 1.0/6), down(0.4, 1.0/6)},
+		"source s block 1 mttr": {down(0.2, 0.5/6), down(0.2, 2.0/6)},
+	}
+	for _, row := range sw.Rows {
+		e := ends[row.Input.Name]
+		if row.Method != variate.MethodExact || math.Abs(row.Base.Lo-down(0.2, 1.0/6)) > 1e-12 ||
+			math.Abs(row.AtLow.Lo-e[0]) > 1e-12 || math.Abs(row.AtHigh.Lo-e[1]) > 1e-12 {
+			t.Errorf("%s: %s %g %g %g, want %g %g %g", row.Input.Name, row.Method, row.AtLow.Lo, row.Base.Lo, row.AtHigh.Lo, e[0], down(0.2, 1.0/6), e[1])
+		}
+	}
+	if g.Sources[0].Chains[0].Fail != 5 || g.Sources[0].Chains[0].Repair != 6 {
+		t.Errorf("the swept graph changed: %+v", g.Sources[0].Chains[0])
+	}
+	// A screen moves every block time.
+	screen, err := g.Sweep(context.Background(), variate.SweepConfig{Screen: 0.1, Inputs: []string{"mtbf", "mttr"}})
+	if err != nil || len(screen.Rows) != 5 {
+		t.Fatalf("screen: %v, %v", screen, err)
+	}
+	for _, row := range screen.Rows {
+		if row.Method != variate.MethodExact {
+			t.Errorf("screen %s: %s", row.Input.Name, row.Method)
+		}
+	}
+	bad := g
+	bad.Sources = slices.Clone(g.Sources)
+	bad.Sources[0].Chains = slices.Clone(g.Sources[0].Chains)
+	bad.Sources[0].Chains[0].MTBFRange = &variate.InputRange{Low: 0.3, High: 0.4}
+	if _, err := bad.Sweep(context.Background(), variate.SweepConfig{}); err == nil || !strings.Contains(err.Error(), "source s block 1 mtbf range") {
+		t.Errorf("a range missing the mean: %v", err)
 	}
 }
