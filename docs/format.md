@@ -536,6 +536,9 @@ start:
   law given that it has lasted that long, past the law's end nothing;
   without `elapsed`, from its equilibrium residual. The rounds then go
   on to `to`.
+- The equilibrium residual of a law with infinite variance (a Pareto
+  with `alpha` at most 2) has an infinite mean, so such an entry must
+  give `in_service` or `elapsed`.
 - `source` names whose rounds they are, in the breakdown; it may be
   left out when the model has one source. `count` is a number or a
   distribution drawn once per repeat, rounded to a whole number.

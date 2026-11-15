@@ -89,7 +89,10 @@ func (b *builder) checkGivenQueue(g Given, n Node, subject string) error {
 	if err := checkSlot("start", subject+" age", g.Age, 0, math.Inf(1), false); err != nil {
 		return err
 	}
-	return checkSlot("start", subject+" in_service", g.InService, 0, math.Inf(1), true)
+	if err := checkSlot("start", subject+" in_service", g.InService, 0, math.Inf(1), true); err != nil {
+		return err
+	}
+	return checkResidual(subject, "the work", "in_service", g.InService, n.Queue.Work)
 }
 
 func (b *builder) checkGivenHolding(g Given, n Node, subject string) error {
@@ -105,7 +108,20 @@ func (b *builder) checkGivenHolding(g Given, n Node, subject string) error {
 	case hold == nil:
 		return modelError("start", subject, "the outcome to "+g.To+" has no holding time")
 	}
-	return checkSlot("start", subject+" elapsed", g.Elapsed, 0, math.Inf(1), true)
+	if err := checkSlot("start", subject+" elapsed", g.Elapsed, 0, math.Inf(1), true); err != nil {
+		return err
+	}
+	return checkResidual(subject, "the holding time", "elapsed", g.Elapsed, hold)
+}
+
+// checkResidual refuses an entry that leaves the time so far unknown when
+// the law d's equilibrium residual, of mean E[X²]/(2E[X]), has an infinite
+// mean.
+func checkResidual(subject, law, field string, given, d dist.Distribution) error {
+	if given != nil || d == nil || !math.IsInf(d.Var(), 1) {
+		return nil
+	}
+	return modelError("start", subject, law+" has infinite variance, so what is left drawn from its long-run residual has an infinite mean: give "+field)
 }
 
 // givenHold finds node n's outcomes to the node to: the holding of the

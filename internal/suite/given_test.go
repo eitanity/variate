@@ -209,6 +209,7 @@ func TestGivenRefusals(t *testing.T) {
 	two.Sources = append(two.Sources, variate.Source{ID: "u", Frequency: C(1), To: "b"})
 	outage := held(variate.Given{Node: "a", To: "b", Count: C(1)})
 	outage.Nodes[0].Outcomes[0] = variate.Outcome{To: "b", OutageHolding: true}
+	par, _ := dist.NewPareto(0.2, 1.5) // infinite variance: its residual has an infinite mean
 	cases := []struct {
 		name string
 		g    variate.Graph
@@ -225,11 +226,21 @@ func TestGivenRefusals(t *testing.T) {
 		{"outage", outage, "outage"},
 		{"two sources", two, "name the rounds' source"},
 		{"negative count", held(variate.Given{Node: "a", To: "b", Count: neg}), "does not fit"},
+		{"residual in service", lineGraph(1, par, 3, variate.Given{Node: "q", Count: C(1), Age: C(1)}), "give in_service"},
+		{"residual held", heldGraph(par, 3, variate.Given{Node: "a", To: "b", Count: C(1)}), "give elapsed"},
 	}
 	for _, c := range cases {
 		_, _, err := c.g.Compile(variate.Config{})
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: error %v, want one containing %q", c.name, err, c.want)
+		}
+	}
+	for _, g := range []variate.Graph{
+		lineGraph(1, par, 3, variate.Given{Node: "q", Count: C(1), Age: C(1), InService: C(1)}),
+		heldGraph(par, 3, variate.Given{Node: "a", To: "b", Count: C(1), Elapsed: C(1)}),
+	} {
+		if _, _, err := g.Compile(variate.Config{}); err != nil {
+			t.Errorf("%s with the time so far given: %v", g.ID, err)
 		}
 	}
 	m, _, err := held(variate.Given{Node: "a", To: "b", Count: C(1)}).Compile(variate.Config{})
