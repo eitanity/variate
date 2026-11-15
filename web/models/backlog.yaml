@@ -1,0 +1,28 @@
+# A maintenance team's backlog: work orders arrive at a steady rate and
+# wait for one of two crews, first come, first served; each order brings
+# a lognormal amount of work in crew-months, so a crew of speed 1 clears
+# it in that many months. An order costs a fee per month while it is
+# open, waiting or worked on, and a fixed amount when it is closed. A
+# period is a month and the run starts today with no backlog, two years
+# repeated, so the report gives each month's figures as the backlog
+# builds, and the queue's wait and stay: the median order waits little
+# while the slowest wait months, since a few long jobs hold both crews.
+start: { from: empty, horizon: {{horizon}} }
+graphs:
+  - id: maintenance
+    sources:
+      - { id: orders, frequency: { constant: {{orders}} }, to: backlog }
+    nodes:
+      - id: backlog
+        queue:
+          servers: {{crews}}
+          speed: {{speed}}
+          work: { lognormal: { median: {{median}}, p90: {{p90}} } }
+          period_end: carry
+        functions:
+          - { name: open, category: exposure, basis: per_time, pert: [200, 400, 1000] }
+        outcomes:
+          - { to: closed }
+      - id: closed
+        functions:
+          - { name: close_out, category: closing, pert: [300, 500, 900] }

@@ -65,6 +65,24 @@ type Node struct {
 	NextRange       *InputRange // how uncertain NextHolding is; nil = not swept
 	Threshold       *Threshold  // a branch on one function's value, in place of Outcomes and Next; nil = none
 	Trigger         *Trigger    // the node is entered once at a period's end when the period's sum of its inputs is above a level; nil = none
+	Queue           *Queue      // the node serves the rounds reaching it in order with limited capacity; nil = none
+}
+
+// Queue makes a node a line served first come, first served by Servers
+// servers of one Speed: a round reaching the node brings an amount of
+// Work, drawn as it arrives, and is served for Work ÷ Speed periods once
+// a server is free, from every source in order of arrival. The node's
+// on-entry functions book on arrival, its per-time functions over the
+// stay, waiting and service, and its outcomes are chosen once served.
+// With Reset, at each period's end the rounds still waiting or in
+// service leave for the Unfinished node; without it the line carries
+// on, which only a started run allows.
+type Queue struct {
+	Servers    int
+	Speed      float64           // work done per period by each server
+	Work       dist.Distribution // each round's work, on [0, ∞) with a finite mean
+	Reset      bool
+	Unfinished string // with Reset, the node the unserved rounds go to
 }
 
 // Threshold sends a round one way when the value a node's function

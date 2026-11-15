@@ -82,11 +82,8 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if cfg.Periods < 0 {
 		return nil, errors.New("config: Periods must be >= 0")
 	}
-	if m.Started() && cfg.Periods != 0 {
-		return nil, errors.New("config: a started run counts repeats of its horizon, not periods: set Repeats")
-	}
-	if cfg.Periods == 0 && cfg.Repeats == 0 && cfg.Series {
-		return nil, errors.New("config: Series needs a fixed Periods, or Repeats in a started run")
+	if err := checkRunConfig(m, cfg); err != nil {
+		return nil, err
 	}
 	w := &Workspace{m: m, cfg: cfg, l: newLayout(m), delays: (m.hasDelays || m.renewal) && !m.Started(), started: m.Started()}
 	w.rows = m.Plan()
@@ -140,6 +137,20 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	return w, nil
 }
 
+// checkRunConfig refuses the settings a run cannot take: the round stream
+// with queues, periods in a started run, and a series without a length.
+func checkRunConfig(m *Compiled, cfg Config) error {
+	switch {
+	case m.HasQueues() && cfg.Observer != nil:
+		return errors.New("config: the round stream does not follow a round through a queue yet: a model with queues runs without it")
+	case m.Started() && cfg.Periods != 0:
+		return errors.New("config: a started run counts repeats of its horizon, not periods: set Repeats")
+	case cfg.Periods == 0 && cfg.Repeats == 0 && cfg.Series:
+		return errors.New("config: Series needs a fixed Periods, or Repeats in a started run")
+	}
+	return nil
+}
+
 // allocRows allocates the series a run keeps, and a started run's
 // per-period statistics.
 func (w *Workspace) allocRows() {
@@ -149,7 +160,8 @@ func (w *Workspace) allocRows() {
 		w.result.Series = &Series{l: w.l, rows: make([]float64, int(n)*w.l.width), n: n, horizon: m.horizon}
 	}
 	if w.started {
-		w.result.ByPeriod = &PeriodStats{l: w.l, h: int(m.horizon), w: make([]stats.Welford, int(m.horizon)*w.l.width)}
+		h := int(m.horizon)
+		w.result.ByPeriod = &PeriodStats{l: w.l, h: h, w: make([]stats.Welford, h*w.l.width), waitCo: make([]float64, h*len(m.queues)), stayCo: make([]float64, h*len(m.queues))}
 	}
 }
 
@@ -165,6 +177,12 @@ func (w *Workspace) allocSlots(nslots int) {
 	for i := 0; i < nslots; i++ {
 		sl := newSlot(w.l, w.block, m.pendCap, nslots, len(m.srcs), len(m.nodes), len(m.outs), len(m.tailThresholds))
 		sl.coarse = w.slotCoarse()
+		for _, q := range w.result.Queues {
+			sl.qwait = append(sl.qwait, q.wait.Hist.Empty())
+			sl.qwaitC = append(sl.qwaitC, q.wait.Groups[0].Empty())
+			sl.qstay = append(sl.qstay, q.stay.Hist.Empty())
+			sl.qstayC = append(sl.qstayC, q.stay.Groups[0].Empty())
+		}
 		w.slots = append(w.slots, sl)
 	}
 }
@@ -206,6 +224,9 @@ func (w *Workspace) startPool(nw, pool int) {
 	// bound: workers or slots, fixed at construction
 	for i := 0; i < nw; i++ {
 		wk := &worker{ss: dist.NewSamplerSet(m.pools, pool), period: make([]float64, m.periodSlots), sums: make([]float64, len(m.trigs))}
+		for _, q := range m.queues {
+			wk.queues = append(wk.queues, newWQueue(q))
+		}
 		if m.renewal {
 			wk.phase = make([]int32, len(m.srcs))
 			wk.downUntil = make([]float64, len(m.srcs))
@@ -448,6 +469,7 @@ func (w *Workspace) allocResult() error {
 	}
 	w.allocLayers(e, res)
 	w.allocTriggers(res)
+	w.allocQueues(res)
 	r.Contrib = make([]Accum, len(m.nodes))
 	w.hasFn = make([]bool, len(m.nodes))
 	for v := range m.nodes {
@@ -464,6 +486,21 @@ func (w *Workspace) allocResult() error {
 		}
 	}
 	return nil
+}
+
+// allocQueues gives each queue its columns' accumulators, and its waits
+// and stays their histograms, ranged from the mean service time.
+func (w *Workspace) allocQueues(res float64) {
+	m, r := w.m, &w.result
+	r.QueueCols = make([]Accum, queueCols*len(m.queues))
+	r.Queues = make([]QueueResult, len(m.queues))
+	for c, q := range m.queues {
+		scale := m.poolMean[q.work] / q.speed
+		if !(scale > 0) || math.IsInf(scale, 1) {
+			scale = 1
+		}
+		r.Queues[c] = QueueResult{wait: newItemAccum(scale, res), stay: newItemAccum(scale, res)}
+	}
 }
 
 // allocGroups gives each quantity with a histogram its batch-group
@@ -535,8 +572,10 @@ func (w *Workspace) accum(i int) *Accum {
 		return &w.result.Contrib[i-1-l.cats-l.srcs-l.nodes]
 	case i < l.trigAt:
 		return &w.result.Layers[i-l.layerAt]
-	default:
+	case i < l.queueAt:
 		return &w.result.Triggers[i-l.trigAt]
+	default:
+		return &w.result.QueueCols[i-l.queueAt]
 	}
 }
 
@@ -568,11 +607,17 @@ func (w *Workspace) resetResult(seed uint64) {
 	for i := range w.stores {
 		w.stores[i].reset()
 	}
+	for i := range r.Queues {
+		r.Queues[i].wait.reset()
+		r.Queues[i].stay.reset()
+	}
 	if r.Series != nil {
 		clear(r.Series.rows)
 	}
 	if r.ByPeriod != nil {
 		clear(r.ByPeriod.w)
+		clear(r.ByPeriod.waitCo)
+		clear(r.ByPeriod.stayCo)
 	}
 	for i := range w.rows {
 		w.rows[i].Observed, w.rows[i].Met = 0, false

@@ -33,13 +33,18 @@ bracketed between rigorous bounds, with no sampling at all.
   drawn once per period and shared by every event in it.
 - **Structure:** several graphs in one model, templates instanced with
   overrides, categories added across the model.
+- **Queues:** a node that serves its rounds first come, first served
+  with a number of servers of one speed, each round bringing its own
+  work, carrying its line from period to period or emptying it at each
+  period's end; the report gives the wait and stay with their
+  quantiles, the line and the servers' utilisation.
 - **Where it starts:** the steady state, or a started run, a horizon of
   periods from an empty start, repeated, reported period by period with
   each period's exact mean where the paths allow, beside the horizon's
   total.
 
 `docs/format.md` is the reference for the YAML model file, and
-`examples/` holds twenty-four complete models with a README saying what
+`examples/` holds twenty-five complete models with a README saying what
 each shows, from a one-line compound loss to a register of a hundred
 risks, a plant as a block diagram, and a shift with its own period.
 

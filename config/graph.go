@@ -304,7 +304,7 @@ func (l *loader) parseNodes(x node, nm naming) error {
 }
 
 func (l *loader) parseNode(it node, nm naming) (variate.Node, error) {
-	m, err := it.mapping("id", "description", "functions", "mode", "outcomes", "next", keyNextHolding, "threshold", "trigger")
+	m, err := it.mapping("id", "description", "functions", "mode", "outcomes", "next", keyNextHolding, "threshold", "trigger", "queue")
 	if err != nil {
 		return variate.Node{}, err
 	}
@@ -340,7 +340,62 @@ func (l *loader) parseNode(it node, nm naming) (variate.Node, error) {
 	if err := parseCondition(m, &n, nm); err != nil {
 		return n, err
 	}
+	if q, ok := m["queue"]; ok {
+		if n.Queue, err = l.parseQueue(q, nm); err != nil {
+			return n, err
+		}
+	}
 	return l.parseNext(n, m, nm)
+}
+
+// parseQueue reads queue: { servers, speed, work, period_end, unfinished }:
+// one server of speed 1 unless given, the work a distribution in the
+// node's time units as a holding time is, and period_end carry or reset,
+// the latter with the node its unserved rounds go to.
+func (l *loader) parseQueue(x node, nm naming) (*variate.Queue, error) {
+	m, err := x.mapping("servers", "speed", "work", "period_end", "unfinished")
+	if err != nil {
+		return nil, err
+	}
+	q := &variate.Queue{Servers: 1, Speed: 1}
+	if s, ok := m["servers"]; ok {
+		n, err := s.integer(1, 1<<16)
+		if err != nil {
+			return nil, err
+		}
+		q.Servers = int(n)
+	}
+	if s, ok := m["speed"]; ok {
+		if q.Speed, err = s.float(); err != nil {
+			return nil, err
+		}
+	}
+	w, ok := m["work"]
+	if !ok {
+		return nil, x.errorf("a queue needs work, each round's amount as a distribution")
+	}
+	if q.Work, _, _, err = l.parseDist(w, slotHolding); err != nil {
+		return nil, err
+	}
+	end, ok := m["period_end"]
+	if !ok {
+		return nil, x.errorf("a queue needs period_end: carry, to keep its line from one period to the next, or reset, to empty it at each period's end")
+	}
+	mode, err := end.oneOf("carry", "reset")
+	if err != nil {
+		return nil, err
+	}
+	q.Reset = mode == "reset"
+	if u, ok := m["unfinished"]; ok {
+		s, err := u.str()
+		if err != nil {
+			return nil, err
+		}
+		if q.Unfinished, err = nm.resolve(u, s); err != nil {
+			return nil, err
+		}
+	}
+	return q, nil
 }
 
 // parseCondition reads a node's threshold and trigger.

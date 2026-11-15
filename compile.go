@@ -31,6 +31,7 @@ type cnode struct {
 	twoWay             bool    // absolute mode with one uncertain probability and a remainder
 	alias              int32   // alias table start, or noIndex
 	thresh             int32   // the function a threshold tests, outside the ranges above, or noIndex
+	queue              int32   // the node's queue, or noIndex
 	over               float64 // the threshold: above when the value is greater
 }
 
@@ -91,6 +92,7 @@ type Compiled struct {
 	reach                                        [][]float64
 	burnIn                                       int64        // burn-in periods
 	horizon                                      int64        // a started run's periods per repeat; 0 in steady state
+	queues                                       []cqueue     // the queue nodes'
 	pendCap                                      int          // pending bookings a slot or the finaliser holds
 	resid                                        []residTable // per source with a repair time, its residual table
 	hasDelays                                    bool
@@ -166,6 +168,7 @@ func (m *Compiled) sizingMean(e *Expectation) float64 {
 // horizon's quantities.
 func (m *Compiled) scaleMeans() *Expectation {
 	e, _, _, _ := m.means()
+	m.queueScale(e)
 	if !m.Started() {
 		return e
 	}
@@ -221,6 +224,9 @@ func (g Graph) flattenReached(cfg Config) (*Compiled, *builder, error) {
 	}
 	m.reach = m.reachTable()
 	if err := m.outageHolds(); err != nil {
+		return nil, nil, err
+	}
+	if err := m.sizeQueues(); err != nil {
 		return nil, nil, err
 	}
 	return m, b, nil
@@ -322,6 +328,11 @@ func (m *Compiled) reachWith(drawn []float64, reach [][]float64) {
 			// bound: outcomes of one node
 			for j := n.outStart; j < n.outEnd; j++ {
 				r[m.outs[j].to] += r[v] * m.outcomeProbWith(v, j, drawn)
+			}
+			// A queue's unfinished rounds have no closed form: the reach
+			// counts every round there too, a bound that sizes the run.
+			if c := n.queue; c != noIndex && m.queues[c].unfinished != noIndex {
+				r[m.queues[c].unfinished] += r[v]
 			}
 		}
 	}

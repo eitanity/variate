@@ -68,3 +68,11 @@ func scratchFullError(rounds int) error {
 
 //go:noinline
 func noRecordFileError() error { return errors.New("record buffer full and no record file") }
+
+func queueFullError(queue string, capacity int) error {
+	return errors.New("queue " + queue + ": more than " + itoa(capacity) + " rounds at once; the line is sized at twice the rounds expected to reach it in a task")
+}
+
+func drainError(periods int) error {
+	return errors.New("the queues did not empty within " + itoa(periods) + " periods after the horizon")
+}

@@ -35,6 +35,9 @@ func (b *builder) validate() error {
 	if err := b.checkAcyclic(); err != nil {
 		return err
 	}
+	if err := b.checkQueues(); err != nil {
+		return err
+	}
 	if err := b.checkTriggers(); err != nil {
 		return err
 	}
@@ -210,7 +213,10 @@ func (b *builder) checkNode(n Node) error {
 			return err
 		}
 	}
-	leaf := len(n.Outcomes) == 0 && n.Next == "" && n.Threshold == nil
+	if err := b.checkQueue(n); err != nil {
+		return err
+	}
+	leaf := len(n.Outcomes) == 0 && n.Next == "" && n.Threshold == nil && n.Queue == nil
 	for _, f := range n.Functions {
 		if err := checkSlot("function", n.ID+"."+f.Name, f.Model, 0, math.Inf(1), false); err != nil {
 			return err
@@ -709,6 +715,9 @@ func (b *builder) targets(n Node) []int32 {
 	}
 	if n.Threshold != nil {
 		out = append(out, b.nodeIndex[n.Threshold.Above], b.nodeIndex[n.Threshold.Below])
+	}
+	if n.Queue != nil && n.Queue.Unfinished != "" {
+		out = append(out, b.nodeIndex[n.Queue.Unfinished])
 	}
 	return out
 }

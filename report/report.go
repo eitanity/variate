@@ -278,6 +278,7 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 			fmt.Fprintf(w, "%-28s %12.4g %12.4g %12.4g %12.4g %12.4g\n", name, s.QSE[0], s.QSE[1], s.QSE[2], s.QSE[3], s.QSE[4])
 		}
 	})
+	rep.writeQueueTable(w)
 	rep.writePeriodTable(w)
 	rep.writeReachTable(w)
 	per := "per period"
@@ -629,8 +630,7 @@ func (rep *Report) WriteJSON(w *bufio.Writer) {
 	}
 	jsonHistogram(j, "histogram", rep.Hist)
 	jsonHistogram(j, "log_histogram", rep.LogHist)
-	rep.jsonSeries(j)
-	rep.jsonPeriods(j)
+	rep.jsonRows(j)
 	if rep.Warnings != nil {
 		j.key("warnings")
 		j.open('[')
@@ -1016,6 +1016,13 @@ func (rep *Report) periodQuantities() []periodQuantity {
 	for i, f := range c.Firings() {
 		q = append(q, periodQuantity{name: "trigger:" + srcs[f.Source], stat: func(k int) variate.PeriodStat { return ps.Trigger(i, k) }, column: col + i})
 	}
+	col += len(c.Firings())
+	names := variate.QueueColumns()
+	for i, id := range c.QueueIDs() {
+		for j, name := range names {
+			q = append(q, periodQuantity{name: "queue:" + id + ":" + name, stat: func(k int) variate.PeriodStat { return ps.Queue(i, j, k) }, column: col + len(names)*i + j})
+		}
+	}
 	return q
 }
 
@@ -1050,6 +1057,14 @@ func exactText(x float64) string {
 		return "-"
 	}
 	return strconv.FormatFloat(x, 'g', 6, 64)
+}
+
+// jsonRows writes what the run kept beyond its summary: the series, the
+// queues' figures and a started run's figures per period.
+func (rep *Report) jsonRows(j *jw) {
+	rep.jsonSeries(j)
+	rep.jsonQueues(j)
+	rep.jsonPeriods(j)
 }
 
 // jsonLength writes the run's length: its periods, or a started run's
@@ -1093,6 +1108,24 @@ func (rep *Report) jsonPeriods(j *jw) {
 		j.nums("exact", col)
 		j.closeC('}')
 	}
+	for i, id := range rep.C.QueueIDs() {
+		for _, x := range []struct {
+			name string
+			f    func(c, k int) variate.QueueRatio
+		}{{"wait", ps.Wait}, {"stay", ps.Stay}} {
+			j.key("queue:" + id + ":" + x.name)
+			j.open('{')
+			for k := range col {
+				col[k] = x.f(i, k).Mean
+			}
+			j.nums("mean", col)
+			for k := range col {
+				col[k] = x.f(i, k).StdErr
+			}
+			j.nums("stderr", col)
+			j.closeC('}')
+		}
+	}
 	j.closeC('}')
 }
 
@@ -1114,4 +1147,73 @@ func (rep *Report) csvPeriods(w *bufio.Writer) {
 			}
 		}
 	}
+}
+
+// writeQueueTable prints each queue's wait and stay over the rounds it
+// served, with quantiles, and per period (or repeat) its rounds, line,
+// utilisation and unfinished rounds.
+func (rep *Report) writeQueueTable(w *bufio.Writer) {
+	if len(rep.Sum.Queues) == 0 {
+		return
+	}
+	per := "period"
+	if rep.C.Started() {
+		per = "repeat"
+	}
+	fmt.Fprintf(w, "\n%-28s %12s %12s %12s %12s %12s %12s %12s %12s\n", "queue, per round served", "rounds", "mean", "stderr", "p50", "p90", "p99", "p999", "p99 stderr")
+	for _, name := range sortedKeys(rep.Sum.Queues) {
+		q := rep.Sum.Queues[name]
+		for _, x := range []struct {
+			what string
+			s    variate.ItemStat
+		}{{"wait", q.Wait}, {"stay", q.Stay}} {
+			fmt.Fprintf(w, "%-28s %12d %12.6g %12.4g %12.6g %12.6g %12.6g %12.6g %12.4g\n", name+" "+x.what, x.s.N, x.s.Mean, x.s.StdErr, x.s.P50, x.s.P90, x.s.P99, x.s.P999, x.s.QSE[3])
+		}
+	}
+	fmt.Fprintf(w, "\n%-28s %12s %12s %12s %12s %12s\n", "queue, per "+per, "joined", "served", "unfinished", "mean line", "utilisation")
+	for _, name := range sortedKeys(rep.Sum.Queues) {
+		q := rep.Sum.Queues[name]
+		fmt.Fprintf(w, "%-28s %12.6g %12.6g %12.6g %12.6g %12.4f\n", name, q.Joined.Mean, q.Served.Mean, q.Unfinished.Mean, q.Line, q.Utilisation)
+	}
+}
+
+// itemStat writes a per-round statistic of a queue.
+func (j *jw) itemStat(k string, s variate.ItemStat) {
+	j.key(k)
+	j.open('{')
+	j.fieldInt("n", s.N)
+	j.field("mean", s.Mean)
+	j.field("stderr", s.StdErr)
+	for i, name := range []string{"p50", "p90", "p95", "p99", "p999"} {
+		j.field(name, [5]float64{s.P50, s.P90, s.P95, s.P99, s.P999}[i])
+		j.field(name+"_stderr", s.QSE[i])
+	}
+	j.fieldBool("clipped", s.Clipped)
+	j.closeC('}')
+}
+
+// jsonQueues writes each queue's figures, when the model has queues.
+func (rep *Report) jsonQueues(j *jw) {
+	if len(rep.Sum.Queues) == 0 {
+		return
+	}
+	j.key("queues")
+	j.open('{')
+	for _, name := range sortedKeys(rep.Sum.Queues) {
+		q := rep.Sum.Queues[name]
+		j.key(name)
+		j.open('{')
+		j.fieldInt("servers", int64(q.Servers))
+		j.itemStat("wait", q.Wait)
+		j.itemStat("stay", q.Stay)
+		j.stat("joined", q.Joined)
+		j.stat("served", q.Served)
+		j.stat("unfinished", q.Unfinished)
+		j.stat("line_at_end", q.Length)
+		j.field("mean_line", q.Line)
+		j.stat("busy", q.Busy)
+		j.field("utilisation", q.Utilisation)
+		j.closeC('}')
+	}
+	j.closeC('}')
 }

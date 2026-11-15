@@ -103,27 +103,30 @@ func (m *Compiled) periodRows(l layout) [][]float64 {
 }
 
 // horizonMeans sets the expectations' means to the horizon's sums, and
-// the rounds and steps to the horizon's.
+// the rounds and steps to the horizon's. The steps are a work estimate:
+// each source's arrivals times the nodes it reaches, which a queue does
+// not change.
 func (m *Compiled) horizonMeans(e *Expectation, l layout, horizon []float64) {
 	e.Mean = horizon[l.total()]
-	steps := 0.0
 	for v := range m.nodes {
 		e.EntriesPer[v] = horizon[l.entry(index(v))]
 		e.Contrib[v] = horizon[l.contrib(index(v))]
-		steps += e.EntriesPer[v]
 	}
-	e.StepsPerPeriod = steps
 	for c := range m.categories {
 		e.MeanByCategory[c] = horizon[l.cat(index(c))]
 	}
 	rounds := 0.0
+	steps := 0.0
 	for k := range m.srcs {
 		e.MeanBySource[k] = horizon[l.src(index(k))]
-		rounds += sumOf(m.startedArrivals(k, int(m.horizon)))
+		arr := sumOf(m.startedArrivals(k, int(m.horizon)))
+		rounds += arr
+		steps += arr * sumOf(m.reach[k])
 		if m.srcs[k].trigger != noIndex {
-			rounds = math.NaN()
+			rounds, steps = math.NaN(), math.NaN()
 		}
 	}
+	e.StepsPerPeriod = steps
 	e.RoundsPerPeriod = rounds
 	e.ArrivalsPerPeriod *= float64(m.horizon)
 	for j := range m.outs {
@@ -260,31 +263,45 @@ func (m *Compiled) startedClasses(k int, hl holdList) []startedClass {
 		if c.none == 0 && !c.mixed && sumOf(c.held) == 0 {
 			continue
 		}
-		n := m.nodes[v]
-		// bound: outcomes of one node
-		for j := n.outStart; j < n.outEnd; j++ {
-			o := m.outs[j]
-			p := m.outcomeMeanProb(v, j)
-			if p == 0 {
-				continue
+		if m.nodes[v].queue != noIndex {
+			// What follows a queue has no closed form.
+			for _, to := range m.successors(v) {
+				cls[to].mixed = true
 			}
-			to := &cls[o.to]
-			switch {
-			case o.outage:
-				to.mixed = true
-			case o.hold == noIndex:
-				to.none += p * c.none
-				for i, x := range c.held {
-					to.held[i] += p * x
-				}
-				to.mixed = to.mixed || c.mixed
-			default:
-				to.held[hl.at[j]] += p * c.none
-				to.mixed = to.mixed || c.mixed || sumOf(c.held) > 0
-			}
+			continue
 		}
+		m.passOn(cls, v, hl)
 	}
 	return cls
+}
+
+// passOn adds node v's mass to its outcomes' targets, by the holding each
+// passes.
+func (m *Compiled) passOn(cls []startedClass, v int32, hl holdList) {
+	c := cls[v]
+	n := m.nodes[v]
+	// bound: outcomes of one node
+	for j := n.outStart; j < n.outEnd; j++ {
+		o := m.outs[j]
+		p := m.outcomeMeanProb(v, j)
+		if p == 0 {
+			continue
+		}
+		to := &cls[o.to]
+		switch {
+		case o.outage:
+			to.mixed = true
+		case o.hold == noIndex:
+			to.none += p * c.none
+			for i, x := range c.held {
+				to.held[i] += p * x
+			}
+			to.mixed = to.mixed || c.mixed
+		default:
+			to.held[hl.at[j]] += p * c.none
+			to.mixed = to.mixed || c.mixed || sumOf(c.held) > 0
+		}
+	}
 }
 
 func sumOf(x []float64) float64 {
@@ -409,7 +426,7 @@ func (m *Compiled) heldTime(v int32, c startedClass, hl holdList, carried [][]fl
 	held = make([]float64, h)
 	n := m.nodes[v]
 	delayed := sumOf(c.held) > 0
-	ok = true
+	ok = n.queue == noIndex
 	// bound: outcomes of one node
 	for j := n.outStart; j < n.outEnd; j++ {
 		o := m.outs[j]

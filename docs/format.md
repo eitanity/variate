@@ -408,6 +408,55 @@ Without ranges, `variate sweep --screen 0.1` moves every input by a
 tenth either way. That ranks leverage, not uncertainty: it shows which
 inputs are worth giving a range.
 
+## Queues
+
+A node with a `queue` serves the rounds that reach it in order of
+arrival, from every source, with limited capacity: what cannot be
+served at once waits.
+
+```yaml
+- id: backlog
+  queue:
+    servers: 2                 # default 1
+    speed: 1                   # work each server does per period; default 1
+    work: { lognormal: { median: 0.5, p90: 3 } }   # each round's work, drawn on arrival
+    period_end: carry          # carry the line on, or reset it at each period's end
+  functions:
+    - { name: open, category: exposure, basis: per_time, constant: 400 }
+  outcomes:
+    - { to: closed }
+```
+
+A round reaching the node draws its work, which may take a time `unit`
+as a holding time does, and joins the line; a free server takes the
+round that has waited longest and serves it for work ÷ speed periods.
+The node's on-entry functions book when the round arrives, its
+per-time functions over its stay, waiting and service, and on being
+served the round goes on by the node's outcomes, holding times
+included, which the per-time functions book over too, as at any node.
+
+`period_end: reset` empties the line at each period's end: the rounds
+still waiting or in service go to the node named by `unfinished`,
+which books and routes them like any other. `carry` keeps the line
+from one period to the next, which needs a started run (below): in
+steady state its warm-up has no known bound. In a steady-state run a
+reset queue must be reached within the period its rounds arrive, so no
+holding time, trigger or `unfinished` exit may lie on a path into it.
+
+The report gives, per queue, the wait and the stay of the rounds it
+served, each with its mean, quantiles and their errors, which come
+from groups of tasks since rounds that share a line are not
+independent; and per period (per repeat in a started run) the rounds
+that joined, those served and those sent to `unfinished`, the mean
+line at a period's end and the share of the servers' time busy. A
+started run also gives, per period, the mean wait and stay of the
+rounds that arrived in it, with their errors across the repeats, and
+the line and busy time at each period's end. What a queue books after
+it, and over its stay, has no exact mean; what is booked before it
+keeps one. A trigger whose inputs are reached through a queue, an
+outage holding after one, and the round stream with queues are not
+supported yet.
+
 ## Started runs
 
 A run is otherwise the steady state: every period alike, as if the

@@ -62,6 +62,11 @@ func (w *Workspace) mergeSlot(sl *slot) {
 	}
 	r.Steps += sl.steps
 	r.TailPeriods += sl.tail
+	for c := range r.Queues {
+		q := &r.Queues[c]
+		q.wait.merge(sl.task, sl.qwait[c], sl.qwaitC[c], sl.stats[w.l.queue(c, qWait)].sum.Value())
+		q.stay.merge(sl.task, sl.qstay[c], sl.qstayC[c], sl.stats[w.l.queue(c, qStay)].sum.Value())
+	}
 	if w.started {
 		r.BeyondHorizon += sl.dropped
 		r.ByPeriod.add(sl.rows)

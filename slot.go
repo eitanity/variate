@@ -38,24 +38,27 @@ func (q *qstat) add(x float64) {
 // the bookings past the block, the slot statistics, and the task's
 // integer counts.
 type slot struct {
-	id       uint32 // the task's stream key half
-	task     int64
-	line     int64     // the timeline the task's block belongs to
-	a, b     int64     // the block [a, b), in the timeline's periods
-	rows     []float64 // a row per period of [a, b)
-	far      []float64 // scratch row for a booking past the block
-	farAt    int64     // the period far holds, or below a when it holds none
-	pend     pending   // the bookings past the block
-	dropped  float64   // a started run's value booked past its horizon, dropped
-	incoming []float64 // what the finaliser handed in, by distance back to the task that booked it
-	stats    []qstat
-	coarse   []*stats.LogHist // with delays, the block's group histogram per quantity; nil entries without one
-	events   []uint64
-	reach    []uint64 // [source×nodes]
-	outs     []uint64 // [source×outcomes]
-	steps    uint64
-	closed   int64 // periods closed by the task
-	tail     int64 // closed periods with Total at or beyond the tail quantile bound
+	id      uint32 // the task's stream key half
+	task    int64
+	line    int64     // the timeline the task's block belongs to
+	a, b    int64     // the block [a, b), in the timeline's periods
+	rows    []float64 // a row per period of [a, b)
+	far     []float64 // scratch row for a booking past the block
+	farAt   int64     // the period far holds, or below a when it holds none
+	pend    pending   // the bookings past the block
+	dropped float64   // a started run's value booked past its horizon, dropped
+	// Per queue, the waits and stays of the rounds served that reached it
+	// within the block, and their coarse copies for the batch groups.
+	qwait, qwaitC, qstay, qstayC []*stats.LogHist
+	incoming                     []float64 // what the finaliser handed in, by distance back to the task that booked it
+	stats                        []qstat
+	coarse                       []*stats.LogHist // with delays, the block's group histogram per quantity; nil entries without one
+	events                       []uint64
+	reach                        []uint64 // [source×nodes]
+	outs                         []uint64 // [source×outcomes]
+	steps                        uint64
+	closed                       int64 // periods closed by the task
+	tail                         int64 // closed periods with Total at or beyond the tail quantile bound
 	// Per tail threshold, the periods that reached it and their rows summed.
 	tailCounts []int64
 	tailSums   []float64 // [threshold×width]
@@ -90,6 +93,11 @@ func (sl *slot) reset() {
 	clear(sl.tailSums)
 	sl.steps = 0
 	sl.dropped = 0
+	for _, hs := range [4][]*stats.LogHist{sl.qwait, sl.qwaitC, sl.qstay, sl.qstayC} {
+		for _, h := range hs {
+			h.Reset()
+		}
+	}
 	sl.closed = 0
 	sl.tail = 0
 	sl.err = nil

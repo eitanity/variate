@@ -204,6 +204,14 @@ function show(r, ms) {
     ...Object.entries(r.by_category).map(([name, s]) => ["category " + name, fmt(s.mean, 4), pct(s.share), fmt(s.p50), fmt(s.p90), fmt(s.p99), fmt(s.p999)]),
     ...Object.entries(r.by_source).map(([name, s]) => ["source " + name, fmt(s.mean, 4), pct(s.share), fmt(s.p50), fmt(s.p90), fmt(s.p99), fmt(s.p999)]),
   ]);
+  // Queues: each one's wait and stay over the rounds it served, and how
+  // busy its servers were.
+  const qs = Object.entries(r.queues || {});
+  $("queueBlock").hidden = qs.length === 0;
+  const cell = (s) => `${fmt(s.mean, 3)} ± ${fmt(s.stderr, 2)}`;
+  table($("queues"), ["queue", "rounds served", "mean wait", "wait P50", "wait P90", "wait P99", "mean stay", "stay P99", "servers busy"],
+    qs.flatMap(([name, q]) => [[name, fmt(q.wait.n, 6), cell(q.wait), fmt(q.wait.p50), fmt(q.wait.p90), fmt(q.wait.p99), cell(q.stay), fmt(q.stay.p99), pct(q.utilisation)]]));
+  $("queueNote").textContent = qs.length ? "Times are in periods. A round's wait runs from reaching the queue to a server taking it; its stay adds the service. A queue serves first come, first served, so a few long jobs holding every server make the slowest waits long while the median wait stays short." : "";
   // Reach: for each source, the nodes its rounds pass through, in the
   // graph's order, with the share that get there. A model where every
   // share is one has no branching, and the table says only that.

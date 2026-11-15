@@ -182,13 +182,15 @@ func TestInvariantCompileOrDocumentedError(t *testing.T) {
 // trigger or above the pair budget, and are then NaN together; P(T = 0) only with a
 // repair source, or a mixture above its work cap, which needs more
 // period-scoped values than these graphs have. A started run has no
-// variance, P(T = 0) or draws count.
+// variance, P(T = 0) or draws count; a model with queues no exact mean
+// of what a queue reaches (TestQueueExactMeans checks which).
 func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Expectation) {
 	t.Helper()
 	known := true
 	for _, f := range e.Firing {
 		known = known && f.Exact()
 	}
+	known = known && !c.HasQueues()
 	bad := func(name string, x float64) {
 		if known && math.IsNaN(x) {
 			t.Errorf("%s: %s is NaN", what, name)

@@ -53,6 +53,7 @@ func (b *builder) flatten() (*Compiled, error) {
 			b.flattenOutcomes(m, index(i), n, &cn)
 		}
 		cn.outEnd = index(len(m.outs))
+		b.flattenQueue(m, index(i), n, &cn)
 		m.nodes = append(m.nodes, cn)
 	}
 	if int64(len(m.pools)) >= maxDistributions {

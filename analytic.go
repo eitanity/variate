@@ -196,6 +196,8 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 	m.maskFirings(e)
 	if m.Started() {
 		m.startedMeans(e)
+	} else {
+		m.maskQueues(e)
 	}
 	return e, nil
 }

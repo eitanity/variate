@@ -360,6 +360,8 @@ func (s *sweeper) exact(g Graph, fig sweepFigure) (Range, error) {
 	m.maskFirings(e)
 	if m.Started() {
 		m.startedMeans(e)
+	} else {
+		m.maskQueues(e)
 	}
 	v := math.NaN()
 	switch fig.kind {

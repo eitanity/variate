@@ -256,6 +256,62 @@
   ]
  },
  {
+  "id": "backlog",
+  "title": "A backlog served first come, first served (a queue)",
+  "file": "backlog.yaml",
+  "about": "Work orders wait for a limited number of crews, first come, first served, from a start with no backlog. Each order brings a lognormal amount of work, so a few long jobs can hold every crew. The queue table shows the wait and the stay: watch the median and the 99th percentile part as the crews get busier, and the period-by-period chart shows the backlog building.",
+  "knobs": [
+   {
+    "key": "horizon",
+    "label": "Months from the start",
+    "min": 1,
+    "max": 60,
+    "step": 1,
+    "value": 24
+   },
+   {
+    "key": "orders",
+    "label": "Orders per month",
+    "min": 0.1,
+    "max": 5,
+    "step": 0.1,
+    "value": 1.2
+   },
+   {
+    "key": "crews",
+    "label": "Crews",
+    "min": 1,
+    "max": 10,
+    "step": 1,
+    "value": 2
+   },
+   {
+    "key": "speed",
+    "label": "Work a crew does per month",
+    "min": 0.25,
+    "max": 4,
+    "step": 0.25,
+    "value": 1
+   },
+   {
+    "key": "median",
+    "label": "Crew-months per order, median",
+    "min": 0.05,
+    "max": 2,
+    "step": 0.05,
+    "value": 0.5
+   },
+   {
+    "key": "p90",
+    "label": "Crew-months per order, 90th percentile",
+    "min": 2.5,
+    "max": 12,
+    "step": 0.5,
+    "value": 3
+   }
+  ]
+ },
+ {
   "id": "pump_station",
   "title": "Pump station (the reference model)",
   "file": "pump_station.yaml",

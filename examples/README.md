@@ -11,6 +11,7 @@ none can rot. Run one with:
 | `pump_station.yaml` | a reliability model: merged flows, a sequential selection, holding times in hours and days, per-time costs, a chained node |
 | `filter.yaml` | a period-scoped probability: the block rate of a filter drawn once per period |
 | `delays.yaml` | holding times, a per-time cost over the repair, and a capped bill |
+| `backlog.yaml` | a queue: work orders wait for two crews, first come, first served (`queue` with `servers`, `speed`, a lognormal `work` and `period_end: carry`), in a started run from no backlog; the report gives the queue's wait and stay with their quantiles, the line and the crews' utilisation, and each month's figures as the backlog builds |
 | `startup.yaml` | a started run: twelve months from an empty start (`start: { from: empty, horizon: 12 }`), repeated, so the report gives each month's figures across the repeats, rising as open work builds up, with each month's exact mean, beside the year's total; `--repeats` sets how many |
 | `sequential.yaml` | detection with a probability, then a sequential response: contained with an uncertain rate, else escalated, else lost; an undetected attack gets no response and a dearer breach |
 | `templates.yaml` | a template instanced twice with one override, both wired to shared nodes |

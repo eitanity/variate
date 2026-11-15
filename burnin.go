@@ -184,7 +184,8 @@ func (m *Compiled) setBurnIn(override int, ws *[]Warning) error {
 	if s, _ := m.burnInBound(ph, 0); s <= burnInShare {
 		hi = 0
 	}
-	m.burnIn = hi
+	// A reset queue holds a round under a period; a round may pass each.
+	m.burnIn = hi + int64(len(m.queues))
 	if hi > burnInWarn {
 		_, driver = m.burnInBound(ph, float64(hi))
 		*ws = append(*ws, Warning{Code: "long-burn-in", Subject: m.outcomeNames[driver], Message: "burn-in of " + itoa(int(hi)) + " periods, run once for each of the " + itoa(batchGroups) + " independent timelines that measure the error; a cap on this holding time would shorten it"})

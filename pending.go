@@ -77,6 +77,13 @@ func (w *Workspace) flushFar(sl *slot) {
 	if sl.farAt < sl.b {
 		return
 	}
+	if w.started {
+		// A started run drops what lands past its horizon.
+		sl.dropped += sl.far[w.l.total()]
+		clear(sl.far)
+		sl.farAt = math.MinInt64
+		return
+	}
 	for c, x := range sl.far {
 		if x == 0 {
 			continue

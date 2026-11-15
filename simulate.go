@@ -18,17 +18,28 @@ func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64) {
 	if m.renewal {
 		w.startSources(wk)
 	}
+	for c := range wk.queues {
+		wk.queues[c].reset()
+	}
+	wk.qseq = 0
 	// bound: the block
 	for p := sl.a; p < sl.b && sl.err == nil; p++ {
 		w.drawPeriod(wk, p)
 		for k := range m.srcs {
 			w.runSource(wk, sl, index(k), p)
 		}
+		if len(wk.queues) > 0 {
+			w.runQueues(wk, sl, float64(p+1))
+			w.queuePeriodEnd(wk, sl, p)
+		}
 		if w.stream {
 			w.flushPeriod(wk, sl)
 		}
 	}
 	if w.started {
+		if len(wk.queues) > 0 {
+			w.drainQueues(wk, sl)
+		}
 		w.dropPending(sl)
 	}
 }
@@ -168,8 +179,7 @@ func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p int64) {
 		w.count(wk, v)
 		n := m.nodes[v]
 		booked := w.bookEntry(wk, row, k, v, n)
-		w.flushFar(sl)
-		if sl.err != nil {
+		if w.stopsAt(wk, sl, k, n, t, p) {
 			return
 		}
 		if w.stream && wk.live {
@@ -193,6 +203,20 @@ func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p int64) {
 		t += tau
 		v = next.to
 	}
+}
+
+// stopsAt ends a walk's step at node n after its entry is booked: on an
+// error, or at a queue, where the round waits its turn.
+func (w *Workspace) stopsAt(wk *worker, sl *slot, k int32, n cnode, t float64, p int64) bool {
+	w.flushFar(sl)
+	if sl.err != nil {
+		return true
+	}
+	if n.queue != noIndex {
+		w.parkRound(wk, sl, n.queue, k, t, p)
+		return true
+	}
+	return false
 }
 
 // chooseSequential tries the outcomes in order, each with its own
@@ -308,7 +332,10 @@ func (w *Workspace) bookRate(wk *worker, sl *slot, k, v int32, n cnode, a, b flo
 			w.feed(wk, f, x)
 			total += x
 		}
-		if b > end {
+		if b > end && w.started {
+			// A started run drops what lands past its horizon.
+			sl.dropped += rate * (b - math.Max(a, end))
+		} else if b > end {
 			lo := math.Max(a, end)
 			x := rate * (b - lo)
 			if !sl.pend.addSeg(pendSeg{p0: p, from: sl.task, lo: lo, hi: b, rate: rate, k: k, v: v, cat: cat}) && sl.err == nil {

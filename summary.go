@@ -61,6 +61,22 @@ type Summary struct {
 	Triggers   map[string]Stat // by the trigger's source name: the sum it tests per period
 	TailShares []TailShare     // who the tail belongs to, at each threshold with a period
 	Plan       []PlanRow
+	Queues     map[string]QueueSummary // by the queue node's name
+}
+
+// QueueSummary is a queue's figures: over the rounds it served, their
+// wait and stay; and per period (in a started run, per repeat of the
+// horizon) the rounds that joined, those served, the line's length at
+// the period's end, the share of the servers' time busy, and the rounds
+// sent to the unfinished node.
+type QueueSummary struct {
+	Servers                    int
+	Wait, Stay                 ItemStat
+	Joined, Served, Unfinished Stat
+	Length                     Stat // summed over the horizon's period ends in a started run
+	Busy                       Stat // busy server time
+	Utilisation                float64
+	Line                       float64 // the mean line at a period's end
 }
 
 // exceedancePoints is the number of log-spaced points of the curve.
@@ -106,6 +122,7 @@ func (w *Workspace) Summarize(dst *Summary) {
 	}
 	dst.TailShares = w.tailShares(dst.TailShares)
 	w.summarizeReach(dst)
+	w.summarizeQueues(dst)
 	dst.Plan = append(dst.Plan[:0], w.rows...)
 }
 
@@ -229,4 +246,22 @@ func prop(count, n uint64) Prop {
 	}
 	p := float64(count) / float64(n)
 	return Prop{P: p, StdErr: math.Sqrt(p * (1 - p) / float64(n))}
+}
+
+// summarizeQueues fills each queue's figures.
+func (w *Workspace) summarizeQueues(dst *Summary) {
+	if dst.Queues == nil {
+		dst.Queues = map[string]QueueSummary{}
+	}
+	clear(dst.Queues)
+	r := &w.result
+	periods := float64(max(w.m.horizon, 1))
+	for c, q := range w.m.queues {
+		col := func(i int) Stat { return w.stat(&r.QueueCols[queueCols*c+i], 1) }
+		s := QueueSummary{Servers: int(q.servers), Wait: r.Queues[c].Wait(), Stay: r.Queues[c].Stay(),
+			Joined: col(qJoined), Served: col(qServed), Unfinished: col(qUnfinished), Length: col(qLength), Busy: col(qBusy)}
+		s.Utilisation = s.Busy.Mean / (float64(q.servers) * periods)
+		s.Line = s.Length.Mean / periods
+		dst.Queues[w.m.nodeIDs[q.node]] = s
+	}
 }

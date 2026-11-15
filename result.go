@@ -155,6 +155,8 @@ type Result struct {
 	Contrib    []Accum // [node]; zero for nodes without functions
 	Layers     []Accum // [layer]: the layer's payout per period
 	Triggers   []Accum // [trigger]: the sum the trigger tests per period
+	QueueCols  []Accum // [queue×queueCols]: each queue's joined, served, wait, stay, length, busy and unfinished per period
+	Queues     []QueueResult
 
 	Steps         uint64
 	BeyondHorizon float64
@@ -173,12 +175,27 @@ type Result struct {
 	ByPeriod *PeriodStats
 }
 
+// QueueResult is a queue's statistics over the rounds it served: their
+// waits and their stays, waiting and service.
+type QueueResult struct {
+	wait, stay itemAccum
+}
+
+// Wait summarises the waits of the rounds served.
+func (q *QueueResult) Wait() ItemStat { return q.wait.stat() }
+
+// Stay summarises the stays, wait and service, of the rounds served.
+func (q *QueueResult) Stay() ItemStat { return q.stay.stat() }
+
 // PeriodStats holds, per period of a started run's horizon and per
 // quantity, the mean and spread across the repeats.
 type PeriodStats struct {
 	l layout
 	h int
 	w []stats.Welford // [period×width]
+	// Per period and queue, the co-moment of the waits' and the stays'
+	// sums with the rounds served, for the ratio's error.
+	waitCo, stayCo []float64 // [period×queues]
 }
 
 // PeriodStat is one quantity in one period of the horizon, across the
@@ -215,11 +232,58 @@ func (s *PeriodStats) Contrib(v, k int) PeriodStat { return s.at(k, s.l.contrib(
 // Trigger is the sum trigger i tested in period k.
 func (s *PeriodStats) Trigger(i, k int) PeriodStat { return s.at(k, s.l.trig(i)) }
 
-// add folds one repeat's rows, a row per period of the horizon.
+// add folds one repeat's rows, a row per period of the horizon: each
+// queue's co-moments first, from the means before this repeat.
 func (s *PeriodStats) add(rows []float64) {
+	width := s.l.width
+	for k := range s.h {
+		for c := range s.l.queues {
+			at := k*s.l.queues + c
+			served := k*width + s.l.queue(c, qServed)
+			n := float64(s.w[served].N + 1)
+			dy := rows[served] - s.w[served].Mean
+			for _, x := range [2]struct {
+				co  []float64
+				col int
+			}{{s.waitCo, qWait}, {s.stayCo, qStay}} {
+				i := k*width + s.l.queue(c, x.col)
+				x.co[at] += (n - 1) / n * (rows[i] - s.w[i].Mean) * dy
+			}
+		}
+	}
 	for i := range s.w {
 		s.w[i].Add(rows[i])
 	}
+}
+
+// QueueRatio is a queue's mean wait or stay of the rounds that reached it
+// in a period and were served, with its standard error across the
+// repeats by the delta method; NaN where none was served.
+type QueueRatio struct{ Mean, StdErr float64 }
+
+// Queue is queue c's column col (Joined … Unfinished) in period k.
+func (s *PeriodStats) Queue(c, col, k int) PeriodStat { return s.at(k, s.l.queue(c, col)) }
+
+// Wait is queue c's mean wait in period k; Stay its mean stay.
+func (s *PeriodStats) Wait(c, k int) QueueRatio { return s.ratio(c, k, qWait, s.waitCo) }
+
+// Stay is queue c's mean stay of the rounds that reached it in period k.
+func (s *PeriodStats) Stay(c, k int) QueueRatio { return s.ratio(c, k, qStay, s.stayCo) }
+
+func (s *PeriodStats) ratio(c, k, col int, co []float64) QueueRatio {
+	x, y := s.w[k*s.l.width+s.l.queue(c, col)], s.w[k*s.l.width+s.l.queue(c, qServed)]
+	if !(y.Mean > 0) || y.N < 2 {
+		return QueueRatio{Mean: math.NaN(), StdErr: math.NaN()}
+	}
+	r := x.Mean / y.Mean
+	cov := co[k*s.l.queues+c] / float64(y.N-1)
+	v := (x.Var() - 2*r*cov + r*r*y.Var()) / (float64(y.N) * y.Mean * y.Mean)
+	return QueueRatio{Mean: r, StdErr: math.Sqrt(math.Max(v, 0))}
+}
+
+// Queues are the queue column names, in the order of Queue's col.
+func QueueColumns() []string {
+	return []string{"joined", "served", "wait_sum", "stay_sum", "line_at_end", "busy", "unfinished"}
 }
 
 // Series holds every closed period's row of quantities: total, categories,
