@@ -11,6 +11,7 @@ type Stat struct {
 	Quantiles                bool // the percentiles exist: the quantity has a histogram
 	Clipped                  bool
 	Share                    float64
+	StdErrUnreliable         bool // the variance is infinite, so the standard error means nothing
 
 	// Per level of QuantileLevels(): the quantile's 95% interval, from the
 	// order statistics, and its standard error, the interval's width over
@@ -43,6 +44,7 @@ type PlanRow struct {
 	PeriodsNeeded    int64
 	Observed         float64
 	Met              bool
+	NotApplicable    string // why the criterion does not apply, which then counts as met; "" where it does
 }
 
 // Summary is the report of a run, with names as keys.
@@ -86,7 +88,8 @@ const exceedancePoints = 64
 // reusing its slices and maps.
 func (w *Workspace) Summarize(dst *Summary) {
 	r := &w.result
-	dst.Total = w.stat(&r.Total, 1)
+	l := &w.l
+	dst.Total = w.statAt(l.total(), &r.Total, 1)
 	dst.Exceedance = w.exceedance(dst.Exceedance[:0])
 	breakdown := w.m.crit.breakdown
 	dst.ByCategory = ensureStats(dst.ByCategory)
@@ -98,18 +101,18 @@ func (w *Workspace) Summarize(dst *Summary) {
 	clear(dst.ContribPer)
 	for c, name := range r.Categories {
 		if breakdown {
-			dst.ByCategory[name] = w.stat(&r.ByCategory[c], r.Total.Mean())
+			dst.ByCategory[name] = w.statAt(l.cat(index(c)), &r.ByCategory[c], r.Total.Mean())
 		}
 	}
 	for k, name := range r.Sources {
 		if breakdown {
-			dst.BySource[name] = w.stat(&r.BySource[k], r.Total.Mean())
+			dst.BySource[name] = w.statAt(l.src(index(k)), &r.BySource[k], r.Total.Mean())
 		}
 	}
 	for v, name := range r.Nodes {
-		dst.EntriesPer[name] = w.stat(&r.EntriesPer[v], 1)
+		dst.EntriesPer[name] = w.statAt(l.entry(index(v)), &r.EntriesPer[v], 1)
 		if breakdown {
-			dst.ContribPer[name] = w.stat(&r.Contrib[v], r.Total.Mean())
+			dst.ContribPer[name] = w.statAt(l.contrib(index(v)), &r.Contrib[v], r.Total.Mean())
 		}
 	}
 	dst.Layers = ensureStats(dst.Layers)
@@ -134,6 +137,14 @@ func ensureStats(m map[string]Stat) map[string]Stat {
 }
 
 // stat converts an Accum; share is Mean/total for breakdowns.
+// statAt is the stat of row quantity q, its standard error marked where
+// its variance is infinite.
+func (w *Workspace) statAt(q int, a *Accum, total float64) Stat {
+	s := w.stat(a, total)
+	s.StdErrUnreliable = w.m.StdErrUnreliable(q)
+	return s
+}
+
 func (w *Workspace) stat(a *Accum, total float64) Stat {
 	s := Stat{N: a.N(), Mean: a.Mean(), StdErr: a.StdErr(w.delays), StdDev: a.StdDev(), Min: a.Min, Max: a.Max}
 	if total != 0 && total != 1 {
@@ -260,6 +271,8 @@ func (w *Workspace) summarizeQueues(dst *Summary) {
 		col := func(i int) Stat { return w.stat(&r.QueueCols[queueCols*c+i], 1) }
 		s := QueueSummary{Servers: int(q.servers), Wait: r.Queues[c].Wait(), Stay: r.Queues[c].Stay(),
 			Joined: col(qJoined), Served: col(qServed), Unfinished: col(qUnfinished), Length: col(qLength), Busy: col(qBusy)}
+		s.Wait.StdErrUnreliable = w.m.QueueStdErrUnreliable(c)
+		s.Stay.StdErrUnreliable = s.Wait.StdErrUnreliable
 		s.Utilisation = s.Busy.Mean / (float64(q.servers) * periods)
 		s.Line = s.Length.Mean / periods
 		dst.Queues[w.m.nodeIDs[q.node]] = s

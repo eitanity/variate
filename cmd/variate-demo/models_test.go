@@ -72,3 +72,54 @@ func TestDemoModels(t *testing.T) {
 		}
 	}
 }
+
+// TestHeavyDemoInfiniteVariance: the heavy-tails demo with the open
+// Pareto's alpha at its default of 2.5 has a finite variance; at its
+// lowest, 1.1, the variance is infinite and the model warns of it.
+func TestHeavyDemoInfiniteVariance(t *testing.T) {
+	dir := filepath.Join("..", "..", "web", "models")
+	data, err := os.ReadFile(filepath.Join(dir, "index.json")) //nolint:gosec // repository file
+	if err != nil {
+		t.Fatal(err)
+	}
+	var models []demoModel
+	if err := json.Unmarshal(data, &models); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range models {
+		if m.ID != "heavy" {
+			continue
+		}
+		text, err := os.ReadFile(filepath.Join(dir, m.File)) //nolint:gosec // repository file
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, low := range []bool{false, true} {
+			yaml := string(text)
+			for _, k := range m.Knobs {
+				v := k.Value
+				if low && k.Key == "open_alpha" {
+					v = k.Min
+				}
+				yaml = strings.ReplaceAll(yaml, "{{"+k.Key+"}}", strconv.FormatFloat(v, 'g', -1, 64))
+			}
+			model, err := config.Parse([]byte(yaml), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, ws, err := model.Graph.Compile(variate.Config{AllowUnconverged: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			warned := false
+			for _, w := range ws {
+				warned = warned || (w.Code == "infinite-variance" && w.Subject == "open_loss:loss")
+			}
+			if warned != low {
+				t.Errorf("open alpha at its lowest %v: infinite-variance warning %v", low, warned)
+			}
+		}
+		return
+	}
+	t.Fatal("no heavy demo")
+}

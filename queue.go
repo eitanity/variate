@@ -436,6 +436,7 @@ type ItemStat struct {
 	P50, P90, P95, P99, P999 float64
 	Clipped                  bool
 	QLo, QHi, QSE            [5]float64
+	StdErrUnreliable         bool // the variance is infinite, so the mean's standard error means nothing
 }
 
 func (a *itemAccum) stat() ItemStat {

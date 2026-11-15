@@ -284,6 +284,18 @@ of probability at the cap, as an insurance limit does. Values, holding
 times and rates must not be negative; a `normal` needs a truncation at
 zero or above.
 
+A distribution whose mean is infinite (a Pareto with `alpha` at most
+1) is refused. One with a finite mean and infinite variance (a Pareto
+with `alpha` at most 2, a generalised Pareto with `shape` at least ½)
+is allowed with a warning, as a value, a per-time rate or a frequency:
+the standard errors of what it books into or reaches are marked
+unreliable (`stderr_unreliable` in the JSON, a `stderr unreliable` row
+in the CSV), and the `target_rse` and `contrib_rse` criteria on them
+read "not applicable: infinite variance" and do not hold the run. The
+quantiles and their errors stay valid. A `cap` or `truncate` gives a
+finite variance. A per-time rate over a long holding time adds no
+infinite variance, as a round books at most its rate in a period.
+
 ## Shared factors
 
 Sources are independent unless they share a factor. A factor is drawn
@@ -451,7 +463,10 @@ that joined, those served and those sent to `unfinished`, the mean
 line at a period's end and the share of the servers' time busy. A
 started run also gives, per period, the mean wait and stay of the
 rounds that arrived in it, with their errors across the repeats, and
-the line and busy time at each period's end. What a queue books after
+the line and busy time at each period's end. When the work, or the
+count of a source reaching a carried queue, has infinite variance, so
+do the waits and stays, and their standard errors are marked
+unreliable; a reset queue's are bounded by the period. What a queue books after
 it, and over its stay, has no exact mean; what is booked before it
 keeps one. A trigger whose inputs are reached through a queue, an
 outage holding after one, and the round stream with queues are not

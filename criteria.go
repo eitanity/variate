@@ -13,6 +13,10 @@ func (w *Workspace) evaluate(periods int64) (allMet bool, unmet []string) {
 	for i := range w.rows {
 		row := &w.rows[i]
 		src := w.m.plan[i]
+		if row.NotApplicable != "" {
+			row.Observed, row.Met = math.NaN(), true
+			continue
+		}
 		switch src.kind {
 		case critMinHits:
 			var hits uint64

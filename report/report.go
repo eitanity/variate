@@ -289,6 +289,7 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 	fmt.Fprintf(w, "\nsteps %d  beyond horizon %.6g  tail %s %d\n\n", r.Steps, r.BeyondHorizon, rows, r.TailPeriods)
 	fmt.Fprintf(w, "%-28s %12s %12s %12s %12s %12s %12s %12s %12s %8s\n", "quantity", "mean", "stderr", "sd", "p50", "p90", "p95", "p99", "p999", "share")
 	rep.eachStat(func(name string, s variate.Stat, share bool) { statRow(w, name, s, share) })
+	rep.writeUnreliable(w)
 	fmt.Fprintf(w, "\n%-28s %12s %12s %12s %12s %12s\n", "quantile stderr", "p50", "p90", "p95", "p99", "p999")
 	rep.eachStat(func(name string, s variate.Stat, _ bool) {
 		if s.Quantiles {
@@ -304,11 +305,29 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 	}
 	fmt.Fprintf(w, "\n%-12s %-32s %12s %12s %12s %5s\n", "criterion", "driver", per, rows, "observed", "met")
 	for _, row := range rep.Sum.Plan {
+		if row.NotApplicable != "" {
+			fmt.Fprintf(w, "%-12s %-32s %12.6g   not applicable: %s\n", row.Criterion, row.Driver, row.PlannedPerPeriod, row.NotApplicable)
+			continue
+		}
 		fmt.Fprintf(w, "%-12s %-32s %12.6g %12s %12s %5v\n", row.Criterion, row.Driver, row.PlannedPerPeriod, planned(row.PeriodsNeeded), observed(row.Observed), row.Met)
 	}
 	rep.writeExceedanceTable(w)
 	if rep.Analytic {
 		rep.writeAnalyticTable(w)
+	}
+}
+
+// writeUnreliable names the quantities whose standard errors mean
+// nothing, their variance infinite.
+func (rep *Report) writeUnreliable(w *bufio.Writer) {
+	var names []string
+	rep.eachStat(func(name string, s variate.Stat, _ bool) {
+		if s.StdErrUnreliable {
+			names = append(names, name)
+		}
+	})
+	if len(names) > 0 {
+		fmt.Fprintf(w, "stderr unreliable, the variance infinite: %s\n", strings.Join(names, ", "))
 	}
 }
 
@@ -566,6 +585,9 @@ func (j *jw) stat(k string, s variate.Stat) {
 		j.fieldBool("clipped", s.Clipped)
 	}
 	j.field("share", s.Share)
+	if s.StdErrUnreliable {
+		j.fieldBool("stderr_unreliable", true)
+	}
 	j.closeC('}')
 }
 
@@ -684,6 +706,9 @@ func (rep *Report) jsonPlan(j *jw) {
 		j.fieldInt("periods", row.PeriodsNeeded)
 		j.field("observed", row.Observed)
 		j.fieldBool("met", row.Met)
+		if row.NotApplicable != "" {
+			j.fieldStr("not_applicable", row.NotApplicable)
+		}
 		j.closeC('}')
 	}
 	j.closeC(']')
@@ -916,6 +941,9 @@ func csvStat(w *bufio.Writer, kind, name string, s variate.Stat) {
 		}
 	}
 	fmt.Fprintln(w)
+	if s.StdErrUnreliable {
+		fmt.Fprintf(w, "stderr unreliable,%s,,,,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(strings.TrimSuffix(kind+":"+name, ":")))
+	}
 }
 
 // WriteExceedanceFile writes the curve as CSV: x, p, stderr, and the
@@ -1132,8 +1160,19 @@ func (rep *Report) jsonPeriods(j *jw) {
 			col[k] = rep.exactAt(k, pq.column)
 		}
 		j.nums("exact", col)
+		if rep.C.StdErrUnreliable(pq.column) {
+			j.fieldBool("stderr_unreliable", true)
+		}
 		j.closeC('}')
 	}
+	rep.jsonQueuePeriods(j, col)
+	j.closeC('}')
+}
+
+// jsonQueuePeriods writes each queue's mean wait and stay of the rounds
+// arriving in each period, with their errors.
+func (rep *Report) jsonQueuePeriods(j *jw, col []float64) {
+	ps := rep.R.ByPeriod
 	for i, id := range rep.C.QueueIDs() {
 		for _, x := range []struct {
 			name string
@@ -1149,10 +1188,12 @@ func (rep *Report) jsonPeriods(j *jw) {
 				col[k] = x.f(i, k).StdErr
 			}
 			j.nums("stderr", col)
+			if rep.C.QueueStdErrUnreliable(i) {
+				j.fieldBool("stderr_unreliable", true)
+			}
 			j.closeC('}')
 		}
 	}
-	j.closeC('}')
 }
 
 // csvPeriods writes a started run's per-period figures as rows of
@@ -1196,6 +1237,15 @@ func (rep *Report) writeQueueTable(w *bufio.Writer) {
 			fmt.Fprintf(w, "%-28s %12d %12.6g %12.4g %12.6g %12.6g %12.6g %12.6g %12.4g\n", name+" "+x.what, x.s.N, x.s.Mean, x.s.StdErr, x.s.P50, x.s.P90, x.s.P99, x.s.P999, x.s.QSE[3])
 		}
 	}
+	var unreliable []string
+	for _, name := range sortedKeys(rep.Sum.Queues) {
+		if rep.Sum.Queues[name].Wait.StdErrUnreliable {
+			unreliable = append(unreliable, name+" wait", name+" stay")
+		}
+	}
+	if len(unreliable) > 0 {
+		fmt.Fprintf(w, "stderr unreliable, the variance infinite: %s\n", strings.Join(unreliable, ", "))
+	}
 	fmt.Fprintf(w, "\n%-28s %12s %12s %12s %12s %12s\n", "queue, per "+per, "joined", "served", "unfinished", "mean line", "utilisation")
 	for _, name := range sortedKeys(rep.Sum.Queues) {
 		q := rep.Sum.Queues[name]
@@ -1215,6 +1265,9 @@ func (j *jw) itemStat(k string, s variate.ItemStat) {
 		j.field(name+"_stderr", s.QSE[i])
 	}
 	j.fieldBool("clipped", s.Clipped)
+	if s.StdErrUnreliable {
+		j.fieldBool("stderr_unreliable", true)
+	}
 	j.closeC('}')
 }
 

@@ -102,6 +102,7 @@ func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
 			PeriodsNeeded: periodsFor(float64(c.minHits) / p),
 		}})
 	}
+	l := newLayout(m)
 	for v := range m.nodes {
 		if !c.breakdown || !m.nodes[v].hasFunctions() || e.Contrib[v] <= 0 {
 			continue
@@ -109,9 +110,9 @@ func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
 		need := e.ContribVar[v] / (c.contribRSE * c.contribRSE * e.Contrib[v] * e.Contrib[v])
 		rows = append(rows, planRow{kind: critContrib, index: v, PlanRow: PlanRow{
 			Criterion: critContrib, Driver: m.nodeIDs[v], PlannedPerPeriod: e.EntriesPer[v], PeriodsNeeded: periodsFor(need),
+			NotApplicable: m.notApplicable(l.contrib(index(v))),
 		}})
 	}
-	l := newLayout(m)
 	target := func(name string, q int, mean, variance float64) {
 		if mean <= 0 {
 			return
@@ -119,6 +120,7 @@ func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
 		rows = append(rows, planRow{kind: critTarget, index: q, PlanRow: PlanRow{
 			Criterion: critTarget, Driver: name, PlannedPerPeriod: mean,
 			PeriodsNeeded: periodsFor(variance / (c.targetRSE * c.targetRSE * mean * mean)),
+			NotApplicable: m.notApplicable(q),
 		}})
 	}
 	target("total", l.total(), e.Mean, e.Var)
@@ -134,7 +136,26 @@ func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
 		Criterion: critTail, Driver: totalSubject, PlannedPerPeriod: 1 - c.tailP,
 		PeriodsNeeded: periodsFor(float64(c.tailHits) / (1 - c.tailP)),
 	}})
+	return leaveOut(rows)
+}
+
+// leaveOut takes the criteria that do not apply out of the plan's sizing.
+func leaveOut(rows []planRow) []planRow {
+	for i := range rows {
+		if rows[i].NotApplicable != "" {
+			rows[i].PeriodsNeeded = 0
+		}
+	}
 	return rows
+}
+
+// notApplicable is why a relative-error criterion on row quantity q does
+// not apply, or "".
+func (m *Compiled) notApplicable(q int) string {
+	if m.infVar[q] {
+		return "infinite variance"
+	}
+	return ""
 }
 
 // periodsFor rounds a period count up; an unknown (NaN or infinite) need

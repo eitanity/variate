@@ -187,13 +187,16 @@ async function run() {
 }
 
 const fmt = (x, digits = 3) => (x === null || x === undefined || Number.isNaN(x)) ? "–" : Number(x).toLocaleString(undefined, { maximumSignificantDigits: digits });
+// pm is a mean with its standard error, the error flagged where the
+// variance is infinite and so it means nothing.
+const pm = (s, digits = 4) => fmt(s.mean, digits) + " ± " + fmt(s.stderr, 2) + (s.stderr_unreliable ? " (error unreliable: infinite variance)" : "");
 const pct = (x) => (x === null || x === undefined) ? "–" : (100 * x).toFixed(1) + "%";
 // pctTick labels a probability axis tick in percent at any scale: 100%, 10%, 0.01%.
 const pctTick = (p) => Number(100 * p).toLocaleString(undefined, { maximumSignificantDigits: 2 }) + "%";
 
 function show(r, ms) {
   $("results").hidden = false;
-  $("mean").textContent = fmt(r.total.mean, 4) + " ± " + fmt(r.total.stderr, 2);
+  $("mean").textContent = pm(r.total);
   $("exact").textContent = fmt(r.analytic.mean, 4);
   $("p50").textContent = fmt(r.total.p50, 4);
   $("p99").textContent = fmt(r.total.p99, 4);
@@ -208,7 +211,7 @@ function show(r, ms) {
   // busy its servers were.
   const qs = Object.entries(r.queues || {});
   $("queueBlock").hidden = qs.length === 0;
-  const cell = (s) => `${fmt(s.mean, 3)} ± ${fmt(s.stderr, 2)}`;
+  const cell = (s) => pm(s, 3);
   table($("queues"), ["queue", "rounds served", "mean wait", "wait P50", "wait P90", "wait P99", "mean stay", "stay P99", "servers busy"],
     qs.flatMap(([name, q]) => [[name, fmt(q.wait.n, 6), cell(q.wait), fmt(q.wait.p50), fmt(q.wait.p90), fmt(q.wait.p99), cell(q.stay), fmt(q.stay.p99), pct(q.utilisation)]]));
   $("queueNote").textContent = qs.length ? "Times are in periods. A round's wait runs from reaching the queue to a server taking it; its stay adds the service. A queue serves first come, first served, so a few long jobs holding every server make the slowest waits long while the median wait stays short." : "";
@@ -227,8 +230,10 @@ function show(r, ms) {
   $("reach").hidden = !branching;
   $("reachNote").textContent = branching ? "" : "Every round from each source passes through every node listed for it: the model does not branch.";
   table($("reach"), ["source", "node its rounds reach", "share that reach it", "entries per period"], reachRows);
-  table($("plan"), ["criterion", "driver", "planned periods", "observed", "met"], r.plan.map((p) => [p.criterion, p.driver, p.periods === 0 ? "unknown" : fmt(p.periods, 6), p.observed === null ? "not yet" : fmt(p.observed, 3), p.met ? "yes" : "no"]));
-  $("planNote").textContent = r.plan.some((p) => p.periods === 0 || p.observed === null)
+  table($("plan"), ["criterion", "driver", "planned periods", "observed", "met"], r.plan.map((p) => p.not_applicable
+    ? [p.criterion, p.driver, "–", "not applicable: " + p.not_applicable, "–"]
+    : [p.criterion, p.driver, p.periods === 0 ? "unknown" : fmt(p.periods, 6), p.observed === null ? "not yet" : fmt(p.observed, 3), p.met ? "yes" : "no"]));
+  $("planNote").textContent = r.plan.some((p) => !p.not_applicable && (p.periods === 0 || p.observed === null))
     ? "A model with delays has no exact variance, so the plan cannot size its error criteria, and the run estimates its errors from blocks of periods: it needs 16 full blocks before it can report them. Run more periods."
     : "";
   const tr = r.analytic.transform;
@@ -572,7 +577,7 @@ function figures(series) {
   const head = ["figure", ...series.map((s) => s.name)];
   const row = (label, f) => [label, ...series.map((s) => f(s.result))];
   const rows = [
-    row("mean per period", (r) => fmt(r.total.mean, 4) + " ± " + fmt(r.total.stderr, 2)),
+    row("mean per period", (r) => pm(r.total)),
     row("exact mean", (r) => fmt(r.analytic.mean, 4)),
     row("median", (r) => fmt(r.total.p50, 4)),
     row("99th percentile", (r) => fmt(r.total.p99, 4)),

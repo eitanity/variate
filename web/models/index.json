@@ -1067,7 +1067,7 @@
   "id": "heavy",
   "title": "Heavy tails, a cap, and layers of the total",
   "file": "heavy.yaml",
-  "about": "Three heavy-tailed severities: a Pareto with a finite variance, a fatter Pareto held by an insurance limit (cap), and a generalised Pareto. Two layers of the period total report what is retained under an aggregate deductible and what a reinsurance layer above it pays; with the exact distribution their means come with bounds. Lower the open Pareto's alpha below two and its variance is infinite: the exact method declines, and the cap is what makes the other tail computable.",
+  "about": "Three heavy-tailed severities: a Pareto with a finite variance, a fatter Pareto held by an insurance limit (cap), and a generalised Pareto. Two layers of the period total report what is retained under an aggregate deductible and what a reinsurance layer above it pays; with the exact distribution their means come with bounds. Lower the open Pareto's alpha to two or below and its variance is infinite: the error on the mean is flagged as unreliable, the relative-error criteria no longer apply, the exact method declines, and the cap is what makes the other tail computable.",
   "knobs": [
    {
     "key": "open_alpha",
