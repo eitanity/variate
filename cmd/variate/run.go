@@ -232,7 +232,8 @@ func writePlan(w io.Writer, c *variate.Compiled, e *variate.Expectation, cfg var
 	}
 	per, rowName := "period", "periods"
 	if c.Started() {
-		fmt.Fprintf(w, "started from empty, horizon %d periods; the figures are per repeat of it\n", c.Horizon())
+		fmt.Fprintf(w, "started from %s, horizon %d periods; the figures are per repeat of it\n", report.StartFrom(c), c.Horizon())
+		report.WriteStartState(w, c)
 		per, rowName = "repeat", "repeats"
 	}
 	fmt.Fprintf(w, "%-12s %-32s %14s %14s\n", "criterion", "driver", "per "+per, rowName)

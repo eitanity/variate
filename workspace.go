@@ -143,6 +143,8 @@ func checkRunConfig(m *Compiled, cfg Config) error {
 	switch {
 	case m.HasQueues() && cfg.Observer != nil:
 		return errors.New("config: the round stream does not follow a round through a queue yet: a model with queues runs without it")
+	case m.GivenState() && cfg.Observer != nil:
+		return errors.New("config: the round stream follows a round from its arrival, which a given state's rounds had before the run: a run from a given state runs without it")
 	case m.Started() && cfg.Periods != 0:
 		return errors.New("config: a started run counts repeats of its horizon, not periods: set Repeats")
 	case cfg.Periods == 0 && cfg.Repeats == 0 && cfg.Series:

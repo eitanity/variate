@@ -25,6 +25,9 @@ func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64) {
 	// bound: the block
 	for p := sl.a; p < sl.b && sl.err == nil; p++ {
 		w.drawPeriod(wk, p)
+		if p == sl.a && len(m.given) > 0 {
+			w.placeGiven(wk, sl)
+		}
 		for k := range m.srcs {
 			w.runSource(wk, sl, index(k), p)
 		}
@@ -171,7 +174,7 @@ func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p int64) {
 	// bound: a path visits each node at most once
 	for step := 0; step <= nodes; step++ {
 		sl.steps++
-		if p >= 0 {
+		if p >= 0 && !wk.given {
 			sl.reach[int(k)*nodes+int(v)]++
 		}
 		row := w.rowFor(sl, t, p)
@@ -248,7 +251,7 @@ type hop struct{ out, to int32 }
 func (w *Workspace) advance(wk *worker, sl *slot, k, v int32, n cnode, t float64, p int64, booked float64) (hop, float64, float64, bool) {
 	m := w.m
 	j := w.choose(wk, v, n)
-	if p >= 0 {
+	if p >= 0 && !wk.given {
 		sl.outs[int(k)*len(m.outs)+int(j)]++
 	}
 	o := m.outs[j]

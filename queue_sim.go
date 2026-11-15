@@ -102,10 +102,15 @@ func (q *wqueue) free() int {
 }
 
 // parkRound puts a round reaching queue c at time t from the start of its
-// arrival period p into the queue's arrivals, to join in time order.
+// arrival period p into the queue's arrivals, to join in time order; a
+// given state's round keeps its mark.
 func (w *Workspace) parkRound(wk *worker, sl *slot, c int32, k int32, t float64, p int64) {
 	wk.qseq++
-	if !wk.queues[c].push(qitem{t: float64(p) + t, p: p, k: k, seq: wk.qseq}) && sl.err == nil {
+	it := qitem{t: float64(p) + t, p: p, k: k, seq: wk.qseq}
+	if wk.given {
+		it.given = -1
+	}
+	if !wk.queues[c].push(it) && sl.err == nil {
 		sl.err = queueFullError(w.m.nodeIDs[w.m.queues[c].node], len(wk.queues[c].arr))
 	}
 }
@@ -178,7 +183,8 @@ func (w *Workspace) startService(wk *worker, c int32, s int, it qitem, t float64
 }
 
 // finishService ends server s's service at queue c: the round's wait and
-// stay count to the period it reached the queue, the node's rates book
+// stay count to the period it reached the queue, period 0 for a round of
+// a given state, the node's rates book
 // over the stay, the server takes the next round in line, and the round
 // goes on through the node's outcomes.
 func (w *Workspace) finishService(wk *worker, sl *slot, c int32, s int) {
@@ -188,7 +194,7 @@ func (w *Workspace) finishService(wk *worker, sl *slot, c int32, s int) {
 	q.servers[s].busy = false
 	q.nBusy--
 	it := sv.item
-	arrived := int64(math.Floor(it.t))
+	arrived := max(int64(math.Floor(it.t)), it.p)
 	w.queueCol(sl, c, qServed, arrived, 1)
 	w.queueCol(sl, c, qWait, arrived, sv.start-it.t)
 	w.queueCol(sl, c, qStay, arrived, sv.finish-it.t)
@@ -204,16 +210,18 @@ func (w *Workspace) finishService(wk *worker, sl *slot, c int32, s int) {
 	n := m.nodes[v]
 	p := it.p
 	if n.rateStart != n.rateEnd {
-		w.bookRate(wk, sl, it.k, v, n, it.t-float64(p), sv.finish-float64(p), p)
+		w.bookRate(wk, sl, it.k, v, n, math.Max(it.t-float64(p), 0), sv.finish-float64(p), p)
 	}
 	if n.outStart == n.outEnd || sl.err != nil {
 		return
 	}
 	t := sv.finish - float64(p)
+	wk.given = it.given != 0
 	next, tau, _, ok := w.advance(wk, sl, it.k, v, n, t, p, 0)
 	if ok {
 		w.walk(wk, sl, it.k, next.to, t+tau, p)
 	}
+	wk.given = false
 }
 
 // periodEnd records each queue's line at the end of period p and, for a
@@ -253,9 +261,11 @@ func (w *Workspace) unfinished(wk *worker, sl *slot, c int32, it qitem, end floa
 	w.queueCol(sl, c, qUnfinished, p, 1)
 	n := m.nodes[cq.node]
 	if n.rateStart != n.rateEnd {
-		w.bookRate(wk, sl, it.k, cq.node, n, it.t-float64(it.p), end-float64(it.p), it.p)
+		w.bookRate(wk, sl, it.k, cq.node, n, math.Max(it.t-float64(it.p), 0), end-float64(it.p), it.p)
 	}
+	wk.given = it.given != 0
 	w.walk(wk, sl, it.k, cq.unfinished, end-float64(it.p), it.p)
+	wk.given = false
 }
 
 // drainQueues serves a started run's queues to empty after its horizon:

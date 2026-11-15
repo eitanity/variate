@@ -39,12 +39,13 @@ bracketed between rigorous bounds, with no sampling at all.
   period's end; the report gives the wait and stay with their
   quantiles, the line and the servers' utilisation.
 - **Where it starts:** the steady state, or a started run, a horizon of
-  periods from an empty start, repeated, reported period by period with
-  each period's exact mean where the paths allow, beside the horizon's
-  total.
+  periods repeated from an empty start or from a given state, the rounds
+  waiting or in service at each queue with their ages and the rounds
+  part-way through a holding time, reported period by period with each
+  period's exact mean where the paths allow, beside the horizon's total.
 
 `docs/format.md` is the reference for the YAML model file, and
-`examples/` holds twenty-five complete models with a README saying what
+`examples/` holds twenty-six complete models with a README saying what
 each shows, from a one-line compound loss to a register of a hundred
 risks, a plant as a block diagram, and a shift with its own period.
 

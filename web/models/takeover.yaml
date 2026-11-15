@@ -1,0 +1,35 @@
+# The maintenance team of backlog.yaml taken over today with work under
+# way: orders open, their ages in months lognormal, some open well over
+# a year; the oldest are with the crews, worked on for a month so far;
+# and finished orders wait on an inspection of one to three months
+# before they close, for how long so far not recorded. An open order's
+# wait and stay count its age, so the old backlog shows in full, and the
+# period-by-period chart shows the line clearing as the crews' spare
+# time allows.
+start:
+  from: given
+  horizon: {{horizon}}
+  state:
+    - { node: backlog, count: {{open}}, age: { lognormal: { median: {{age_median}}, p90: {{age_p90}} } }, in_service: { constant: 1 } }
+    - { node: inspection, to: closed, count: {{inspections}} }
+graphs:
+  - id: maintenance
+    sources:
+      - { id: orders, frequency: { constant: {{orders}} }, to: backlog }
+    nodes:
+      - id: backlog
+        queue:
+          servers: {{crews}}
+          speed: 1
+          work: { lognormal: { median: 0.5, p90: 3 } }
+          period_end: carry
+        functions:
+          - { name: open, category: exposure, basis: per_time, pert: [200, 400, 1000] }
+        outcomes:
+          - { to: inspection }
+      - id: inspection
+        next: closed
+        next_holding: { uniform: [1, 3] }
+      - id: closed
+        functions:
+          - { name: close_out, category: closing, pert: [300, 500, 900] }

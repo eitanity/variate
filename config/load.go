@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"code.eitanity.com/variate"
+	"code.eitanity.com/variate/dist"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -352,7 +353,7 @@ func (l *loader) settings(top map[string]node) error {
 	}
 	if s, ok := top["start"]; ok {
 		var err error
-		if l.model.Graph.Start, err = parseStart(s, top); err != nil {
+		if l.model.Graph.Start, err = l.parseStart(s, top); err != nil {
 			return err
 		}
 	}
@@ -493,19 +494,33 @@ func startRefused() []struct{ key, why string } {
 	}
 }
 
-// parseStart reads start: { from: empty, horizon: n }, refusing the
-// settings a started run has no use for.
-func parseStart(x node, top map[string]node) (variate.Start, error) {
-	m, err := x.mapping("from", "horizon")
+// parseStart reads start: { from: empty | given, horizon: n, state },
+// the state a given start's list of entries, refusing the settings a
+// started run has no use for.
+func (l *loader) parseStart(x node, top map[string]node) (variate.Start, error) {
+	m, err := x.mapping("from", "horizon", "state")
 	if err != nil {
 		return variate.Start{}, err
 	}
 	from, ok := m["from"]
 	if !ok {
-		return variate.Start{}, x.errorf("start needs from: empty")
+		return variate.Start{}, x.errorf("start needs from: empty or from: given")
 	}
-	if _, err := from.oneOf("empty"); err != nil {
+	kind, err := from.oneOf("empty", "given")
+	if err != nil {
 		return variate.Start{}, err
+	}
+	var state []variate.Given
+	st, hasState := m["state"]
+	switch {
+	case kind == "empty" && hasState:
+		return variate.Start{}, st.errorf("an empty start has no state: write from: given")
+	case kind == "given" && !hasState:
+		return variate.Start{}, x.errorf("from: given needs a state, the rounds under way at period 0")
+	case hasState:
+		if state, err = l.parseState(st); err != nil {
+			return variate.Start{}, err
+		}
 	}
 	hz, ok := m["horizon"]
 	if !ok {
@@ -520,5 +535,83 @@ func parseStart(x node, top map[string]node) (variate.Start, error) {
 			return variate.Start{}, n.errorf("%s: %s", r.key, r.why)
 		}
 	}
-	return variate.Start{Horizon: int(h)}, nil
+	return variate.Start{Horizon: int(h), State: state}, nil
+}
+
+// parseState reads a given start's entries: { node, source, count, age,
+// in_service } for rounds at a queue, { node, to, source, count,
+// elapsed } for rounds part-way through a holding time.
+func (l *loader) parseState(x node) ([]variate.Given, error) {
+	items, err := x.items()
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, x.errorf("a given state needs at least one entry")
+	}
+	out := make([]variate.Given, 0, len(items))
+	for _, it := range items {
+		g, err := l.parseGiven(it)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+
+func (l *loader) parseGiven(x node) (variate.Given, error) {
+	var g variate.Given
+	m, err := x.mapping("node", "to", "source", "count", "age", "in_service", "elapsed")
+	if err != nil {
+		return g, err
+	}
+	names := []struct {
+		key string
+		dst *string
+	}{{"node", &g.Node}, {"to", &g.To}, {"source", &g.Source}}
+	for _, f := range names {
+		if v, ok := m[f.key]; ok {
+			if *f.dst, err = v.str(); err != nil {
+				return g, err
+			}
+		}
+	}
+	if g.Node == "" {
+		return g, x.errorf("a state entry needs node, the queue or the holding's node the rounds are at")
+	}
+	c, ok := m["count"]
+	if !ok {
+		return g, x.errorf("a state entry needs count, its rounds as a number or a distribution")
+	}
+	if g.Count, err = l.stateDist(c, slotValue); err != nil {
+		return g, err
+	}
+	times := []struct {
+		key string
+		dst *dist.Distribution
+	}{{"age", &g.Age}, {"in_service", &g.InService}, {"elapsed", &g.Elapsed}}
+	for _, f := range times {
+		if v, ok := m[f.key]; ok {
+			if *f.dst, err = l.stateDist(v, slotHolding); err != nil {
+				return g, err
+			}
+		}
+	}
+	return g, nil
+}
+
+// stateDist reads a state's distribution, drawn once per round and
+// never swept.
+func (l *loader) stateDist(x node, s slot) (dist.Distribution, error) {
+	d, scope, rng, err := l.parseDist(x, s)
+	switch {
+	case err != nil:
+		return nil, err
+	case scope == variate.PerPeriod:
+		return nil, x.errorf("a state is drawn per round: scope does not apply")
+	case rng != nil:
+		return nil, x.errorf("a state is not swept: range does not apply")
+	}
+	return d, nil
 }

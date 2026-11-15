@@ -1,0 +1,37 @@
+# The maintenance team of backlog.yaml taken over today with work under
+# way: 30 orders open, their ages in months from the tracker in
+# data/open_ages.csv, some open well over a year; the two oldest are
+# with the crews, worked on for a month so far; and four finished
+# orders wait on an inspection of one to three months before they close,
+# for how long so far not recorded. Two years from today, repeated: an
+# open order's wait and stay count its age, so the old backlog shows in
+# full. The crews are 80% busy with new orders alone, so the backlog
+# clears slowly: the line falls from 30 to about 21 in two years, and an
+# order arriving in the first months waits well over a year.
+start:
+  from: given
+  horizon: 24
+  state:
+    - { node: backlog, count: 30, age: { empirical: { file: data/open_ages.csv } }, in_service: { constant: 1 } }
+    - { node: inspection, to: closed, count: 4 }
+graphs:
+  - id: maintenance
+    sources:
+      - { id: orders, frequency: { constant: 1.2 }, to: backlog }
+    nodes:
+      - id: backlog
+        queue:
+          servers: 2
+          speed: 1
+          work: { lognormal: { median: 0.5, p90: 3 } }
+          period_end: carry
+        functions:
+          - { name: open, category: exposure, basis: per_time, pert: [200, 400, 1000] }
+        outcomes:
+          - { to: inspection }
+      - id: inspection
+        next: closed
+        next_holding: { uniform: [1, 3] }
+      - id: closed
+        functions:
+          - { name: close_out, category: closing, pert: [300, 500, 900] }

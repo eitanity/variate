@@ -48,8 +48,8 @@ func TestExamplesRun(t *testing.T) {
 			t.Errorf("%s: simulated mean %g, exact %g", e.Name(), mean, ex.Mean)
 		}
 	}
-	if seen != 25 {
-		t.Errorf("%d example models, README lists 25", seen)
+	if seen != 26 {
+		t.Errorf("%d example models, README lists 26", seen)
 	}
 }
 

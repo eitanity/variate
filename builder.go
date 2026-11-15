@@ -38,6 +38,9 @@ func (b *builder) validate() error {
 	if err := b.checkQueues(); err != nil {
 		return err
 	}
+	if err := b.checkGiven(); err != nil {
+		return err
+	}
 	if err := b.checkTriggers(); err != nil {
 		return err
 	}

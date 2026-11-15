@@ -798,8 +798,9 @@ function drawByPeriod(canvas, r) {
   for (let k = 0; k < n; k += every) ctx.fillText(String(k + 1), X(k) - 3, h - 8);
   caption(ctx, "mean total per period across the repeats (blue line, shaded two standard errors either side); exact mean (orange dots) where the model gives one; peak " + fmt(peak, 3), left + 4, plotW - 8, top);
   const exact = t.exact.filter((e) => e !== null).length;
-  $("byPeriodNote").textContent = `A started run: ${r.repeats.toLocaleString()} repeats of ${n} periods, each from an empty start. This chart is the total period by period; the charts and tables above describe the whole horizon, one total per repeat, so "periods" there means repeats. ` +
-    (exact === n ? "Every period has an exact mean." : exact === 0 ? "No period has an exact mean here: some path passes two holding times, or a trigger." : `${exact} of ${n} periods have an exact mean.`);
+  const from = r.start_state ? "each from the state given at the start (" + r.start_state.join("; ") + ")" : "each from an empty start";
+  $("byPeriodNote").textContent = `A started run: ${r.repeats.toLocaleString()} repeats of ${n} periods, ${from}. This chart is the total period by period; the charts and tables above describe the whole horizon, one total per repeat, so "periods" there means repeats. ` +
+    (exact === n ? "Every period has an exact mean." : exact === 0 ? "No period has an exact mean here: some path passes two holding times, a queue or a trigger, or rounds given at the start." : `${exact} of ${n} periods have an exact mean.`);
 }
 
 // drawFlow draws the compiled graph as an SVG: sources on the left,

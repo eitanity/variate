@@ -93,6 +93,7 @@ type Compiled struct {
 	burnIn                                       int64        // burn-in periods
 	horizon                                      int64        // a started run's periods per repeat; 0 in steady state
 	queues                                       []cqueue     // the queue nodes'
+	given                                        []cgiven     // a started run's given state
 	pendCap                                      int          // pending bookings a slot or the finaliser holds
 	resid                                        []residTable // per source with a repair time, its residual table
 	hasDelays                                    bool
@@ -179,6 +180,7 @@ func (m *Compiled) scaleMeans() *Expectation {
 			x[i] *= h
 		}
 	}
+	m.givenScale(e)
 	return e
 }
 

@@ -504,6 +504,56 @@ after another, and the round stream gives each round its repeat.
 `variate sweep` sweeps the figures a started run has exactly, the
 horizon's mean and its categories' and sources' means.
 
+### From a given state
+
+A started run can instead begin from a system already running: the
+rounds waiting or in service at each queue, and the rounds part-way
+through a holding time, each said with a count and distributions, and
+observed data with `empirical: { file }`:
+
+```yaml
+start:
+  from: given
+  horizon: 24
+  state:
+    - { node: backlog, count: 30, age: { empirical: { file: data/open_ages.csv } }, in_service: { constant: 1 } }
+    - { node: inspection, to: closed, count: { poisson: 4 } }
+```
+
+- An entry without `to` puts `count` rounds in the queue `node`, each
+  there for a time drawn from `age`. The ages are sorted: the oldest,
+  as many as the queue has servers, are in service, and the rest wait
+  in line, oldest first. A waiting round's work is drawn as an
+  arrival's. A round in service has served for `in_service`, and its
+  remaining work is the work's law given that it is more than that
+  time's work; without `in_service`, its remaining work and the time it
+  has served come from the work's long-run (equilibrium) residual, as
+  in a queue that has long been running. A round's wait and stay count
+  its age, and it counts as joining in period 0.
+- An entry with `to` puts `count` rounds part-way through the holding
+  time of `node`'s outcome (or `next`) to `to`, each held for a time
+  drawn from `elapsed`. What is left of the holding is drawn from its
+  law given that it has lasted that long, past the law's end nothing;
+  without `elapsed`, from its equilibrium residual. The rounds then go
+  on to `to`.
+- `source` names whose rounds they are, in the breakdown; it may be
+  left out when the model has one source. `count` is a number or a
+  distribution drawn once per repeat, rounded to a whole number.
+- Nothing booked before period 0 is booked again: no on-entry value at
+  `node`. The per-time values at `node` book from 0 over what is left
+  of the stay or the holding.
+- A round's age and its time in service are drawn independently, so a
+  round can have served longer than it has been there; its wait then
+  counts as 0.
+
+The time units are the model's, and `unit:` converts as for a holding
+time. The report says which entries drew what was left from the
+equilibrium. An `outage` holding is refused, as its length is that of
+the block's time down, which a state does not hold. What the given
+rounds reach has no exact per-period mean and is simulated; another
+source's rounds keep theirs. The round stream is refused, as it follows
+a round from its arrival.
+
 ## Layers of the period total
 
 A layer pays, in each period, the share of the total between its

@@ -109,6 +109,14 @@ func reportsClose(want, got []byte, tol float64) string {
 	return closeValues(a, b, "", tol)
 }
 
+// roundingSpread reports a standard error or deviation that is rounding
+// noise on both architectures: the spread of a quantity the same in every
+// repeat up to its last bits, as a sum of spans covering a whole period.
+func roundingSpread(path string, x, y float64) bool {
+	spread := strings.HasSuffix(path, ".stderr") || strings.HasSuffix(path, ".sd") || strings.Contains(path, ".stderr[") || strings.Contains(path, ".sd[")
+	return spread && math.Abs(x) < 1e-15 && math.Abs(y) < 1e-15
+}
+
 func closeValues(a, b any, path string, tol float64) string {
 	switch x := a.(type) {
 	case map[string]any:
@@ -136,7 +144,7 @@ func closeValues(a, b any, path string, tol float64) string {
 		if !ok {
 			return path + ": number vs " + typeName(b)
 		}
-		if x != y && math.Abs(x-y) > tol*math.Max(math.Abs(x), math.Abs(y)) {
+		if x != y && math.Abs(x-y) > tol*math.Max(math.Abs(x), math.Abs(y)) && !roundingSpread(path, x, y) {
 			return path + ": " + strconv.FormatFloat(x, 'g', -1, 64) + " vs " + strconv.FormatFloat(y, 'g', -1, 64)
 		}
 	default:

@@ -73,6 +73,10 @@ func queueFullError(queue string, capacity int) error {
 	return errors.New("queue " + queue + ": more than " + itoa(capacity) + " rounds at once; the line is sized at twice the rounds expected to reach it in a task")
 }
 
+func givenCountError(entry string, n float64) error {
+	return errors.New("start: " + entry + " drew " + figure(n) + " rounds, more than " + itoa(maxGiven) + " a repeat")
+}
+
 func drainError(periods int) error {
 	return errors.New("the queues did not empty within " + itoa(periods) + " periods after the horizon")
 }

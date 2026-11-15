@@ -48,14 +48,16 @@ type cqueue struct {
 }
 
 // qitem is a round at a queue: when it reached the queue, from the start
-// of period 0; its arrival period and source; its work; and the order it
-// was parked in, which breaks ties in time.
+// of period 0, before it for a round of a given state; its arrival
+// period and source; its work; and the order it was parked in, which
+// breaks ties in time.
 type qitem struct {
-	t    float64
-	p    int64
-	k    int32
-	work float64
-	seq  uint64
+	t     float64
+	p     int64
+	k     int32
+	given int32 // its entry of the given state at this queue, from 1; −1 for a given state's round from a holding; 0 for an arrival
+	work  float64
+	seq   uint64
 }
 
 // qserver is a server: the round it serves, when it began and when it
@@ -256,7 +258,7 @@ func (m *Compiled) sizeQueues() error {
 		for k := range m.srcs {
 			in += m.countMean[k] * m.reach[k][q.node]
 		}
-		need := queueSlack*in*periods + queueFloor
+		need := queueSlack*(in*periods+m.givenRounds()) + queueFloor
 		if !(need <= maxQueueItems) {
 			return modelError("queue", m.nodeIDs[q.node], "expects "+figure(in*periods)+" rounds in a task, more than a queue can hold ("+itoa(maxQueueItems)+")")
 		}

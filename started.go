@@ -25,10 +25,11 @@ const (
 )
 
 // Start is where a run begins. A zero Horizon is today's steady state;
-// a positive one is a started run of that many periods from an empty
-// start, repeated.
+// a positive one is a started run of that many periods, repeated, from
+// an empty start or, with State, from a given one.
 type Start struct {
 	Horizon int
+	State   []Given // what is under way at period 0; nil = an empty start
 }
 
 // Started reports whether the model is a started run.
@@ -89,6 +90,9 @@ func (m *Compiled) periodRows(l layout) [][]float64 {
 		rows[k] = make([]float64, l.width)
 	}
 	ok := m.fillStartedMeans(rows, l)
+	if ok {
+		m.markGiven(rows, l)
+	}
 	for _, row := range rows {
 		lo := l.layerAt
 		if !ok {
@@ -105,7 +109,7 @@ func (m *Compiled) periodRows(l layout) [][]float64 {
 // horizonMeans sets the expectations' means to the horizon's sums, and
 // the rounds and steps to the horizon's. The steps are a work estimate:
 // each source's arrivals times the nodes it reaches, which a queue does
-// not change.
+// not change, and a given state's rounds each down the longest path.
 func (m *Compiled) horizonMeans(e *Expectation, l layout, horizon []float64) {
 	e.Mean = horizon[l.total()]
 	for v := range m.nodes {
@@ -116,7 +120,7 @@ func (m *Compiled) horizonMeans(e *Expectation, l layout, horizon []float64) {
 		e.MeanByCategory[c] = horizon[l.cat(index(c))]
 	}
 	rounds := 0.0
-	steps := 0.0
+	steps := m.givenRounds() * float64(m.longestNodePath())
 	for k := range m.srcs {
 		e.MeanBySource[k] = horizon[l.src(index(k))]
 		arr := sumOf(m.startedArrivals(k, int(m.horizon)))
@@ -471,19 +475,28 @@ func (m *Compiled) bookPeriods(rows [][]float64, q int, v int32, filt valueFilte
 }
 
 // markNode sets to NaN what source k's rounds book at node v: its entries
-// and contribution, the source, the total, and every category.
+// and what markValues sets.
 func (m *Compiled) markNode(rows [][]float64, l layout, k int, v int32) {
+	for _, row := range rows {
+		row[l.entry(v)] = math.NaN()
+	}
+	m.markValues(rows, l, k, v)
+}
+
+// markValues sets to NaN the values source k's rounds book at node v:
+// its contribution, the source, the total, and every category.
+func (m *Compiled) markValues(rows [][]float64, l layout, k int, v int32) {
+	if !m.nodes[v].hasFunctions() {
+		return
+	}
 	nan := math.NaN()
 	for _, row := range rows {
-		row[l.entry(v)] = nan
-		if m.nodes[v].hasFunctions() {
-			row[l.total()] = nan
-			row[l.src(index(k))] = nan
-			row[l.contrib(v)] = nan
-			for c := range m.categories {
-				if m.nodeBooks(v, index(c)) {
-					row[l.cat(index(c))] = nan
-				}
+		row[l.total()] = nan
+		row[l.src(index(k))] = nan
+		row[l.contrib(v)] = nan
+		for c := range m.categories {
+			if m.nodeBooks(v, index(c)) {
+				row[l.cat(index(c))] = nan
 			}
 		}
 	}

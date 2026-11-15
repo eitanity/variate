@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"sort"
@@ -247,6 +248,21 @@ func jsonHistogram(j *jw, key string, h *Histogram) {
 
 // ---- table ----
 
+// StartFrom names where a started run starts: empty or a given state.
+func StartFrom(c *variate.Compiled) string {
+	if c.GivenState() {
+		return "a given state"
+	}
+	return "empty"
+}
+
+// WriteStartState writes a given state's entries, a line each.
+func WriteStartState(w io.Writer, c *variate.Compiled) {
+	for _, s := range c.StartState() {
+		fmt.Fprintf(w, "  at the start: %s\n", s)
+	}
+}
+
 // WriteTable writes the human-readable report.
 func (rep *Report) WriteTable(w *bufio.Writer) {
 	r := rep.R
@@ -254,7 +270,8 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 		fmt.Fprintln(w, t)
 	}
 	if rep.C.Started() {
-		fmt.Fprintf(w, "started from empty, horizon %d periods; each figure below is over the horizon, one per repeat\n", rep.C.Horizon())
+		fmt.Fprintf(w, "started from %s, horizon %d periods; each figure below is over the horizon, one per repeat\n", StartFrom(rep.C), rep.C.Horizon())
+		WriteStartState(w, rep.C)
 		fmt.Fprintf(w, "seed %d  repeats %d  converged %v  binding %s", r.Seed, r.Periods, r.Converged, r.Binding)
 	} else {
 		fmt.Fprintf(w, "seed %d  periods %d  converged %v  binding %s", r.Seed, r.Periods, r.Converged, r.Binding)
@@ -1073,6 +1090,15 @@ func (rep *Report) jsonLength(j *jw) {
 	if rep.C.Started() {
 		j.fieldInt("horizon", int64(rep.C.Horizon()))
 		j.fieldInt("repeats", rep.R.Periods)
+		if rep.C.GivenState() {
+			j.key("start_state")
+			j.open('[')
+			for _, s := range rep.C.StartState() {
+				j.sep()
+				j.str(s)
+			}
+			j.closeC(']')
+		}
 		return
 	}
 	j.fieldInt("periods", rep.R.Periods)

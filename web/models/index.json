@@ -312,6 +312,70 @@
   ]
  },
  {
+  "id": "takeover",
+  "title": "A backlog taken over with work under way (a given start)",
+  "file": "takeover.yaml",
+  "about": "The backlog's crews taken over today with orders already open, of various ages, and finished orders waiting on an inspection. An open order's wait counts its age, so the old backlog shows in full; the period-by-period chart shows the line clearing, or not, as the crews' spare time allows. Move the open orders and the crews and watch the line.",
+  "knobs": [
+   {
+    "key": "horizon",
+    "label": "Months from today",
+    "min": 1,
+    "max": 60,
+    "step": 1,
+    "value": 24
+   },
+   {
+    "key": "open",
+    "label": "Orders open today",
+    "min": 0,
+    "max": 200,
+    "step": 1,
+    "value": 30
+   },
+   {
+    "key": "age_median",
+    "label": "Age of an open order, median months",
+    "min": 0.5,
+    "max": 12,
+    "step": 0.5,
+    "value": 3
+   },
+   {
+    "key": "age_p90",
+    "label": "Age of an open order, 90th percentile months",
+    "min": 13,
+    "max": 48,
+    "step": 1,
+    "value": 15
+   },
+   {
+    "key": "inspections",
+    "label": "Orders waiting on inspection",
+    "min": 0,
+    "max": 50,
+    "step": 1,
+    "value": 4
+   },
+   {
+    "key": "orders",
+    "label": "New orders per month",
+    "min": 0.1,
+    "max": 5,
+    "step": 0.1,
+    "value": 1.2
+   },
+   {
+    "key": "crews",
+    "label": "Crews",
+    "min": 1,
+    "max": 10,
+    "step": 1,
+    "value": 2
+   }
+  ]
+ },
+ {
   "id": "pump_station",
   "title": "Pump station (the reference model)",
   "file": "pump_station.yaml",

@@ -12,6 +12,7 @@ none can rot. Run one with:
 | `filter.yaml` | a period-scoped probability: the block rate of a filter drawn once per period |
 | `delays.yaml` | holding times, a per-time cost over the repair, and a capped bill |
 | `backlog.yaml` | a queue: work orders wait for two crews, first come, first served (`queue` with `servers`, `speed`, a lognormal `work` and `period_end: carry`), in a started run from no backlog; the report gives the queue's wait and stay with their quantiles, the line and the crews' utilisation, and each month's figures as the backlog builds |
+| `takeover.yaml` | a started run from a given state (`start: { from: given, state }`): the backlog's crews taken over with 30 orders open, their ages from a data file, the oldest in service for a month (`in_service`), and four orders part-way through an inspection (`to`, the time held so far unknown); the wait and stay count each open order's age |
 | `startup.yaml` | a started run: twelve months from an empty start (`start: { from: empty, horizon: 12 }`), repeated, so the report gives each month's figures across the repeats, rising as open work builds up, with each month's exact mean, beside the year's total; `--repeats` sets how many |
 | `sequential.yaml` | detection with a probability, then a sequential response: contained with an uncertain rate, else escalated, else lost; an undetected attack gets no response and a dearer breach |
 | `templates.yaml` | a template instanced twice with one override, both wired to shared nodes |

@@ -35,6 +35,7 @@ type worker struct {
 	sums      []float64           // per trigger, the period's sum of its inputs so far
 	queues    []wqueue            // per queue, its state within the task
 	qseq      uint64              // rounds parked at the queues in the task, to order ties
+	given     bool                // the round walking is a given state's: not counted in the reach or the outcomes
 	hists     [2][]*stats.LogHist // by batch parity
 	// Round stream scratch: the round being walked, the period's matching
 	// records, and the sort scratch.
