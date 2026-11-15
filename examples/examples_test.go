@@ -34,7 +34,11 @@ func TestExamplesRun(t *testing.T) {
 			t.Fatalf("%s: compile: %v", e.Name(), err)
 		}
 		ex, _ := c.Analytic()
-		m.Config.Periods = max(5000, int64(2000/ex.RoundsPerPeriod))
+		if c.Started() {
+			m.Config.Repeats = max(5000, int64(2000/ex.RoundsPerPeriod))
+		} else {
+			m.Config.Periods = max(5000, int64(2000/ex.RoundsPerPeriod))
+		}
 		m.Config.Seed = max(m.Config.Seed, 1)
 		r, err := c.Simulate(context.Background(), m.Config)
 		if err != nil {
@@ -44,8 +48,8 @@ func TestExamplesRun(t *testing.T) {
 			t.Errorf("%s: simulated mean %g, exact %g", e.Name(), mean, ex.Mean)
 		}
 	}
-	if seen != 23 {
-		t.Errorf("%d example models, README lists 23", seen)
+	if seen != 24 {
+		t.Errorf("%d example models, README lists 24", seen)
 	}
 }
 

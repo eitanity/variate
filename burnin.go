@@ -159,6 +159,10 @@ func (m *Compiled) setBurnIn(override int, ws *[]Warning) error {
 	}
 	ph := m.pathHoldsOf()
 	m.pendCap = m.pendingCap(ph)
+	if m.Started() {
+		m.burnIn = 0
+		return nil
+	}
 	if override > 0 {
 		m.burnIn = int64(override)
 		return nil

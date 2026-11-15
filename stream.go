@@ -102,6 +102,10 @@ func (w *Workspace) spillRecord(sl *slot, rec []byte) error {
 // Seq, pacing against the clock, and translating ErrStop into a stop.
 func (w *Workspace) deliver(sl *slot) (stop bool, err error) {
 	size := w.recSize
+	w.repeat = 0
+	if w.started {
+		w.repeat = sl.task
+	}
 	// bound: records in the buffer
 	for off := 0; off+size <= sl.recLen; off += size {
 		if stop, err = w.observe(sl.recBuf[off : off+size]); stop || err != nil {
@@ -125,6 +129,7 @@ func (w *Workspace) deliver(sl *slot) (stop bool, err error) {
 // leaves the workspace usable.
 func (w *Workspace) observe(rec []byte) (stop bool, err error) {
 	getRound(rec, &w.round)
+	w.round.Repeat = w.repeat
 	// The engine times a round from the start of its arrival period; the
 	// observer sees times from period zero.
 	base := float64(w.round.Period)
@@ -136,7 +141,8 @@ func (w *Workspace) observe(rec []byte) (stop bool, err error) {
 	w.round.Seq = w.seq
 	w.seq++
 	if w.cfg.Pace > 0 {
-		due := w.start.Add(time.Duration(w.round.Arrival * float64(w.cfg.Pace)))
+		at := w.round.Arrival + float64(w.round.Repeat*w.m.horizon)
+		due := w.start.Add(time.Duration(at * float64(w.cfg.Pace)))
 		if d := due.Sub(w.clock.Now()); d > 0 {
 			w.clock.Sleep(d)
 		}

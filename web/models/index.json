@@ -208,6 +208,54 @@
   ]
  },
  {
+  "id": "startup",
+  "title": "From an empty start (a started run)",
+  "file": "startup.yaml",
+  "about": "A team starts today with nothing in progress. Requests arrive each month and stay open for a lognormal time, costing upkeep while open and a fee when closed. The run repeats the first months from empty, so the period-by-period chart shows the cost building up month by month to its steady level, each month's exact mean beside the simulated one. The other charts describe the horizon's total, one per repeat.",
+  "knobs": [
+   {
+    "key": "horizon",
+    "label": "Months from the start",
+    "min": 1,
+    "max": 60,
+    "step": 1,
+    "value": 12
+   },
+   {
+    "key": "requests",
+    "label": "Requests per month",
+    "min": 1,
+    "max": 100,
+    "step": 1,
+    "value": 20
+   },
+   {
+    "key": "median",
+    "label": "Months a request stays open, median",
+    "min": 0.25,
+    "max": 6,
+    "step": 0.25,
+    "value": 2
+   },
+   {
+    "key": "p90",
+    "label": "Months a request stays open, 90th percentile",
+    "min": 1,
+    "max": 24,
+    "step": 0.5,
+    "value": 6
+   },
+   {
+    "key": "upkeep",
+    "label": "Upkeep per month open, most likely",
+    "min": 100,
+    "max": 500,
+    "step": 10,
+    "value": 200
+   }
+  ]
+ },
+ {
   "id": "pump_station",
   "title": "Pump station (the reference model)",
   "file": "pump_station.yaml",

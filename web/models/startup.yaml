@@ -1,0 +1,21 @@
+# A team that starts today with nothing in progress: requests arrive at
+# a steady rate, each stays open for a lognormal time, costs a fee per
+# month while open and a fixed amount when it is closed. A period is a
+# month. start runs twelve months from an empty start, repeated, so the
+# report gives each month's figures across the repeats, rising as the
+# open work builds up, beside the year's total; each month's mean is
+# exact, from the share of each earlier month's requests still open.
+start: { from: empty, horizon: {{horizon}} }
+graphs:
+  - id: team
+    sources:
+      - { id: requests, frequency: { constant: {{requests}} }, to: open }
+    nodes:
+      - id: open
+        functions:
+          - { name: upkeep, category: running, basis: per_time, pert: [100, {{upkeep}}, 500] }
+        outcomes:
+          - { to: closed, holding: { lognormal: { median: {{median}}, p90: {{p90}} } } }
+      - id: closed
+        functions:
+          - { name: close_out, category: closing, pert: [300, 500, 1200] }

@@ -41,7 +41,7 @@ func plan(args []string, stdout, stderr io.Writer) error {
 		for _, b := range m.Blocks {
 			blocks = append(blocks, report.BlockFigure{Source: b.Source, Rate: b.Rate, MTBF: b.MTBF, Unavailability: b.Unavailability})
 		}
-		report.PlanJSON(w, c, e, m.Config, warnings, estimate(work, float64(periods), m.Config.Workers), blocks)
+		report.PlanJSON(w, c, e, m.Config, warnings, estimate(work, float64(periods)*float64(max(c.Horizon(), 1)), m.Config.Workers), blocks)
 		return flush(w)
 	}
 	writePlan(w, c, e, m.Config)
@@ -230,7 +230,12 @@ func writePlan(w io.Writer, c *variate.Compiled, e *variate.Expectation, cfg var
 	if t := report.PhaseText(c.Phase()); t != "" {
 		fmt.Fprintln(w, t)
 	}
-	fmt.Fprintf(w, "%-12s %-32s %14s %14s\n", "criterion", "driver", "per period", "periods")
+	per, rowName := "period", "periods"
+	if c.Started() {
+		fmt.Fprintf(w, "started from empty, horizon %d periods; the figures are per repeat of it\n", c.Horizon())
+		per, rowName = "repeat", "repeats"
+	}
+	fmt.Fprintf(w, "%-12s %-32s %14s %14s\n", "criterion", "driver", "per "+per, rowName)
 	var need int64
 	binding := ""
 	for _, row := range rows {
@@ -240,9 +245,9 @@ func writePlan(w io.Writer, c *variate.Compiled, e *variate.Expectation, cfg var
 		}
 	}
 	periods := c.PlanPeriods(int64(max(cfg.BlockPeriods, 1)))
-	fmt.Fprintf(w, "\nbinding: %s\nperiods: %d\nexpected rounds per period: %.6g\nexpected steps per period: %.6g\n", binding, periods, e.RoundsPerPeriod, e.StepsPerPeriod)
+	fmt.Fprintf(w, "\nbinding: %s\n%s: %d\nexpected rounds per %s: %.6g\nexpected steps per %s: %.6g\n", binding, rowName, periods, per, e.RoundsPerPeriod, per, e.StepsPerPeriod)
 	work := float64(periods) * (e.StepsPerPeriod + e.ArrivalsPerPeriod)
-	fmt.Fprintf(w, "expected steps: %.4g\nestimated time: %s at %d M steps/s and %d M periods/s per core\n", work, estimate(work, float64(periods), cfg.Workers), int(stepsPerSecond/1e6), int(periodsPerSecond/1e6))
+	fmt.Fprintf(w, "expected steps: %.4g\nestimated time: %s at %d M steps/s and %d M periods/s per core\n", work, estimate(work, float64(periods)*float64(max(c.Horizon(), 1)), cfg.Workers), int(stepsPerSecond/1e6), int(periodsPerSecond/1e6))
 	if _, _, err := quantileLine(c); err == nil {
 		fmt.Fprintln(w, "transform: applies")
 	}

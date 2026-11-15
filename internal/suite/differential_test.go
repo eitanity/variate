@@ -27,6 +27,15 @@ type corpusModel struct {
 	cfg  variate.Config // the file's own settings, which the CLI applies too
 }
 
+// lengthFor is a corpus run's settings for model g: a started run takes
+// the periods as repeats of its horizon, one task each.
+func lengthFor(g variate.Graph, cfg variate.Config) variate.Config {
+	if g.Start.Horizon > 0 {
+		cfg.Repeats, cfg.Periods, cfg.BlockPeriods, cfg.Transform = cfg.Periods, 0, 0, false
+	}
+	return cfg
+}
+
 // corpus is every example model, every demo model at its default knobs
 // that is not an example's model, and three random DAGs.
 func corpus(t *testing.T) []corpusModel {
@@ -138,7 +147,7 @@ func TestDifferentialWorkers(t *testing.T) {
 	for _, m := range corpus(t) {
 		var first []byte
 		for _, workers := range []int{1, 3, 32} {
-			cfg := variate.Config{Periods: 2000, Workers: workers, BlockPeriods: 50}
+			cfg := lengthFor(m.g, variate.Config{Periods: 2000, Workers: workers, BlockPeriods: 50})
 			got, _ := libraryJSON(t, m.g, cfg, 7)
 			if first == nil {
 				first = got
@@ -155,7 +164,7 @@ func TestDifferentialWorkers(t *testing.T) {
 // every result field a report is built from.
 func TestDifferentialSimulate(t *testing.T) {
 	for _, m := range corpus(t) {
-		cfg := variate.Config{Periods: 1000, Seed: 9, BlockPeriods: 50}
+		cfg := lengthFor(m.g, variate.Config{Periods: 1000, Seed: 9, BlockPeriods: 50})
 		_, r := libraryJSON(t, m.g, cfg, 9)
 		c, _, err := m.g.Compile(cfg)
 		if err != nil {
@@ -207,6 +216,7 @@ func TestDifferentialCLI(t *testing.T) {
 		// the same fields on the command line as here.
 		cfg := m.cfg
 		cfg.Periods, cfg.Seed, cfg.BlockPeriods, cfg.Transform = 2000, 5, 50, analytic
+		cfg = lengthFor(m.g, cfg)
 		c, _, err := m.g.Compile(cfg)
 		if err != nil {
 			t.Fatal(err)
@@ -223,6 +233,9 @@ func TestDifferentialCLI(t *testing.T) {
 		want := rep.JSON()
 		w.Close()
 		args := []string{"run", "-f", m.path, "-n", "2000", "--seed", "5", "--block-periods", "50", "--format", "json"}
+		if m.g.Start.Horizon > 0 {
+			args = []string{"run", "-f", m.path, "--repeats", "2000", "--seed", "5", "--format", "json"}
+		}
 		if analytic {
 			args = append(args, "--analytic")
 		}

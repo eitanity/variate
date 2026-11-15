@@ -65,7 +65,7 @@
     </details>
     <h2 style="margin-top:16px">Run</h2>
     <div class="row">
-      <div><label>Periods</label><input id="periods" type="number" min="100" max="2000000" step="100" value="20000"></div>
+      <div><label id="periodsLabel">Periods</label><input id="periods" type="number" min="100" max="2000000" step="100" value="20000"></div>
       <div><label>Seed (0 = a fresh random seed each run)</label><input id="seed" type="number" min="0" step="1" value="0"></div>
     </div>
     <label><input id="keepseries" type="checkbox"> Keep every period's total for a chart over time (runs up to 400,000 periods)</label><br>
@@ -100,6 +100,7 @@
     <h2 style="margin-top:16px">Events per period <label class="pick">from source <select id="countsource"></select></label></h2>
     <p class="about" id="countNote"></p>
     <canvas id="counts"></canvas>
+    <div id="byPeriodBlock" hidden><h2 style="margin-top:16px">Period by period from the start</h2><p class="about" id="byPeriodNote"></p><canvas id="byperiod"></canvas></div>
     <div id="seriesBlock" hidden><h2 style="margin-top:16px">Over the periods</h2><p class="about" id="seriesNote"></p><canvas id="series"></canvas></div>
     <h2 style="margin-top:16px">Flow</h2>
     <p class="about">The graph as compiled: each edge's width is the events per period taking it and its label the share of the node's entries; a dashed edge holds the event for a while; a dotted edge feeds a trigger's sum, and the trigger's node is entered once in a period whose sum is above the level. A node shows its entries per period and the mean value it books per period.</p>

@@ -102,6 +102,10 @@ func (b Bounds) Quantile(p float64) (lo, hi float64) {
 func (m *Compiled) Transform(cfg TransformConfig) (*Transformed, error) {
 	t := newTransformer(m, cfg)
 	out := &Transformed{}
+	if m.Started() {
+		out.Reason = "a started run's periods are not stationary"
+		return out, nil
+	}
 	if reason := t.applicable(); reason != "" {
 		out.Reason = reason
 		return out, nil

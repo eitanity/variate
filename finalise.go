@@ -62,6 +62,13 @@ func (w *Workspace) mergeSlot(sl *slot) {
 	}
 	r.Steps += sl.steps
 	r.TailPeriods += sl.tail
+	if w.started {
+		r.BeyondHorizon += sl.dropped
+		r.ByPeriod.add(sl.rows)
+		if s := r.Series; s != nil {
+			copy(s.rows[int(sl.task)*len(sl.rows):], sl.rows)
+		}
+	}
 	width := w.l.tailWidth()
 	for j := range r.TailCounts {
 		r.TailCounts[j] += sl.tailCounts[j]

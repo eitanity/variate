@@ -19,6 +19,8 @@ type roundWriter struct {
 	srcs  []string
 	outs  []string
 	line  []byte
+	// started: a started run, whose records carry their repeat.
+	started bool
 }
 
 // newRoundWriter returns the observer for a record format.
@@ -26,8 +28,11 @@ func newRoundWriter(format string, dst io.Writer, c *variate.Compiled) variate.O
 	if format == formatBin {
 		return variate.NewRecordWriter(dst, c.LongestPath())
 	}
-	rw := &roundWriter{w: bufio.NewWriter(dst), csv: format == formatCSV, names: c.NodeIDs(), srcs: c.SourceIDs(), outs: c.OutcomeNames()}
-	if rw.csv {
+	rw := &roundWriter{w: bufio.NewWriter(dst), csv: format == formatCSV, names: c.NodeIDs(), srcs: c.SourceIDs(), outs: c.OutcomeNames(), started: c.Started()}
+	switch {
+	case rw.csv && rw.started:
+		rw.w.WriteString("seq,repeat,period,source,arrival,end,leaf,value,path\n")
+	case rw.csv:
 		rw.w.WriteString("seq,period,source,arrival,end,leaf,value,path\n")
 	}
 	return rw
@@ -55,6 +60,10 @@ func (rw *roundWriter) jsonRecord(r *variate.Round) {
 	b := rw.line
 	b = append(b, `{"seq":`...)
 	b = strconv.AppendUint(b, r.Seq, 10)
+	if rw.started {
+		b = append(b, `,"repeat":`...)
+		b = strconv.AppendInt(b, r.Repeat, 10)
+	}
 	b = append(b, `,"period":`...)
 	b = strconv.AppendInt(b, r.Period, 10)
 	b = append(b, `,"source":`...)
@@ -94,6 +103,10 @@ func (rw *roundWriter) csvRecord(r *variate.Round) {
 	b := rw.line
 	b = strconv.AppendUint(b, r.Seq, 10)
 	b = append(b, ',')
+	if rw.started {
+		b = strconv.AppendInt(b, r.Repeat, 10)
+		b = append(b, ',')
+	}
 	b = strconv.AppendInt(b, r.Period, 10)
 	b = append(b, ',')
 	b = append(b, report.CSVField(rw.srcs[r.Source])...)

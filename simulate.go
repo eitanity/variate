@@ -28,6 +28,27 @@ func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64) {
 			w.flushPeriod(wk, sl)
 		}
 	}
+	if w.started {
+		w.dropPending(sl)
+	}
+}
+
+// dropPending drops what a started run's repeat booked past its
+// horizon, keeping its total.
+func (w *Workspace) dropPending(sl *slot) {
+	q := &sl.pend
+	// bound: the slot's points
+	for i := 0; i < q.nPts; i++ {
+		if pt := q.pts[i]; pt.col == int32(w.l.total()) { //nolint:gosec // column 0
+			sl.dropped += pt.x
+		}
+	}
+	// bound: the slot's segments
+	for i := 0; i < q.nSeg; i++ {
+		s := q.segs[i]
+		sl.dropped += s.rate * (s.hi - s.lo)
+	}
+	q.reset()
 }
 
 // closeRows closes the block's rows in period order, once the slot holds
@@ -36,11 +57,32 @@ func (w *Workspace) closeRows(sl *slot, hs []*stats.LogHist) {
 	if sl.task < 0 {
 		return
 	}
+	if w.started {
+		w.closeHorizon(sl, hs)
+		return
+	}
 	// bound: the block
 	for p := sl.a; p < sl.b && sl.err == nil; p++ {
 		w.closeRow(sl, sl.rowAt(w.l, p), p, hs)
 		sl.closed++
 	}
+}
+
+// closeHorizon closes a started run's repeat as one row, its periods
+// summed, in the scratch row, which is free once the block is simulated.
+// The rows per period stay for the finaliser.
+func (w *Workspace) closeHorizon(sl *slot, hs []*stats.LogHist) {
+	row := sl.far
+	clear(row)
+	// bound: the horizon
+	for p := sl.a; p < sl.b; p++ {
+		for i, x := range sl.rowAt(w.l, p) {
+			row[i] += x
+		}
+	}
+	w.closeRow(sl, row, sl.task, hs)
+	clear(row)
+	sl.closed = 1
 }
 
 // drawPeriod takes this period's value from every period-scoped pool,
@@ -382,7 +424,7 @@ func (w *Workspace) fold(sl *slot, row []float64, lo, hi int, hs []*stats.LogHis
 
 // keepSeries copies a closed period's row into the series, if one is kept.
 func (w *Workspace) keepSeries(row []float64, p int64) {
-	if s := w.result.Series; s != nil {
+	if s := w.result.Series; s != nil && !w.started {
 		width := w.l.width
 		copy(s.rows[int(p)*width:(int(p)+1)*width], row)
 	}

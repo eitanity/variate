@@ -181,7 +181,8 @@ func TestInvariantCompileOrDocumentedError(t *testing.T) {
 // and its breakdowns may be NaN only with delays, a repair source, a
 // trigger or above the pair budget, and are then NaN together; P(T = 0) only with a
 // repair source, or a mixture above its work cap, which needs more
-// period-scoped values than these graphs have.
+// period-scoped values than these graphs have. A started run has no
+// variance, P(T = 0) or draws count.
 func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Expectation) {
 	t.Helper()
 	known := true
@@ -196,8 +197,10 @@ func checkNumbers(t *testing.T, what string, c *variate.Compiled, e *variate.Exp
 	bad("Mean", e.Mean)
 	bad("StepsPerPeriod", e.StepsPerPeriod)
 	bad("RoundsPerPeriod", e.RoundsPerPeriod)
-	bad("DrawsMean", e.DrawsMean)
-	if !c.HasRepair() && !c.HasTriggers() {
+	if !c.Started() {
+		bad("DrawsMean", e.DrawsMean)
+	}
+	if !c.HasRepair() && !c.HasTriggers() && !c.Started() {
 		bad("PZero", e.PZero())
 	}
 	for v, x := range e.EntriesPer {

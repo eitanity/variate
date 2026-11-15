@@ -176,6 +176,10 @@ func (w *Workspace) workerLoop(wk *worker) {
 // task holds the periods [j·L, j·L + L) of the run's count, the last cut
 // at the horizon.
 func (w *Workspace) placeTask(sl *slot, j int64) {
+	if w.started {
+		sl.line, sl.a, sl.b = 0, 0, w.block
+		return
+	}
 	pos := j / w.lines
 	if j%w.lines < 0 {
 		pos--
@@ -304,7 +308,7 @@ func (w *Workspace) finaliseOne(i int) (stopNow, last bool) {
 	if boundary {
 		w.mergeBatchHists((sl.task / w.batch) & 1)
 	}
-	periods := (sl.task + 1) * w.block
+	periods := w.rowsBefore(sl.task + 1)
 	switch {
 	case w.adaptive && boundary:
 		stopNow = w.adaptiveStop(periods)
@@ -317,12 +321,21 @@ func (w *Workspace) finaliseOne(i int) (stopNow, last bool) {
 // endRun closes the run once the tasks before stop are folded, adding
 // what they booked past the folded periods to BeyondHorizon.
 func (w *Workspace) endRun(stop int64) {
-	periods := max(stop, 0) * w.block
+	periods := w.rowsBefore(max(stop, 0))
 	if !w.adaptive && !w.stopped {
 		periods = w.horizon
 	}
 	w.flushPending(stop)
 	w.result.Periods = periods
+}
+
+// rowsBefore is the rows of the result the first n tasks fold: their
+// periods, or in a started run one horizon row per repeat.
+func (w *Workspace) rowsBefore(n int64) int64 {
+	if w.started {
+		return n
+	}
+	return n * w.block
 }
 
 // mergeBatchHists adds every worker's histogram set of one parity into the

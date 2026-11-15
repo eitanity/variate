@@ -7,7 +7,8 @@ import (
 
 // Record layout: a 56-byte header followed by 24 bytes per step. The
 // header holds Seq, Period, Source, Arrival, End, Leaf, Value (48 bytes),
-// a uint32 step count and 4 bytes of padding. Steps hold Node, Outcome,
+// a uint32 step count and a started run's repeat as a uint32, which a
+// run's fewer than 2^32 tasks fit. Steps hold Node, Outcome,
 // T and Value. All little-endian. The engine's own records time a round
 // from the start of its Period; it adds the Period before delivery.
 const (
@@ -30,7 +31,7 @@ func putRound(buf []byte, r *Round) {
 	le.PutUint64(buf[32:], math.Float64bits(r.End))
 	le.PutUint64(buf[40:], math.Float64bits(r.Value))
 	le.PutUint32(buf[48:], bits32(index(len(r.Steps))))
-	le.PutUint32(buf[52:], 0)
+	le.PutUint32(buf[52:], uint32(r.Repeat)) //nolint:gosec // below 2^32, as the tasks are
 	for i, s := range r.Steps {
 		o := recordHeader + recordStep*i
 		le.PutUint32(buf[o:], bits32(s.Node))
@@ -51,6 +52,7 @@ func getRound(buf []byte, r *Round) {
 	r.End = math.Float64frombits(le.Uint64(buf[32:]))
 	r.Value = math.Float64frombits(le.Uint64(buf[40:]))
 	n := int(le.Uint32(buf[48:]))
+	r.Repeat = int64(le.Uint32(buf[52:]))
 	r.Steps = r.Steps[:n]
 	for i := range r.Steps {
 		o := recordHeader + recordStep*i

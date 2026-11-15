@@ -166,19 +166,79 @@ type Result struct {
 	TailSums   [][]float64
 
 	Series *Series // raw per-period rows; fixed runs with Config.Series only
+
+	// ByPeriod is a started run's statistics per period of its horizon,
+	// across the repeats; nil in steady state. The fields above then
+	// describe the horizon: one row per repeat, its periods summed.
+	ByPeriod *PeriodStats
+}
+
+// PeriodStats holds, per period of a started run's horizon and per
+// quantity, the mean and spread across the repeats.
+type PeriodStats struct {
+	l layout
+	h int
+	w []stats.Welford // [period×width]
+}
+
+// PeriodStat is one quantity in one period of the horizon, across the
+// repeats: their number, the mean, its standard error and the standard
+// deviation.
+type PeriodStat struct {
+	N                    int64
+	Mean, StdErr, StdDev float64
+}
+
+// Periods is the horizon.
+func (s *PeriodStats) Periods() int { return s.h }
+
+func (s *PeriodStats) at(k int, i int) PeriodStat {
+	w := s.w[k*s.l.width+i]
+	return PeriodStat{N: w.N, Mean: w.Mean, StdErr: w.StdErr(), StdDev: w.StdDev()}
+}
+
+// Total is the period total in period k of the horizon, from 0.
+func (s *PeriodStats) Total(k int) PeriodStat { return s.at(k, s.l.total()) }
+
+// Category is category c's value in period k.
+func (s *PeriodStats) Category(c, k int) PeriodStat { return s.at(k, s.l.cat(index(c))) }
+
+// Source is source k's value in period p.
+func (s *PeriodStats) Source(k, p int) PeriodStat { return s.at(p, s.l.src(index(k))) }
+
+// Entries is node v's entries in period k.
+func (s *PeriodStats) Entries(v, k int) PeriodStat { return s.at(k, s.l.entry(index(v))) }
+
+// Contrib is node v's booked value in period k.
+func (s *PeriodStats) Contrib(v, k int) PeriodStat { return s.at(k, s.l.contrib(index(v))) }
+
+// Trigger is the sum trigger i tested in period k.
+func (s *PeriodStats) Trigger(i, k int) PeriodStat { return s.at(k, s.l.trig(i)) }
+
+// add folds one repeat's rows, a row per period of the horizon.
+func (s *PeriodStats) add(rows []float64) {
+	for i := range s.w {
+		s.w[i].Add(rows[i])
+	}
 }
 
 // Series holds every closed period's row of quantities: total, categories,
 // sources, entries per node, contribution per node, layers and the sum
 // each trigger tests.
 type Series struct {
-	l    layout
-	rows []float64 // [period×width]
-	n    int64
+	l       layout
+	rows    []float64 // [period×width]
+	n       int64
+	horizon int64 // a started run's periods per repeat, which follow each other in the rows; 0 in steady state
 }
 
-// Periods is the number of periods recorded.
+// Periods is the number of periods recorded: in a started run, the
+// repeats times the horizon.
 func (s *Series) Periods() int64 { return s.n }
+
+// Horizon is a started run's periods per repeat, row p being period
+// p mod Horizon of repeat p / Horizon; 0 in steady state.
+func (s *Series) Horizon() int64 { return s.horizon }
 
 func (s *Series) at(p int64, i int) float64 { return s.rows[int(p)*s.l.width+i] }
 

@@ -28,6 +28,7 @@ the line.
 | key | meaning |
 |---|---|
 | `phase` | run one place in the schedules' cycle, counted from 1; 0 or omitted is the whole cycle (see rates that vary by period). |
+| `start` | where a run begins: omitted, the steady state, every period alike; `{ from: empty, horizon: n }`, a started run of n periods from an empty start, repeated (below). |
 | `period` | the length of one period, as one of `{ hours: n }`, `{ days: n }`, `{ weeks: n }`. Needed when any distribution, holding time or block uses a time `unit`. |
 | `graphs` | a list of graphs; sources and nodes of every graph form one model. |
 | `templates` | reusable sub-graphs instanced inside graphs (below). |
@@ -407,6 +408,53 @@ Without ranges, `variate sweep --screen 0.1` moves every input by a
 tenth either way. That ranks leverage, not uncertainty: it shows which
 inputs are worth giving a range.
 
+## Started runs
+
+A run is otherwise the steady state: every period alike, as if the
+model had always been running, which a burn-in before period 0 makes
+true. A started run instead begins at period 0 with nothing in
+progress, and asks what happens in period 1, 2, … of a horizon:
+
+```yaml
+start: { from: empty, horizon: 12 }   # twelve periods from an empty start
+repeats: 1000                         # optional; omitted, the plan decides
+```
+
+Each repeat simulates the horizon once from the start, from its own
+random streams. Nothing is in flight at period 0: no round is in a
+holding time, and nothing booked before 0 counts. The sources start in
+their steady state, as always: a reliability block's units, a repair
+source's silence and an `every` source's count are drawn from their
+long-run law. What a repeat books past the horizon is dropped, and its
+total is the report's `beyond horizon`.
+
+The report then has two parts. The usual figures describe the
+horizon: each repeat adds up its periods into one horizon total, and
+the mean, quantiles, exceedance curve, tail shares, layers (an annual
+deductible applies to the horizon's total) and the breakdown are over
+those totals, one per repeat; the criteria bind them and the plan
+counts repeats. A table by period gives, for each period of the
+horizon, the mean across the repeats with its standard error and
+standard deviation, and the exact mean beside it where the model gives
+one; the JSON (`by_period`) and CSV (rows of quantity `period`) carry
+every quantity this way: total, categories, sources, entries and value
+per node, and each trigger's sum.
+
+The exact mean of a period comes from the arrivals of every earlier
+period and the share of each that has passed its holding time by then.
+It applies where every path into a node passes at most one holding
+time drawn from a law; a node behind two holdings in a row, or an
+`outage` holding, and a trigger's rounds, are simulated with their
+error. A period's rate follows its schedule from the cycle's first
+value, so `phase` is refused: to start in another season, write the
+schedule's values from that season. The exact variance, P(T = 0) and
+the exact distribution assume stationary periods and are not computed,
+so `transform` is refused, as are `burn_in` and `block_periods`, since
+a repeat is one task. `--series` keeps every repeat's periods, one
+after another, and the round stream gives each round its repeat.
+`variate sweep` sweeps the figures a started run has exactly, the
+horizon's mean and its categories' and sources' means.
+
 ## Layers of the period total
 
 A layer pays, in each period, the share of the total between its
@@ -493,6 +541,7 @@ flag wins.
 | setting | meaning |
 |---|---|
 | `periods` | run exactly this many periods. Omitted: the plan decides, running until every criterion below is met. |
+| `repeats` | in a started run, run exactly this many repeats of the horizon; omitted, the plan decides. A started run refuses `periods`. |
 | `seed` | the random seed; 0, the default, draws a fresh seed each run, which the report gives. The same seed, model and `block_periods` repeat a run exactly. |
 | `workers` | simulation threads; default all cores, or as many as fit `max_memory`. |
 | `min_hits` | events every reachable outcome must see (default 1000). |

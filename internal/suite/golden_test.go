@@ -42,7 +42,7 @@ func TestGoldenReports(t *testing.T) {
 		// costs minutes on models pairing an uncertain rate with a
 		// per-period probability.
 		analytic := name == "compound"
-		cfg := variate.Config{Periods: 1000, Seed: 11, BlockPeriods: 50, Transform: analytic}
+		cfg := lengthFor(m.g, variate.Config{Periods: 1000, Seed: 11, BlockPeriods: 50, Transform: analytic})
 		c, warnings, err := m.g.Compile(cfg)
 		if err != nil {
 			t.Fatal(err)

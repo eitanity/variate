@@ -358,12 +358,18 @@ func (s *sweeper) exact(g Graph, fig sweepFigure) (Range, error) {
 	// means, which sizes the histograms; the figures it reaches are not
 	// exact.
 	m.maskFirings(e)
+	if m.Started() {
+		m.startedMeans(e)
+	}
 	v := math.NaN()
 	switch fig.kind {
 	case figMean:
 		v = e.Mean
 	case figPZero:
 		v = m.zeroProbability()
+		if m.Started() {
+			v = math.NaN()
+		}
 	case figCategory:
 		if c := slices.Index(m.categories, fig.name); c >= 0 {
 			v = e.MeanByCategory[c]
@@ -431,6 +437,9 @@ func (m *Compiled) layerIndex(id string) int {
 // simulatedRow runs the moved models for the base run's length at its
 // seed and pairs their blocks with the base run's.
 func (s *sweeper) simulatedRow(row SweepRow, nudged [2]Graph) (SweepRow, error) {
+	if s.g.Start.Horizon > 0 {
+		return row, errors.New("sweep: a started run's figures are swept where they are exact, the horizon's mean and its categories' and sources' means; " + s.cfg.Figure + " would need simulating, which a started run's sweep does not do yet")
+	}
 	base, err := s.baseSeries()
 	if err != nil {
 		return row, err

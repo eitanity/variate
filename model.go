@@ -143,12 +143,14 @@ type Graph struct {
 	Schedules       []Schedule
 	Layers          []Layer // functions of the period total reported beside it
 	Phased          Phase   // set by Phase: the place in the cycle every schedule is fixed at
+	Start           Start   // where a run begins: steady state, or a started run's horizon
 }
 
 // Config holds every run setting; each field's zero value selects the
 // default.
 type Config struct {
 	Periods          int64
+	Repeats          int64   // a started run's repeats of its horizon; 0 = the plan decides
 	AllowUnconverged bool    // run to the caps when the plan exceeds them
 	Transform        bool    // compute the transform at compile; the tail criterion then counts periods beyond its quantile
 	TransformGrid    int     // largest grid of that transform; 0 = the transform's default
@@ -207,7 +209,8 @@ var ErrStop = errors.New("stop")
 // Round is one delivered event with its whole path.
 type Round struct {
 	Seq     uint64
-	Period  int64
+	Repeat  int64 // a started run's repeat, from 0; 0 in steady state
+	Period  int64 // in a started run, the period within the repeat
 	Source  int32
 	Arrival float64
 	End     float64

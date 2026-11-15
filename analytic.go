@@ -28,7 +28,12 @@ type Expectation struct {
 	ArrivalsPerPeriod   float64  // arrivals the renewal and chain sources draw beyond their rounds: the stream's events, the units' failures and repairs
 	RoundsPerPeriod     float64  // Σ_k E[λ_k]
 	Firing              []Firing // per trigger, P(fire)
-	pzero               float64
+	// ByPeriod is a started run's exact mean per period of its horizon,
+	// [period][quantity] in the order of Series columns, NaN where no
+	// closed form applies; nil in steady state. The fields above are
+	// then over the whole horizon.
+	ByPeriod [][]float64
+	pzero    float64
 }
 
 // valueFilter selects which function values the recursion books: every
@@ -189,6 +194,9 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 		m.wholeVariance(e, m1, m2)
 	}
 	m.maskFirings(e)
+	if m.Started() {
+		m.startedMeans(e)
+	}
 	return e, nil
 }
 

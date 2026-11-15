@@ -46,6 +46,7 @@ type Workspace struct {
 	block       int64
 	batch       int64
 	horizon     int64
+	started     bool // a started run: a task is one repeat of the horizon, its block
 	workers     []*worker
 	slots       []*slot
 	stores      []pending // per timeline, what its finished tasks booked past the blocks handed so far
@@ -69,6 +70,7 @@ type Workspace struct {
 	round   Round  // reused for every delivery
 	fileRec []byte // one record read back from a slot file
 	seq     uint64
+	repeat  int64 // the repeat whose rounds are being delivered, in a started run
 	clock   clock
 	start   time.Time
 	stopped bool
@@ -80,10 +82,13 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if cfg.Periods < 0 {
 		return nil, errors.New("config: Periods must be >= 0")
 	}
-	if cfg.Periods == 0 && cfg.Series {
-		return nil, errors.New("config: Series needs a fixed Periods")
+	if m.Started() && cfg.Periods != 0 {
+		return nil, errors.New("config: a started run counts repeats of its horizon, not periods: set Repeats")
 	}
-	w := &Workspace{m: m, cfg: cfg, l: newLayout(m), delays: m.hasDelays || m.renewal}
+	if cfg.Periods == 0 && cfg.Repeats == 0 && cfg.Series {
+		return nil, errors.New("config: Series needs a fixed Periods, or Repeats in a started run")
+	}
+	w := &Workspace{m: m, cfg: cfg, l: newLayout(m), delays: (m.hasDelays || m.renewal) && !m.Started(), started: m.Started()}
 	w.rows = m.Plan()
 	w.labels = make([]string, len(w.rows))
 	for i, r := range w.rows {
@@ -100,6 +105,10 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	}
 	tasks := (horizon + w.block - 1) / w.block
 	w.lines = timelines(m, cfg, tasks)
+	if w.started {
+		w.block, w.lines = m.horizon, 1
+		tasks, _ = w.runLength()
+	}
 	w.burnIn = w.lines * ((m.burnIn + w.block - 1) / w.block)
 	if tasks+w.burnIn >= maxTasks {
 		return nil, errors.New("config: more than 2^32 tasks with the burn-in; raise BlockPeriods or lower MaxPeriods")
@@ -122,15 +131,26 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Series {
-		w.result.Series = &Series{l: w.l, rows: make([]float64, int(cfg.Periods)*w.l.width), n: cfg.Periods}
-	}
+	w.allocRows()
 	w.allocSlots(nslots)
 	if err := w.setupStream(nw); err != nil {
 		return nil, err
 	}
 	w.startPool(nw, pool)
 	return w, nil
+}
+
+// allocRows allocates the series a run keeps, and a started run's
+// per-period statistics.
+func (w *Workspace) allocRows() {
+	m, cfg := w.m, w.cfg
+	if cfg.Series {
+		n := cfg.Periods + cfg.Repeats*m.horizon
+		w.result.Series = &Series{l: w.l, rows: make([]float64, int(n)*w.l.width), n: n, horizon: m.horizon}
+	}
+	if w.started {
+		w.result.ByPeriod = &PeriodStats{l: w.l, h: int(m.horizon), w: make([]stats.Welford, int(m.horizon)*w.l.width)}
+	}
 }
 
 // allocSlots allocates the finaliser's pending list per timeline and the
@@ -356,7 +376,10 @@ func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
 	poolsB := int64(nw) * int64(len(w.m.pools)) * int64(pool) * 8
 	seriesB := int64(0)
 	if w.cfg.Series {
-		seriesB = 8 * a * w.cfg.Periods
+		seriesB = 8 * a * (w.cfg.Periods + w.cfg.Repeats*w.m.horizon)
+	}
+	if w.started {
+		globalB += 24 * a * w.m.horizon // the per-period means
 	}
 	total := slotsB + carryB + globalB + workerHistB + poolsB + seriesB
 	w.footprint = total
@@ -383,7 +406,7 @@ const exactBuckets = 4096
 func (w *Workspace) allocResult() error {
 	m := w.m
 	// The histograms are sized from the means alone.
-	e, _, _, _ := m.means()
+	e := m.scaleMeans()
 	res := w.histRes()
 	r := &w.result
 	r.Nodes, r.Outcomes, r.Categories, r.Sources = m.nodeIDs, m.outcomeNames, m.categories, m.sourceIDs
@@ -548,6 +571,9 @@ func (w *Workspace) resetResult(seed uint64) {
 	if r.Series != nil {
 		clear(r.Series.rows)
 	}
+	if r.ByPeriod != nil {
+		clear(r.ByPeriod.w)
+	}
 	for i := range w.rows {
 		w.rows[i].Observed, w.rows[i].Met = 0, false
 	}
@@ -574,18 +600,12 @@ func (w *Workspace) Run(ctx context.Context, seed uint64) (*Result, error) {
 	s.busy = true
 	s.mu.Unlock()
 	w.resetResult(seed)
-	w.adaptive = w.cfg.Periods == 0
+	w.adaptive = w.cfg.Periods == 0 && w.cfg.Repeats == 0
 	w.seq = 0
 	w.stopped = false
 	w.start = w.clock.Now()
 	s.mu.Lock()
-	if w.adaptive {
-		s.tasks = (w.m.crit.maxPeriods + w.block - 1) / w.block
-		w.horizon = s.tasks * w.block
-	} else {
-		w.horizon = w.cfg.Periods
-		s.tasks = (w.horizon + w.block - 1) / w.block
-	}
+	s.tasks, w.horizon = w.runLength()
 	clear(s.slotState)
 	s.running = 0
 	s.active, s.done, s.stop, s.err = true, false, false, nil
@@ -701,3 +721,25 @@ func (w *Workspace) Timelines() int { return int(w.lines) }
 
 // BlockPeriods is the periods per task the workspace runs.
 func (w *Workspace) BlockPeriods() int64 { return w.block }
+
+// runLength is a run's tasks and the rows they fold: the periods, cut
+// into blocks, or a started run's repeats, a task each; an adaptive run
+// takes the cap and stops early.
+func (w *Workspace) runLength() (tasks, rows int64) {
+	switch {
+	case w.started && w.adaptive:
+		return w.repeatCap(), w.repeatCap()
+	case w.started:
+		return w.cfg.Repeats, w.cfg.Repeats
+	case w.adaptive:
+		tasks = (w.m.crit.maxPeriods + w.block - 1) / w.block
+		return tasks, tasks * w.block
+	}
+	return (w.cfg.Periods + w.block - 1) / w.block, w.cfg.Periods
+}
+
+// repeatCap is the most repeats an adaptive started run may take: the
+// cap on its rows, below the tasks the stream keys tell apart.
+func (w *Workspace) repeatCap() int64 {
+	return min(w.m.crit.maxPeriods, maxTasks-1)
+}

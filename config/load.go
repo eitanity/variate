@@ -148,7 +148,7 @@ type loader struct {
 
 // topKeys are the keys allowed at the top level besides the settings.
 func topKeys() []string {
-	return append([]string{"period", "phase", "graphs", "templates", "factors", "schedules", "layers"}, settingKeys()...)
+	return append([]string{"period", "phase", "start", "graphs", "templates", "factors", "schedules", "layers"}, settingKeys()...)
 }
 
 func (l *loader) load(root node) (*Model, error) {
@@ -326,13 +326,13 @@ func unitHours(unit string) float64 {
 
 // settingKeys lists the run settings a file may declare.
 func settingKeys() []string {
-	return []string{unitPeriods, "allow_unconverged", keyTransform, "transform_grid", "transform_tol", "transform_work", "transform_bytes", "min_hits", "contrib_rse", "target_rse",
+	return []string{unitPeriods, "repeats", "allow_unconverged", keyTransform, "transform_grid", "transform_tol", "transform_work", "transform_bytes", "min_hits", "contrib_rse", "target_rse",
 		"tail", "tail_hits", "max_periods", "max_steps", "batch", "hist_res", "seed", "workers",
-		"block_periods", "pool_size", "series", "no_breakdown", "node_hist", "burn_in", "max_memory",
+		keyBlockPeriods, "pool_size", "series", "no_breakdown", "node_hist", keyBurnIn, "max_memory",
 		"pace", "round_scratch", "record_buffer"}
 }
 
-// settings fills Config, and the phase, from the top-level keys.
+// settings fills Config, the phase and the start from the top-level keys.
 func (l *loader) settings(top map[string]node) error {
 	c := &l.model.Config
 	for _, key := range settingKeys() {
@@ -347,6 +347,12 @@ func (l *loader) settings(top map[string]node) error {
 	if p, ok := top["phase"]; ok {
 		var err error
 		if l.model.Phase, err = smallInt(p); err != nil {
+			return err
+		}
+	}
+	if s, ok := top["start"]; ok {
+		var err error
+		if l.model.Graph.Start, err = parseStart(s, top); err != nil {
 			return err
 		}
 	}
@@ -371,6 +377,8 @@ func setSetting(c *variate.Config, key string, v node) error {
 	switch key {
 	case unitPeriods:
 		c.Periods, err = v.integer(0, 1<<62)
+	case "repeats":
+		c.Repeats, err = v.integer(0, 1<<62)
 	case "allow_unconverged":
 		c.AllowUnconverged, err = v.boolean()
 	case keyTransform, "transform_grid", "transform_tol", "transform_work", "transform_bytes":
@@ -397,7 +405,7 @@ func setSetting(c *variate.Config, key string, v node) error {
 		c.Seed, err = uinteger(v)
 	case "workers":
 		c.Workers, err = smallInt(v)
-	case "block_periods":
+	case keyBlockPeriods:
 		c.BlockPeriods, err = smallInt(v)
 	case "pool_size":
 		c.PoolSize, err = smallInt(v)
@@ -407,7 +415,7 @@ func setSetting(c *variate.Config, key string, v node) error {
 		c.NoBreakdown, err = v.boolean()
 	case "node_hist":
 		c.NodeHist, err = v.boolean()
-	case "burn_in":
+	case keyBurnIn:
 		c.BurnIn, err = smallInt(v)
 	case "max_memory":
 		c.MaxMemory, err = v.integer(0, 1<<62)
@@ -466,4 +474,51 @@ func duration(v node) (time.Duration, error) {
 		return 0, v.errorf("%q is not a duration", s)
 	}
 	return d, nil
+}
+
+// The settings of a task's periods and of the burn-in.
+const (
+	keyBlockPeriods = "block_periods"
+	keyBurnIn       = "burn_in"
+)
+
+// startRefused are the top-level keys a started run has no use for,
+// with the reason each is refused.
+func startRefused() []struct{ key, why string } {
+	return []struct{ key, why string }{
+		{unitPeriods, "a started run counts repeats of its horizon, not periods: use repeats"},
+		{keyBurnIn, "a started run starts empty at period 0 and has no burn-in"},
+		{keyBlockPeriods, "a started run simulates one repeat of its horizon per task"},
+		{"phase", "a started run runs its schedules from the first value of the cycle: write the values from the season to start in instead"},
+	}
+}
+
+// parseStart reads start: { from: empty, horizon: n }, refusing the
+// settings a started run has no use for.
+func parseStart(x node, top map[string]node) (variate.Start, error) {
+	m, err := x.mapping("from", "horizon")
+	if err != nil {
+		return variate.Start{}, err
+	}
+	from, ok := m["from"]
+	if !ok {
+		return variate.Start{}, x.errorf("start needs from: empty")
+	}
+	if _, err := from.oneOf("empty"); err != nil {
+		return variate.Start{}, err
+	}
+	hz, ok := m["horizon"]
+	if !ok {
+		return variate.Start{}, x.errorf("start needs a horizon, the periods each repeat runs")
+	}
+	h, err := hz.integer(1, 1<<20)
+	if err != nil {
+		return variate.Start{}, err
+	}
+	for _, r := range startRefused() {
+		if n, ok := top[r.key]; ok {
+			return variate.Start{}, n.errorf("%s: %s", r.key, r.why)
+		}
+	}
+	return variate.Start{Horizon: int(h)}, nil
 }

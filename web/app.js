@@ -120,10 +120,19 @@ async function selectModel(id) {
   refreshYAML();
 }
 
+// started reports whether the YAML declares a started run, which
+// counts repeats of its horizon where a steady-state run counts periods.
+const started = () => /^start\s*:/m.test($("yaml").value);
+
 // refreshYAML substitutes the knobs into the template, unless the YAML
-// box has been edited by hand.
+// box has been edited by hand, and names the run length to match.
 function refreshYAML() {
-  if (edited) return;
+  if (!edited) fillYAML();
+  $("periodsLabel").textContent = started() ? "Repeats" : "Periods";
+}
+
+// fillYAML substitutes the knobs into the template.
+function fillYAML() {
   let text = current.template;
   for (const k of current.knobs) {
     text = text.split("{{" + k.key + "}}").join(String(k.current));
@@ -138,7 +147,14 @@ async function run() {
   $("error").textContent = "";
   $("status").textContent = $("transform").checked ? "running, then computing the exact distribution…" : "running…";
   const settings = { periods: $("periods").value, seed: $("seed").value, transform: $("transform").checked ? "true" : "false" };
-  if ($("keepseries").checked && Number($("periods").value) <= 400000) settings.series = "true";
+  const isStarted = started();
+  if (isStarted) {
+    settings.repeats = settings.periods;
+    delete settings.periods;
+    delete settings.transform;
+  }
+  $("periodsLabel").textContent = isStarted ? "Repeats" : "Periods";
+  if (!isStarted && $("keepseries").checked && Number($("periods").value) <= 400000) settings.series = "true";
   try {
     const { result, ms, keep, blocks, graph } = await call("run", $("yaml").value, settings);
     $("blockNote").textContent = (blocks || []).map((b) => `Reliability block ${b.source}: ${fmt(b.rate, 3)} failures per period; system MTBF ${fmt(b.mtbf, 4)} hours; unavailability ${pct(b.unavailability)}.`).join(" ");
@@ -156,7 +172,10 @@ async function run() {
     await drawCountsFor($("countsource").value);
     // Every period of a phased run is the same month, so it has no cycle to show.
     await drawSeriesIfKept(settings.series === "true" && !result.phase);
-    $("status").textContent = (result.phase ? `Phase ${result.phase.index} of ${result.phase.cycle}: every period is that month. ` : "") + `${result.periods.toLocaleString()} periods in ${(ms / 1000).toFixed(2)} s: ${Math.round(result.periods / (ms / 1000)).toLocaleString()} periods/s, ${Math.round(result.steps / (ms / 1000) / 1e6)} M steps/s. Seed ${result.seed}: enter it to repeat this run exactly; leave 0 for an independent run each time.`;
+    drawByPeriod($("byperiod"), result);
+    const rows = result.by_period ? result.repeats : result.periods;
+    const word = result.by_period ? `repeats of ${result.horizon} periods` : "periods";
+    $("status").textContent = (result.phase ? `Phase ${result.phase.index} of ${result.phase.cycle}: every period is that month. ` : "") + `${rows.toLocaleString()} ${word} in ${(ms / 1000).toFixed(2)} s, ${Math.round(result.steps / (ms / 1000) / 1e6)} M steps/s. Seed ${result.seed}: enter it to repeat this run exactly; leave 0 for an independent run each time.`;
   } catch (err) {
     if (err.message !== "cancelled") {
       $("status").textContent = "";
@@ -741,6 +760,38 @@ async function drawSeriesIfKept(kept) {
   caption(ctx, "period totals in order (light), and their rolling mean over " + win + " periods (dark); peak " + fmt(peak, 3), left + 4, plotW - 8, top);
   for (let i = 0; i <= 5; i++) ctx.fillText(Math.round((n - 1) * i / 5).toLocaleString(), left + plotW * i / 5 - 10, h - 8);
   $("seriesNote").textContent = `${n.toLocaleString()} periods in the order they were simulated. Clusters show a count law or delays carrying from one period to the next; a flat rolling mean shows the run has settled.`;
+}
+
+// drawByPeriod draws a started run's total per period of its horizon:
+// the mean across repeats with two standard errors either side, and the
+// exact mean where the model gives one.
+function drawByPeriod(canvas, r) {
+  const bp = r.by_period;
+  $("byPeriodBlock").hidden = !bp;
+  if (!bp) return;
+  const t = bp.total, n = t.mean.length;
+  const { ctx, w, h, left, right, top, bottom } = setup(canvas);
+  const plotW = w - left - right, plotH = h - top - bottom;
+  let peak = 1e-9;
+  t.mean.forEach((m, k) => { peak = Math.max(peak, m + 2 * t.stderr[k], t.exact[k] ?? 0); });
+  const X = (k) => left + plotW * (k + 0.5) / n, Y = (v) => top + plotH * (1 - v / peak);
+  ctx.fillStyle = "rgba(31,111,235,0.18)";
+  ctx.beginPath();
+  t.mean.forEach((m, k) => { const x = X(k), y = Y(m + 2 * t.stderr[k]); if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  for (let k = n - 1; k >= 0; k--) ctx.lineTo(X(k), Y(Math.max(0, t.mean[k] - 2 * t.stderr[k])));
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = COLOURS.current; ctx.lineWidth = 2; ctx.beginPath();
+  t.mean.forEach((m, k) => { if (k === 0) ctx.moveTo(X(k), Y(m)); else ctx.lineTo(X(k), Y(m)); });
+  ctx.stroke(); ctx.lineWidth = 1;
+  ctx.fillStyle = COLOURS.baseline;
+  t.exact.forEach((e, k) => { if (e !== null) { ctx.beginPath(); ctx.arc(X(k), Y(e), 3, 0, 2 * Math.PI); ctx.fill(); } });
+  ctx.fillStyle = "#666";
+  const every = Math.max(1, Math.round(n / 12));
+  for (let k = 0; k < n; k += every) ctx.fillText(String(k + 1), X(k) - 3, h - 8);
+  caption(ctx, "mean total per period across the repeats (blue line, shaded two standard errors either side); exact mean (orange dots) where the model gives one; peak " + fmt(peak, 3), left + 4, plotW - 8, top);
+  const exact = t.exact.filter((e) => e !== null).length;
+  $("byPeriodNote").textContent = `A started run: ${r.repeats.toLocaleString()} repeats of ${n} periods, each from an empty start. This chart is the total period by period; the charts and tables above describe the whole horizon, one total per repeat, so "periods" there means repeats. ` +
+    (exact === n ? "Every period has an exact mean." : exact === 0 ? "No period has an exact mean here: some path passes two holding times, or a trigger." : `${exact} of ${n} periods have an exact mean.`);
 }
 
 // drawFlow draws the compiled graph as an SVG: sources on the left,

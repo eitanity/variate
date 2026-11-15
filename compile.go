@@ -90,6 +90,7 @@ type Compiled struct {
 	topo                                         []int32
 	reach                                        [][]float64
 	burnIn                                       int64        // burn-in periods
+	horizon                                      int64        // a started run's periods per repeat; 0 in steady state
 	pendCap                                      int          // pending bookings a slot or the finaliser holds
 	resid                                        []residTable // per source with a repair time, its residual table
 	hasDelays                                    bool
@@ -157,8 +158,25 @@ func (m *Compiled) sizingMean(e *Expectation) float64 {
 	if !math.IsNaN(e.Mean) {
 		return e.Mean
 	}
-	s, _, _, _ := m.means()
-	return s.Mean
+	return m.scaleMeans().Mean
+}
+
+// scaleMeans are the steady-state means per period, which size the
+// histograms; for a started run, times its horizon, a scale for the
+// horizon's quantities.
+func (m *Compiled) scaleMeans() *Expectation {
+	e, _, _, _ := m.means()
+	if !m.Started() {
+		return e
+	}
+	h := float64(m.horizon)
+	e.Mean *= h
+	for _, x := range [][]float64{e.MeanByCategory, e.MeanBySource, e.EntriesPer, e.Contrib} {
+		for i := range x {
+			x[i] *= h
+		}
+	}
+	return e
 }
 
 // flattenChecked validates and flattens the graph and builds its reach
@@ -184,6 +202,9 @@ func (g Graph) flattenChecked(cfg Config) (*Compiled, *builder, []Warning, error
 // tables, with a trigger's count mean not yet set: as far as the model
 // of a trigger's sum, which has none, needs.
 func (g Graph) flattenReached(cfg Config) (*Compiled, *builder, error) {
+	if err := checkStart(g, cfg); err != nil {
+		return nil, nil, err
+	}
 	b := &builder{g: g, cfg: cfg, nodeIndex: map[string]int32{}}
 	if err := b.validate(); err != nil {
 		return nil, nil, err
@@ -194,6 +215,7 @@ func (g Graph) flattenReached(cfg Config) (*Compiled, *builder, error) {
 	}
 	m.cfg = cfg
 	m.phase = g.Phased
+	m.horizon = int64(g.Start.Horizon)
 	if err := reachCap(g.ID, len(m.srcs), len(m.nodes)); err != nil {
 		return nil, nil, err
 	}

@@ -11,6 +11,7 @@ none can rot. Run one with:
 | `pump_station.yaml` | a reliability model: merged flows, a sequential selection, holding times in hours and days, per-time costs, a chained node |
 | `filter.yaml` | a period-scoped probability: the block rate of a filter drawn once per period |
 | `delays.yaml` | holding times, a per-time cost over the repair, and a capped bill |
+| `startup.yaml` | a started run: twelve months from an empty start (`start: { from: empty, horizon: 12 }`), repeated, so the report gives each month's figures across the repeats, rising as open work builds up, with each month's exact mean, beside the year's total; `--repeats` sets how many |
 | `sequential.yaml` | detection with a probability, then a sequential response: contained with an uncertain rate, else escalated, else lost; an undetected attack gets no response and a dearer breach |
 | `templates.yaml` | a template instanced twice with one override, both wired to shared nodes |
 | `regimes.yaml` | two regimes: frequent minor faults and rare critical failures a hundred times dearer, so the period total has two peaks; the plan sizes the run on the rare source |

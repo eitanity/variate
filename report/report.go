@@ -38,7 +38,7 @@ func New(c *variate.Compiled, w *variate.Workspace, r *variate.Result, analytic 
 	sum := &variate.Summary{}
 	w.Summarize(sum)
 	rep := &Report{C: c, R: r, Sum: sum, Analytic: analytic}
-	if analytic {
+	if analytic || c.Started() {
 		e, err := c.Analytic()
 		if err != nil {
 			return nil, fmt.Errorf("analytic: %w", err)
@@ -145,6 +145,9 @@ func (rep *Report) jsonSeries(j *jw) {
 	col := make([]float64, n)
 	j.key("series")
 	j.open('{')
+	if h := s.Horizon(); h > 0 {
+		j.fieldInt("horizon", h)
+	}
 	j.nums("total", s.TotalColumn(col))
 	for c, name := range rep.C.Categories() {
 		j.nums("category:"+name, s.CategoryColumn(c, col))
@@ -207,7 +210,12 @@ func PlanJSON(w *bufio.Writer, c *variate.Compiled, e *variate.Expectation, cfg 
 	}
 	j.closeC(']')
 	j.fieldStr("binding", binding)
-	j.fieldInt("periods", c.PlanPeriods(int64(max(cfg.BlockPeriods, 1))))
+	if c.Started() {
+		j.fieldInt("horizon", int64(c.Horizon()))
+		j.fieldInt("repeats", c.PlanPeriods(1))
+	} else {
+		j.fieldInt("periods", c.PlanPeriods(int64(max(cfg.BlockPeriods, 1))))
+	}
 	j.fieldStr("estimated_time", estimate)
 	j.key("blocks")
 	j.open('[')
@@ -245,14 +253,23 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 	if t := PhaseText(rep.C.Phase()); t != "" {
 		fmt.Fprintln(w, t)
 	}
-	fmt.Fprintf(w, "seed %d  periods %d  converged %v  binding %s", r.Seed, r.Periods, r.Converged, r.Binding)
+	if rep.C.Started() {
+		fmt.Fprintf(w, "started from empty, horizon %d periods; each figure below is over the horizon, one per repeat\n", rep.C.Horizon())
+		fmt.Fprintf(w, "seed %d  repeats %d  converged %v  binding %s", r.Seed, r.Periods, r.Converged, r.Binding)
+	} else {
+		fmt.Fprintf(w, "seed %d  periods %d  converged %v  binding %s", r.Seed, r.Periods, r.Converged, r.Binding)
+	}
 	if r.Stopped {
 		fmt.Fprint(w, "  stopped")
 	}
 	if len(r.Unmet) > 0 {
 		fmt.Fprintf(w, "  unmet %s", strings.Join(r.Unmet, ","))
 	}
-	fmt.Fprintf(w, "\nsteps %d  beyond horizon %.6g  tail periods %d\n\n", r.Steps, r.BeyondHorizon, r.TailPeriods)
+	rows := "periods"
+	if rep.C.Started() {
+		rows = "repeats"
+	}
+	fmt.Fprintf(w, "\nsteps %d  beyond horizon %.6g  tail %s %d\n\n", r.Steps, r.BeyondHorizon, rows, r.TailPeriods)
 	fmt.Fprintf(w, "%-28s %12s %12s %12s %12s %12s %12s %12s %12s %8s\n", "quantity", "mean", "stderr", "sd", "p50", "p90", "p95", "p99", "p999", "share")
 	rep.eachStat(func(name string, s variate.Stat, share bool) { statRow(w, name, s, share) })
 	fmt.Fprintf(w, "\n%-28s %12s %12s %12s %12s %12s\n", "quantile stderr", "p50", "p90", "p95", "p99", "p999")
@@ -261,8 +278,13 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 			fmt.Fprintf(w, "%-28s %12.4g %12.4g %12.4g %12.4g %12.4g\n", name, s.QSE[0], s.QSE[1], s.QSE[2], s.QSE[3], s.QSE[4])
 		}
 	})
+	rep.writePeriodTable(w)
 	rep.writeReachTable(w)
-	fmt.Fprintf(w, "\n%-12s %-32s %12s %12s %12s %5s\n", "criterion", "driver", "per period", "periods", "observed", "met")
+	per := "per period"
+	if rep.C.Started() {
+		per = "per repeat"
+	}
+	fmt.Fprintf(w, "\n%-12s %-32s %12s %12s %12s %5s\n", "criterion", "driver", per, rows, "observed", "met")
 	for _, row := range rep.Sum.Plan {
 		fmt.Fprintf(w, "%-12s %-32s %12.6g %12s %12s %5v\n", row.Criterion, row.Driver, row.PlannedPerPeriod, planned(row.PeriodsNeeded), observed(row.Observed), row.Met)
 	}
@@ -565,7 +587,7 @@ func (rep *Report) WriteJSON(w *bufio.Writer) {
 	j.open('{')
 	j.phase(rep.C.Phase())
 	j.fieldUint("seed", r.Seed)
-	j.fieldInt("periods", r.Periods)
+	rep.jsonLength(j)
 	j.fieldBool("converged", r.Converged)
 	j.fieldBool("stopped", r.Stopped)
 	j.fieldStr("binding", r.Binding)
@@ -608,6 +630,7 @@ func (rep *Report) WriteJSON(w *bufio.Writer) {
 	jsonHistogram(j, "histogram", rep.Hist)
 	jsonHistogram(j, "log_histogram", rep.LogHist)
 	rep.jsonSeries(j)
+	rep.jsonPeriods(j)
 	if rep.Warnings != nil {
 		j.key("warnings")
 		j.open('[')
@@ -839,6 +862,7 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 	for _, name := range sortedKeys(rep.Sum.Triggers) {
 		csvStat(w, "trigger", name, rep.Sum.Triggers[name])
 	}
+	rep.csvPeriods(w)
 	if rep.Analytic {
 		e := rep.E
 		fmt.Fprintf(w, "analytic,total,,%s,,%s,,,,,,,,,"+csvQuantileGap+"\n", csvNum(e.Mean), csvNum(math.Sqrt(e.Var)))
@@ -953,4 +977,141 @@ func (j *jw) phase(p variate.Phase) {
 	j.fieldInt("index", int64(p.Index))
 	j.fieldInt("cycle", int64(p.Cycle))
 	j.closeC('}')
+}
+
+// periodQuantity is one quantity of a started run's per-period figures:
+// its name, its statistics in period k, and its column in the exact
+// means' rows.
+type periodQuantity struct {
+	name   string
+	stat   func(k int) variate.PeriodStat
+	column int
+}
+
+// periodQuantities lists a started run's per-period quantities in the
+// order of the exact means' rows: the total, the categories, the
+// sources, the entries and contribution per node, and the triggers'
+// sums. The table shows the first 1 + categories of them.
+func (rep *Report) periodQuantities() []periodQuantity {
+	ps := rep.R.ByPeriod
+	c := rep.C
+	q := []periodQuantity{{name: "total", stat: ps.Total}}
+	for i, name := range c.Categories() {
+		q = append(q, periodQuantity{name: "category:" + name, stat: func(k int) variate.PeriodStat { return ps.Category(i, k) }})
+	}
+	for i, name := range c.SourceIDs() {
+		q = append(q, periodQuantity{name: "source:" + name, stat: func(k int) variate.PeriodStat { return ps.Source(i, k) }})
+	}
+	for v, name := range c.NodeIDs() {
+		q = append(q, periodQuantity{name: "entries:" + name, stat: func(k int) variate.PeriodStat { return ps.Entries(v, k) }})
+	}
+	for v, name := range c.NodeIDs() {
+		q = append(q, periodQuantity{name: "contrib:" + name, stat: func(k int) variate.PeriodStat { return ps.Contrib(v, k) }})
+	}
+	for i := range q {
+		q[i].column = i
+	}
+	col := len(q) + len(c.Layers())
+	srcs := c.SourceIDs()
+	for i, f := range c.Firings() {
+		q = append(q, periodQuantity{name: "trigger:" + srcs[f.Source], stat: func(k int) variate.PeriodStat { return ps.Trigger(i, k) }, column: col + i})
+	}
+	return q
+}
+
+// exactAt is the exact mean of column q in period k, NaN where unknown.
+func (rep *Report) exactAt(k, q int) float64 {
+	if rep.E == nil || rep.E.ByPeriod == nil {
+		return math.NaN()
+	}
+	return rep.E.ByPeriod[k][q]
+}
+
+// writePeriodTable prints a started run's total and categories per
+// period of its horizon: the mean across repeats, the exact mean where
+// one applies, the standard error and the standard deviation.
+func (rep *Report) writePeriodTable(w *bufio.Writer) {
+	if rep.R.ByPeriod == nil {
+		return
+	}
+	fmt.Fprintf(w, "\n%-8s %-28s %12s %12s %12s %12s\n", "period", "per period, across repeats", "mean", "exact", "stderr", "sd")
+	shown := 1 + len(rep.C.Categories())
+	for _, pq := range rep.periodQuantities()[:shown] {
+		for k := range rep.R.ByPeriod.Periods() {
+			s := pq.stat(k)
+			fmt.Fprintf(w, "%-8d %-28s %12.6g %12s %12.4g %12.6g\n", k+1, strings.Replace(pq.name, ":", " ", 1), s.Mean, exactText(rep.exactAt(k, pq.column)), s.StdErr, s.StdDev)
+		}
+	}
+}
+
+// exactText is an exact mean, or "-" where none applies.
+func exactText(x float64) string {
+	if math.IsNaN(x) {
+		return "-"
+	}
+	return strconv.FormatFloat(x, 'g', 6, 64)
+}
+
+// jsonLength writes the run's length: its periods, or a started run's
+// horizon and repeats.
+func (rep *Report) jsonLength(j *jw) {
+	if rep.C.Started() {
+		j.fieldInt("horizon", int64(rep.C.Horizon()))
+		j.fieldInt("repeats", rep.R.Periods)
+		return
+	}
+	j.fieldInt("periods", rep.R.Periods)
+}
+
+// jsonPeriods writes a started run's per-period figures: per quantity,
+// arrays over the horizon of the mean, standard error, standard
+// deviation and exact mean (null where none applies).
+func (rep *Report) jsonPeriods(j *jw) {
+	ps := rep.R.ByPeriod
+	if ps == nil {
+		return
+	}
+	h := ps.Periods()
+	col := make([]float64, h)
+	j.key("by_period")
+	j.open('{')
+	for _, pq := range rep.periodQuantities() {
+		j.key(pq.name)
+		j.open('{')
+		fill := func(f func(s variate.PeriodStat) float64) []float64 {
+			for k := range col {
+				col[k] = f(pq.stat(k))
+			}
+			return col
+		}
+		j.nums("mean", fill(func(s variate.PeriodStat) float64 { return s.Mean }))
+		j.nums("stderr", fill(func(s variate.PeriodStat) float64 { return s.StdErr }))
+		j.nums("sd", fill(func(s variate.PeriodStat) float64 { return s.StdDev }))
+		for k := range col {
+			col[k] = rep.exactAt(k, pq.column)
+		}
+		j.nums("exact", col)
+		j.closeC('}')
+	}
+	j.closeC('}')
+}
+
+// csvPeriods writes a started run's per-period figures as rows of
+// quantity "period", named "<period>:<quantity>", periods from 1; and
+// their exact means as rows of quantity "analytic period".
+func (rep *Report) csvPeriods(w *bufio.Writer) {
+	ps := rep.R.ByPeriod
+	if ps == nil {
+		return
+	}
+	for _, pq := range rep.periodQuantities() {
+		for k := range ps.Periods() {
+			s := pq.stat(k)
+			name := strconv.Itoa(k+1) + ":" + pq.name
+			fmt.Fprintf(w, "period,%s,%d,%s,%s,%s,,,,,,,,,"+csvQuantileGap+"\n", CSVField(name), s.N, csvNum(s.Mean), csvNum(s.StdErr), csvNum(s.StdDev))
+			if x := rep.exactAt(k, pq.column); !math.IsNaN(x) {
+				fmt.Fprintf(w, "analytic period,%s,,%s,,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(name), csvNum(x))
+			}
+		}
+	}
 }

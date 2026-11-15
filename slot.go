@@ -46,6 +46,7 @@ type slot struct {
 	far      []float64 // scratch row for a booking past the block
 	farAt    int64     // the period far holds, or below a when it holds none
 	pend     pending   // the bookings past the block
+	dropped  float64   // a started run's value booked past its horizon, dropped
 	incoming []float64 // what the finaliser handed in, by distance back to the task that booked it
 	stats    []qstat
 	coarse   []*stats.LogHist // with delays, the block's group histogram per quantity; nil entries without one
@@ -88,6 +89,7 @@ func (sl *slot) reset() {
 	clear(sl.tailCounts)
 	clear(sl.tailSums)
 	sl.steps = 0
+	sl.dropped = 0
 	sl.closed = 0
 	sl.tail = 0
 	sl.err = nil
