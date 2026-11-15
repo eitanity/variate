@@ -123,3 +123,59 @@ func TestHeavyDemoInfiniteVariance(t *testing.T) {
 	}
 	t.Fatal("no heavy demo")
 }
+
+// TestBacklogDemoLongRun: the backlog demo with one crew and half an
+// order a month, a load of two thirds, has exact long-run figures by
+// Pollaczek–Khinchine; with two crews and lognormal work it has none.
+func TestBacklogDemoLongRun(t *testing.T) {
+	for _, crews := range []float64{1, 2} {
+		g := demoGraph(t, "backlog", map[string]float64{"crews": crews, "orders": 0.5})
+		m, _, err := g.Compile(variate.Config{Repeats: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		lr := m.QueueLongRun(0)
+		if (lr.Method == "Pollaczek–Khinchine") != (crews == 1) {
+			t.Errorf("crews %g: long-run method %q, reason %q", crews, lr.Method, lr.Reason)
+		}
+	}
+}
+
+// demoGraph is demo id's model with its knobs at their defaults but for
+// those set.
+func demoGraph(t *testing.T, id string, set map[string]float64) variate.Graph {
+	t.Helper()
+	dir := filepath.Join("..", "..", "web", "models")
+	data, err := os.ReadFile(filepath.Join(dir, "index.json")) //nolint:gosec // repository file
+	if err != nil {
+		t.Fatal(err)
+	}
+	var models []demoModel
+	if err := json.Unmarshal(data, &models); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range models {
+		if m.ID != id {
+			continue
+		}
+		text, err := os.ReadFile(filepath.Join(dir, m.File)) //nolint:gosec // repository file
+		if err != nil {
+			t.Fatal(err)
+		}
+		yaml := string(text)
+		for _, k := range m.Knobs {
+			v, ok := set[k.Key]
+			if !ok {
+				v = k.Value
+			}
+			yaml = strings.ReplaceAll(yaml, "{{"+k.Key+"}}", strconv.FormatFloat(v, 'g', -1, 64))
+		}
+		model, err := config.Parse([]byte(yaml), dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return model.Graph
+	}
+	t.Fatalf("no demo %s", id)
+	return variate.Graph{}
+}

@@ -79,6 +79,7 @@ type QueueSummary struct {
 	Busy                       Stat // busy server time
 	Utilisation                float64
 	Line                       float64 // the mean line at a period's end
+	LongRun                    QueueLongRun
 }
 
 // exceedancePoints is the number of log-spaced points of the curve.
@@ -271,6 +272,7 @@ func (w *Workspace) summarizeQueues(dst *Summary) {
 		col := func(i int) Stat { return w.stat(&r.QueueCols[queueCols*c+i], 1) }
 		s := QueueSummary{Servers: int(q.servers), Wait: r.Queues[c].Wait(), Stay: r.Queues[c].Stay(),
 			Joined: col(qJoined), Served: col(qServed), Unfinished: col(qUnfinished), Length: col(qLength), Busy: col(qBusy)}
+		s.LongRun = w.m.queueLong[c]
 		s.Wait.StdErrUnreliable = w.m.QueueStdErrUnreliable(c)
 		s.Stay.StdErrUnreliable = s.Wait.StdErrUnreliable
 		s.Utilisation = s.Busy.Mean / (float64(q.servers) * periods)

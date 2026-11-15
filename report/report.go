@@ -577,7 +577,7 @@ func (j *jw) stat(k string, s variate.Stat) {
 		j.field("p95", s.P95)
 		j.field("p99", s.P99)
 		j.field("p999", s.P999)
-		for i, k := range [5]string{"p50", "p90", "p95", "p99", "p999"} {
+		for i, k := range quantileKeys() {
 			j.field(k+"_stderr", s.QSE[i])
 			j.field(k+"_lo", s.QLo[i])
 			j.field(k+"_hi", s.QHi[i])
@@ -1237,6 +1237,9 @@ func (rep *Report) writeQueueTable(w *bufio.Writer) {
 			fmt.Fprintf(w, "%-28s %12d %12.6g %12.4g %12.6g %12.6g %12.6g %12.6g %12.4g\n", name+" "+x.what, x.s.N, x.s.Mean, x.s.StdErr, x.s.P50, x.s.P90, x.s.P99, x.s.P999, x.s.QSE[3])
 		}
 	}
+	for _, name := range sortedKeys(rep.Sum.Queues) {
+		writeLongRun(w, name, rep.Sum.Queues[name].LongRun)
+	}
 	var unreliable []string
 	for _, name := range sortedKeys(rep.Sum.Queues) {
 		if rep.Sum.Queues[name].Wait.StdErrUnreliable {
@@ -1253,6 +1256,20 @@ func (rep *Report) writeQueueTable(w *bufio.Writer) {
 	}
 }
 
+// writeLongRun prints a queue's long-run wait and stay: the exact means,
+// each wait quantile the middle of its interval and the p99's half-width
+// in its error column, and the method; or why there are none.
+func writeLongRun(w *bufio.Writer, name string, lr variate.QueueLongRun) {
+	if lr.Method == "" {
+		fmt.Fprintf(w, "%s long run: none, %s\n", name, lr.Reason)
+		return
+	}
+	mid := func(i int) float64 { return (lr.WaitLo[i] + lr.WaitHi[i]) / 2 }
+	fmt.Fprintf(w, "%-28s %12s %12.6g %12s %12.6g %12.6g %12.6g %12.6g %12.4g\n", name+" wait, long run", "-", lr.Wait, "exact", mid(0), mid(1), mid(3), mid(4), (lr.WaitHi[3]-lr.WaitLo[3])/2)
+	fmt.Fprintf(w, "%-28s %12s %12.6g %12s %12s %12s %12s %12s %12s\n", name+" stay, long run", "-", lr.Stay, "exact", "-", "-", "-", "-", "-")
+	fmt.Fprintf(w, "%s long run: %s, the stationary figures the late periods approach\n", name, lr.Method)
+}
+
 // itemStat writes a per-round statistic of a queue.
 func (j *jw) itemStat(k string, s variate.ItemStat) {
 	j.key(k)
@@ -1260,7 +1277,7 @@ func (j *jw) itemStat(k string, s variate.ItemStat) {
 	j.fieldInt("n", s.N)
 	j.field("mean", s.Mean)
 	j.field("stderr", s.StdErr)
-	for i, name := range []string{"p50", "p90", "p95", "p99", "p999"} {
+	for i, name := range quantileKeys() {
 		j.field(name, [5]float64{s.P50, s.P90, s.P95, s.P99, s.P999}[i])
 		j.field(name+"_stderr", s.QSE[i])
 	}
@@ -1292,7 +1309,38 @@ func (rep *Report) jsonQueues(j *jw) {
 		j.field("mean_line", q.Line)
 		j.stat("busy", q.Busy)
 		j.field("utilisation", q.Utilisation)
+		j.longRun(q.LongRun)
 		j.closeC('}')
 	}
+	j.closeC('}')
+}
+
+// quantileKeys are the JSON names of the quantiles at
+// variate.QuantileLevels().
+func quantileKeys() [5]string { return [5]string{"p50", "p90", "p95", "p99", "p999"} }
+
+// longRun writes a queue's long-run figures: the method, the mean wait
+// and stay, and each wait quantile's interval; or why there are none.
+func (j *jw) longRun(lr variate.QueueLongRun) {
+	j.key("long_run")
+	j.open('{')
+	if lr.Method == "" {
+		j.fieldStr("reason", lr.Reason)
+		j.closeC('}')
+		return
+	}
+	j.fieldStr("method", lr.Method)
+	j.key("wait")
+	j.open('{')
+	j.field("mean", lr.Wait)
+	for i, name := range quantileKeys() {
+		j.field(name+"_lo", lr.WaitLo[i])
+		j.field(name+"_hi", lr.WaitHi[i])
+	}
+	j.closeC('}')
+	j.key("stay")
+	j.open('{')
+	j.field("mean", lr.Stay)
+	j.closeC('}')
 	j.closeC('}')
 }

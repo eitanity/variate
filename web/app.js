@@ -190,6 +190,9 @@ const fmt = (x, digits = 3) => (x === null || x === undefined || Number.isNaN(x)
 // pm is a mean with its standard error, the error flagged where the
 // variance is infinite and so it means nothing.
 const pm = (s, digits = 4) => fmt(s.mean, digits) + " ± " + fmt(s.stderr, 2) + (s.stderr_unreliable ? " (error unreliable: infinite variance)" : "");
+// between is an interval, or one figure where its ends agree to the shown
+// digits.
+const between = (lo, hi) => fmt(lo) === fmt(hi) ? fmt(lo) : fmt(lo) + "–" + fmt(hi);
 const pct = (x) => (x === null || x === undefined) ? "–" : (100 * x).toFixed(1) + "%";
 // pctTick labels a probability axis tick in percent at any scale: 100%, 10%, 0.01%.
 const pctTick = (p) => Number(100 * p).toLocaleString(undefined, { maximumSignificantDigits: 2 }) + "%";
@@ -213,8 +216,18 @@ function show(r, ms) {
   $("queueBlock").hidden = qs.length === 0;
   const cell = (s) => pm(s, 3);
   table($("queues"), ["queue", "rounds served", "mean wait", "wait P50", "wait P90", "wait P99", "mean stay", "stay P99", "servers busy"],
-    qs.flatMap(([name, q]) => [[name, fmt(q.wait.n, 6), cell(q.wait), fmt(q.wait.p50), fmt(q.wait.p90), fmt(q.wait.p99), cell(q.stay), fmt(q.stay.p99), pct(q.utilisation)]]));
-  $("queueNote").textContent = qs.length ? "Times are in periods. A round's wait runs from reaching the queue to a server taking it; its stay adds the service. A queue serves first come, first served, so a few long jobs holding every server make the slowest waits long while the median wait stays short." : "";
+    qs.flatMap(([name, q]) => {
+      const rows = [[name, fmt(q.wait.n, 6), cell(q.wait), fmt(q.wait.p50), fmt(q.wait.p90), fmt(q.wait.p99), cell(q.stay), fmt(q.stay.p99), pct(q.utilisation)]];
+      const lr = q.long_run;
+      if (lr && lr.method) {
+        rows.push([name + ", long run (exact)", "", fmt(lr.wait.mean, 3), between(lr.wait.p50_lo, lr.wait.p50_hi), between(lr.wait.p90_lo, lr.wait.p90_hi), between(lr.wait.p99_lo, lr.wait.p99_hi), fmt(lr.stay.mean, 3), "", ""]);
+      }
+      return rows;
+    }));
+  const longRun = qs.map(([name, q]) => q.long_run && (q.long_run.method
+    ? `${name}: the long-run row is exact, by ${q.long_run.method}: the figures the queue settles to once it has run a long time, which the late periods approach; each quantile lies in the range shown.`
+    : `${name} has no exact long-run figures: ${q.long_run.reason}.`)).filter(Boolean).join(" ");
+  $("queueNote").textContent = qs.length ? "Times are in periods. A round's wait runs from reaching the queue to a server taking it; its stay adds the service. A queue serves first come, first served, so a few long jobs holding every server make the slowest waits long while the median wait stays short. " + longRun : "";
   // Reach: for each source, the nodes its rounds pass through, in the
   // graph's order, with the share that get there. A model where every
   // share is one has no branching, and the table says only that.

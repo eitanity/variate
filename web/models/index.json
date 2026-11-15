@@ -259,7 +259,7 @@
   "id": "backlog",
   "title": "A backlog served first come, first served (a queue)",
   "file": "backlog.yaml",
-  "about": "Work orders wait for a limited number of crews, first come, first served, from a start with no backlog. Each order brings a lognormal amount of work, so a few long jobs can hold every crew. The queue table shows the wait and the stay: watch the median and the 99th percentile part as the crews get busier, and the period-by-period chart shows the backlog building.",
+  "about": "Work orders wait for a limited number of crews, first come, first served, from a start with no backlog. Each order brings a lognormal amount of work, so a few long jobs can hold every crew. The queue table shows the wait and the stay: watch the median and the 99th percentile part as the crews get busier, and the period-by-period chart shows the backlog building. With one crew and orders it can keep up with (below about 0.75 a month), the queue table adds the exact long-run figures by Pollaczek–Khinchine, the wait the line settles to once it has run a long time: compare them with the horizon's and see how far a short run falls from them.",
   "knobs": [
    {
     "key": "horizon",

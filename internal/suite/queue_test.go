@@ -66,7 +66,9 @@ func erlangCWait(lam, mu float64, c int) float64 {
 // TestQueueClosedForms: over a long horizon from empty the mean wait of
 // one server with Poisson input is Pollaczek–Khinchine's λE[S²]/(2(1 − ρ))
 // for constant, exponential and lognormal work, and of three exponential
-// servers Erlang C's, each within four standard errors.
+// servers Erlang C's, each within four standard errors; the queue's
+// long-run figures give the same means, and the simulated quantiles of
+// the wait lie within four of their errors of the long-run intervals.
 func TestQueueClosedForms(t *testing.T) {
 	expo, _ := dist.NewExponential(1.233)
 	logn, _ := dist.NewLognormalFromMeanSD(1.233, 1.233)
@@ -91,6 +93,57 @@ func TestQueueClosedForms(t *testing.T) {
 		if math.Abs(q.Utilisation-lam*1.233/sp) > 0.01 {
 			t.Errorf("%s: utilisation %v, want ρ = %v", c.name, q.Utilisation, lam*1.233/sp)
 		}
+		lr := q.LongRun
+		if lr.Method == "" || math.Abs(lr.Wait-c.want) > 1e-12*c.want {
+			t.Errorf("%s: long-run %s mean wait %v, closed form %v (%s)", c.name, lr.Method, lr.Wait, c.want, lr.Reason)
+		}
+		sim := [5]float64{q.Wait.P50, q.Wait.P90, q.Wait.P95, q.Wait.P99, q.Wait.P999}
+		for i := range 4 {
+			if gap := math.Max(lr.WaitLo[i]-sim[i], sim[i]-lr.WaitHi[i]); gap > 4*q.Wait.QSE[i] {
+				t.Errorf("%s: wait quantile %d simulated %v ± %v, long-run [%v, %v]", c.name, i, sim[i], q.Wait.QSE[i], lr.WaitLo[i], lr.WaitHi[i])
+			}
+		}
+	}
+}
+
+// TestQueueLongRunReasons: where no closed form holds the long-run
+// figures are absent with the reason: a reset queue, several servers of
+// non-exponential work, a load of 1 or more, and input that is not
+// Poisson at a constant rate.
+func TestQueueLongRunReasons(t *testing.T) {
+	logn, _ := dist.NewLognormalFromMeanSD(1.233, 1.233)
+	reset := laneGraph(6.12, 1, 10.85, logn, 20)
+	reset.Nodes[0].Queue.Reset, reset.Nodes[0].Queue.Unfinished = true, "fixed"
+	mixed := laneGraph(6.12, 1, 10.85, logn, 20)
+	mixed.Sources[0].Frequency = Pert(4, 6, 8)
+	cases := []struct {
+		name string
+		g    variate.Graph
+		want string
+	}{
+		{"reset", reset, "reset queue"},
+		{"several servers", laneGraph(6.12, 2, 10.85, logn, 20), "several servers"},
+		{"overload", laneGraph(12, 1, 10.85, logn, 20), "not below 1"},
+		{"mixed rate", mixed, "not Poisson at a constant rate"},
+	}
+	for _, c := range cases {
+		m, _, err := c.g.Compile(variate.Config{Repeats: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		lr := m.QueueLongRun(0)
+		if lr.Method != "" || !strings.Contains(lr.Reason, c.want) {
+			t.Errorf("%s: method %q reason %q, want none for a reason naming %q", c.name, lr.Method, lr.Reason, c.want)
+		}
+	}
+	series := laneGraph(6.12, 1, 10.85, logn, 20)
+	series.Nodes[1].Queue = &variate.Queue{Servers: 1, Speed: 10.85, Work: logn}
+	m, _, err := series.Compile(variate.Config{Repeats: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first, second := m.QueueLongRun(indexOf(m.QueueIDs(), "lane")), m.QueueLongRun(indexOf(m.QueueIDs(), "fixed")); first.Method == "" || !strings.Contains(second.Reason, "through queue lane") {
+		t.Errorf("queues in series: first %q (%s), second %q (%s); want the first exact and the second not", first.Method, first.Reason, second.Method, second.Reason)
 	}
 }
 
@@ -105,6 +158,9 @@ func TestQueueLane(t *testing.T) {
 	want := 6.12*14.7/(10.85*10.85)/(2*(1-6.12*es)) + es
 	if math.Abs(q.Stay.Mean-want) > 4*q.Stay.StdErr {
 		t.Errorf("mean stay %v ± %v periods, Pollaczek–Khinchine %v", q.Stay.Mean, q.Stay.StdErr, want)
+	}
+	if math.Abs(q.LongRun.Stay-want) > 1e-9*want {
+		t.Errorf("long-run mean stay %v, Pollaczek–Khinchine %v", q.LongRun.Stay, want)
 	}
 }
 

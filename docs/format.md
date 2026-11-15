@@ -466,7 +466,22 @@ rounds that arrived in it, with their errors across the repeats, and
 the line and busy time at each period's end. When the work, or the
 count of a source reaching a carried queue, has infinite variance, so
 do the waits and stays, and their standard errors are marked
-unreliable; a reset queue's are bounded by the period. What a queue books after
+unreliable; a reset queue's are bounded by the period.
+
+A carried queue whose rounds arrive as a Poisson stream at a constant
+rate also gets its exact long-run figures, the stationary wait and
+stay it settles to once it has run a long time, which the late periods
+of a long horizon approach: by Erlang C for exponential work at any
+number of servers, and by Pollaczek–Khinchine for one server and any
+work. They are the mean wait and stay, and the wait's quantiles, exact
+under Erlang C and under Pollaczek–Khinchine each an interval that
+holds it, computed from bounds on the law. The input is Poisson when
+every source reaching the queue has a constant frequency, with no
+factor, schedule, `every`, reliability block, repair time or trigger,
+and the paths into it pass no other queue and nothing drawn once a
+period; holding times and branching keep it Poisson. With a load of 1
+or more, several servers of other work, or other input, the report
+says why there are none. What a queue books after
 it, and over its stay, has no exact mean; what is booked before it
 keeps one. A trigger whose inputs are reached through a queue, an
 outage holding after one, and the round stream with queues are not
