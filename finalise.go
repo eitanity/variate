@@ -82,4 +82,5 @@ func (w *Workspace) mergeSlot(sl *slot) {
 			r.TailSums[j][i] += v
 		}
 	}
+	w.mergeWhen(sl)
 }

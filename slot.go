@@ -62,7 +62,11 @@ type slot struct {
 	// Per tail threshold, the periods that reached it and their rows summed.
 	tailCounts []int64
 	tailSums   []float64 // [threshold×width]
-	err        error
+	// Config.When: the sums of its value half-lines over the block, and
+	// in a started run the horizon's row its return periods keep.
+	when []float64
+	hrow []float64
+	err  error
 	// Round stream: the block's matching rounds, in delivery order, in the
 	// buffer and then in the file.
 	recBuf  []byte
@@ -91,6 +95,7 @@ func (sl *slot) reset() {
 	clear(sl.outs)
 	clear(sl.tailCounts)
 	clear(sl.tailSums)
+	clear(sl.when)
 	sl.steps = 0
 	sl.dropped = 0
 	for _, hs := range [4][]*stats.LogHist{sl.qwait, sl.qwaitC, sl.qstay, sl.qstayC} {

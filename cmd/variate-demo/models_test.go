@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -235,4 +236,55 @@ func demoModels(t *testing.T) []demoModel {
 		t.Fatal(err)
 	}
 	return models
+}
+
+// TestDemoTailWhen: the page's tail chart asks the run what the periods
+// at or above each of its return periods are made of; at the pump
+// station's defaults the 1-in-100 periods are 1% of the run, at a level
+// with an error, and the sources' shares of their total sum to 1, each
+// with an error.
+func TestDemoTailWhen(t *testing.T) {
+	asked := []string{"total>=1/10", "total>=1/100", "total>=1/1000"}
+	when := make([]variate.When, 0, len(asked))
+	for _, s := range asked {
+		c, err := config.ParseWhen(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		when = append(when, c)
+	}
+	cfg := variate.Config{Periods: 20000, Seed: 1, AllowUnconverged: true, When: when}
+	c, _, err := demoGraph(t, "pump_station", nil).Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := c.NewWorkspace(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	if _, err := w.Run(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	var s variate.Summary
+	w.Summarize(&s)
+	if len(s.When) != 3 {
+		t.Fatalf("%d conditions, want 3", len(s.When))
+	}
+	st := s.When[1]
+	if st.Reason != "" || st.Met != 200 || !(st.Lower.StdErr > 0) {
+		t.Fatalf("1 in 100: %d periods, level %v ± %v, %q", st.Met, st.Lower.X, st.Lower.StdErr, st.Reason)
+	}
+	sum := 0.0
+	for _, p := range st.Parts {
+		if p.Kind == "source" {
+			sum += p.Share
+			if !(p.ShareStdErr >= 0) {
+				t.Errorf("%s: share error %v", p.Name, p.ShareStdErr)
+			}
+		}
+	}
+	if math.Abs(sum-1) > 1e-9 {
+		t.Errorf("sources' shares sum to %v", sum)
+	}
 }

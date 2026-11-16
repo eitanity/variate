@@ -62,8 +62,18 @@ type Workspace struct {
 	unmet       []string  // reused by evaluate
 	labels      []string  // criterion and driver per row, built once
 	planBinding string
-	lastUnmet   string
-	adaptive    bool
+	// Config.When: the half-lines of its conditions, a slot's sums of the
+	// value ones, the periods merged in all and per batch group, the
+	// quantities each condition reports, and scratch sums.
+	halves        []half
+	slotWhen      int
+	anyOneIn      bool
+	whenN         int64
+	whenGN        []int64
+	whenPartsTmpl []WhenPart
+	whenScratch   condSums
+	lastUnmet     string
+	adaptive      bool
 	// Round stream.
 	stream  bool
 	recSize int
@@ -124,10 +134,12 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if w.delays {
 		w.allocGroups()
 	}
+	w.allocWhen()
 	nw, nslots, err := w.fitWorkers(pool)
 	if err != nil {
 		return nil, err
 	}
+	w.sizeWhen(w.memoryLimit())
 	w.allocRows()
 	w.allocSlots(nslots)
 	if err := w.setupStream(nw); err != nil {
@@ -179,6 +191,10 @@ func (w *Workspace) allocSlots(nslots int) {
 	for i := 0; i < nslots; i++ {
 		sl := newSlot(w.l, w.block, m.pendCap, nslots, len(m.srcs), len(m.nodes), len(m.outs), len(m.tailThresholds))
 		sl.coarse = w.slotCoarse()
+		sl.when = make([]float64, w.slotWhen)
+		if w.anyOneIn && w.started {
+			sl.hrow = make([]float64, w.l.layerAt)
+		}
 		for _, q := range w.result.Queues {
 			sl.qwait = append(sl.qwait, q.wait.Hist.Empty())
 			sl.qwaitC = append(sl.qwaitC, q.wait.Groups[0].Empty())
@@ -358,13 +374,18 @@ func (w *Workspace) slotsFor(nw int) int {
 	return int(min(int64(2*nw+2), w.batch))
 }
 
+// memoryLimit is MaxMemory, or its default.
+func (w *Workspace) memoryLimit() int64 {
+	if w.cfg.MaxMemory > 0 {
+		return w.cfg.MaxMemory
+	}
+	return defaultMaxMemory
+}
+
 // checkFootprint evaluates the memory the workspace would hold and
 // refuses above MaxMemory.
 func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
-	limit := w.cfg.MaxMemory
-	if limit <= 0 {
-		limit = defaultMaxMemory
-	}
+	limit := w.memoryLimit()
 	a := int64(w.l.width)
 	bins := int64(0)
 	for _, h := range w.hists {
@@ -389,9 +410,10 @@ func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
 	// Each slot holds a row per period of its block, a scratch row and its
 	// pending list; the finaliser holds one more pending list per timeline.
 	pendB := int64(w.m.pendCap) * (pendPointBytes + pendSegBytes)
-	slotsB := int64(nslots) * (8*a*(w.block+1) + 64*a + 8*counters + 8*coarse + pendB + 8*int64(nslots+1))
+	whenSlotB, whenB := w.whenBytes()
+	slotsB := int64(nslots) * (8*a*(w.block+1) + 64*a + 8*counters + 8*coarse + pendB + 8*int64(nslots+1) + whenSlotB)
 	carryB := w.lines * pendB
-	globalB := 64*a + 8*bins + 8*batchGroups*coarse + coarseMaps
+	globalB := 64*a + 8*bins + 8*batchGroups*coarse + coarseMaps + whenB
 	if w.lines > 1 {
 		globalB += 24 * batchGroups * a // the group sums and counts
 	}
@@ -612,6 +634,7 @@ func (w *Workspace) resetResult(seed uint64) {
 	for i := range w.stores {
 		w.stores[i].reset()
 	}
+	w.resetWhen()
 	for i := range r.Queues {
 		r.Queues[i].wait.reset()
 		r.Queues[i].stay.reset()

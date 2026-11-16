@@ -297,6 +297,7 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 		}
 	})
 	rep.writeAtTable(w)
+	rep.writeWhenTable(w)
 	rep.writeQueueTable(w)
 	rep.writePeriodTable(w)
 	rep.writeReachTable(w)
@@ -336,6 +337,42 @@ func (rep *Report) writeAtTable(w *bufio.Writer) {
 	fmt.Fprintf(w, "\n%-28s %12s %12s %12s %12s\n", "at", "value", "P(≥ value)", "P(< value)", "stderr")
 	for _, a := range rep.Sum.At {
 		fmt.Fprintf(w, "%-28s %12.6g %12.6g %12.6g %12.4g\n", levelName(a.Level), a.X, a.P, 1-a.P, a.StdErr)
+	}
+}
+
+// partName is how a condition's figure names its quantity.
+func partName(p variate.WhenPart) string {
+	return levelName(variate.Level{Kind: p.Kind, Name: p.Name})
+}
+
+// writeWhenTable prints each of Config.When's conditions: how many
+// periods meet it, the level of each bound, and over those periods each
+// quantity's mean and share of their total.
+func (rep *Report) writeWhenTable(w *bufio.Writer) {
+	for _, c := range rep.Sum.When {
+		fmt.Fprintf(w, "\nwhen %s: %d of %d periods, P %.6g ± %.4g", variate.WhenName(c.When), c.Met, c.N, c.P, c.StdErr)
+		if c.From.OneIn > 0 {
+			fmt.Fprintf(w, ", level %.6g ± %.4g", c.Lower.X, c.Lower.StdErr)
+		}
+		if c.To != nil && c.To.OneIn > 0 {
+			fmt.Fprintf(w, ", upper level %.6g ± %.4g", c.Upper.X, c.Upper.StdErr)
+		}
+		fmt.Fprintln(w)
+		if c.Reason != "" {
+			fmt.Fprintf(w, "  no figures: %s\n", c.Reason)
+			continue
+		}
+		if len(c.Parts) == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "  %-26s %12s %12s %12s %12s\n", "quantity", "mean", "stderr", "share", "stderr")
+		for _, p := range c.Parts {
+			fmt.Fprintf(w, "  %-26s %12.6g %12.4g", partName(p), p.Mean, p.MeanStdErr)
+			if !math.IsNaN(p.Share) {
+				fmt.Fprintf(w, " %12.4g %12.4g", p.Share, p.ShareStdErr)
+			}
+			fmt.Fprintln(w)
+		}
 	}
 }
 
@@ -671,7 +708,7 @@ func (rep *Report) WriteJSON(w *bufio.Writer) {
 	rep.jsonLayers(j)
 	rep.jsonTriggerSums(j)
 	rep.jsonTailShares(j)
-	rep.jsonAt(j)
+	rep.jsonAsked(j)
 	j.key("reach")
 	j.open('{')
 	for _, src := range rep.C.SourceIDs() {
@@ -734,6 +771,59 @@ func (rep *Report) jsonAt(j *jw) {
 		j.field("p_reached", a.P)
 		j.field("p_below", 1-a.P)
 		j.field("stderr", a.StdErr)
+		j.closeC('}')
+	}
+	j.closeC(']')
+}
+
+// jsonAsked writes what the run was asked about its quantities: the
+// chance of each of Config.At's values and each of Config.When's
+// conditions.
+func (rep *Report) jsonAsked(j *jw) {
+	rep.jsonAt(j)
+	rep.jsonWhen(j)
+}
+
+// jsonWhen writes each of Config.When's conditions, when the run names
+// any.
+func (rep *Report) jsonWhen(j *jw) {
+	if len(rep.Sum.When) == 0 {
+		return
+	}
+	j.key("when")
+	j.open('[')
+	for _, c := range rep.Sum.When {
+		j.sep()
+		j.open('{')
+		j.fieldStr("condition", variate.WhenName(c.When))
+		j.fieldInt("n", c.N)
+		j.fieldInt("met", c.Met)
+		j.field("p", c.P)
+		j.field("stderr", c.StdErr)
+		j.field("level", c.Lower.X)
+		j.field("level_stderr", c.Lower.StdErr)
+		if c.To != nil {
+			j.field("upper_level", c.Upper.X)
+			j.field("upper_level_stderr", c.Upper.StdErr)
+		}
+		if c.Reason != "" {
+			j.fieldStr("reason", c.Reason)
+		}
+		j.key("parts")
+		j.open('[')
+		for _, p := range c.Parts {
+			j.sep()
+			j.open('{')
+			j.fieldStr("quantity", partName(p))
+			j.field("mean", p.Mean)
+			j.field("mean_stderr", p.MeanStdErr)
+			if !math.IsNaN(p.Share) {
+				j.field("share", p.Share)
+				j.field("share_stderr", p.ShareStdErr)
+			}
+			j.closeC('}')
+		}
+		j.closeC(']')
 		j.closeC('}')
 	}
 	j.closeC(']')
@@ -952,6 +1042,7 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 	for _, a := range rep.Sum.At {
 		fmt.Fprintf(w, "at,%s,%d,%s,%s,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(levelName(a.Level)+"="+csvNum(a.X)), a.N, csvNum(a.P), csvNum(a.StdErr))
 	}
+	rep.csvWhen(w)
 	rep.csvPeriods(w)
 	if rep.Analytic {
 		e := rep.E
@@ -971,6 +1062,30 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 
 // csvStat writes one quantity; the percentile and clipped cells are
 // empty where the quantity has no histogram.
+// csvWhen writes each of Config.When's conditions: a row of its count
+// and chance, one of each bound's level, and a row of each quantity's
+// mean and of its share over the periods that meet it, named by the
+// condition and the quantity.
+func (rep *Report) csvWhen(w *bufio.Writer) {
+	row := func(kind, name string, n int64, x, se float64) {
+		fmt.Fprintf(w, "%s,%s,%d,%s,%s,,,,,,,,,,"+csvQuantileGap+"\n", kind, CSVField(name), n, csvNum(x), csvNum(se))
+	}
+	for _, c := range rep.Sum.When {
+		name := variate.WhenName(c.When)
+		row("when", name, c.Met, c.P, c.StdErr)
+		row("when level", name, c.N, c.Lower.X, c.Lower.StdErr)
+		if c.To != nil {
+			row("when upper level", name, c.N, c.Upper.X, c.Upper.StdErr)
+		}
+		for _, p := range c.Parts {
+			row("when mean", name+" "+partName(p), c.Met, p.Mean, p.MeanStdErr)
+			if !math.IsNaN(p.Share) {
+				row("when share", name+" "+partName(p), c.Met, p.Share, p.ShareStdErr)
+			}
+		}
+	}
+}
+
 func csvStat(w *bufio.Writer, kind, name string, s variate.Stat) {
 	fmt.Fprintf(w, "%s,%s,%d,%s,%s,%s,%s,%s,", kind, CSVField(name), s.N,
 		csvNum(s.Mean), csvNum(s.StdErr), csvNum(s.StdDev), csvNum(s.Min), csvNum(s.Max))

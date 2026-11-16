@@ -21,6 +21,9 @@ func TestApply(t *testing.T) {
 	}
 	unset := variate.Config{}
 	browser.Apply(&unset)
+	if unset.MaxMemory != browser.MaxMemory {
+		t.Errorf("max memory %d, want the browser's %d", unset.MaxMemory, browser.MaxMemory)
+	}
 	if unset.TransformTol != browser.TransformTol {
 		t.Errorf("tol %g, want the browser's %g", unset.TransformTol, browser.TransformTol)
 	}

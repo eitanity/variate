@@ -7,6 +7,15 @@ import "math"
 // Config.NodeHist asks for them. These accessors let a report draw any
 // of them the way it draws the total.
 
+// The kinds of quantity a row breaks the total into, as QuantityRow
+// names them.
+const (
+	kindCategory = "category"
+	kindSource   = "source"
+	kindEntries  = "entries"
+	kindContrib  = "contrib"
+)
+
 // QuantityRow finds the row of a quantity by kind ("total", "category",
 // "source", "entries", "contrib", "layer", "trigger") and name; ok is false for a kind or
 // name the model does not have, and for a breakdown with Config.NoBreakdown.
@@ -15,7 +24,7 @@ func (w *Workspace) QuantityRow(kind, name string) (row int, ok bool) {
 }
 
 func (m *Compiled) quantityRow(l layout, kind, name string) (row int, ok bool) {
-	if kind == "total" {
+	if kind == totalSubject {
 		return l.total(), true
 	}
 	names, at := m.quantityNames(l, kind)
@@ -29,17 +38,17 @@ func (m *Compiled) quantityRow(l layout, kind, name string) (row int, ok bool) {
 
 // quantityNames lists the names of a kind and the row of each.
 func (m *Compiled) quantityNames(l layout, kind string) (names []string, at func(int) int) {
-	if !m.crit.breakdown && (kind == "category" || kind == "source" || kind == "contrib") {
+	if !m.crit.breakdown && (kind == kindCategory || kind == kindSource || kind == kindContrib) {
 		return nil, nil
 	}
 	switch kind {
-	case "category":
+	case kindCategory:
 		return m.categories, func(i int) int { return l.cat(index(i)) }
-	case "source":
+	case kindSource:
 		return m.sourceIDs, func(i int) int { return l.src(index(i)) }
-	case "entries":
+	case kindEntries:
 		return m.nodeIDs, func(i int) int { return l.entry(index(i)) }
-	case "contrib":
+	case kindContrib:
 		return m.nodeIDs, func(i int) int { return l.contrib(index(i)) }
 	case "layer":
 		names = make([]string, len(m.layers))

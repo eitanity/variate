@@ -41,11 +41,27 @@ type options struct {
 	leaf       string
 	minValue   float64
 	at         []variate.Level
+	when       []variate.When
 	// sweep
 	figure string
 	screen float64
 	inputs string
 	top    int
+}
+
+// quantityFlags are the flags that ask about a quantity: the chance of
+// reaching a value, and what the periods meeting a condition are made of.
+func (o *options) quantityFlags(fs *flag.FlagSet) {
+	fs.Func("at", "count the periods a quantity reaches a value, as kind:name=x or total=x (repeatable)", func(s string) error {
+		lv, err := config.ParseLevel(s)
+		o.at = append(o.at, lv)
+		return err
+	})
+	fs.Func("when", "describe the periods a quantity is at or above a bound, as kind:name>=b or kind:name in [a,b), a bound a value or 1/N (repeatable)", func(s string) error {
+		c, err := config.ParseWhen(s)
+		o.when = append(o.when, c)
+		return err
+	})
 }
 
 // parseFlags reads the flags of plan, run, stream and sweep.
@@ -76,11 +92,7 @@ func parseFlags(name string, args []string, stderr io.Writer) (*options, error) 
 	fs.StringVar(&o.watch, "watch", "", "deliver rounds reaching any of these nodes (comma-separated)")
 	fs.StringVar(&o.leaf, "leaf", "", "deliver rounds ending at any of these leaves")
 	fs.Float64Var(&o.minValue, "min-value", 0, "deliver rounds booking at least this value")
-	fs.Func("at", "count the periods a quantity reaches a value, as kind:name=x or total=x (repeatable)", func(s string) error {
-		lv, err := config.ParseLevel(s)
-		o.at = append(o.at, lv)
-		return err
-	})
+	o.quantityFlags(fs)
 	if name == "sweep" {
 		o.sweepFlags(fs)
 	}
@@ -162,6 +174,7 @@ func (o *options) apply() (*config.Model, error) {
 	}
 	m.Config.Watch = variate.Watch{Nodes: splitList(o.watch), Leaves: splitList(o.leaf), MinValue: o.minValue}
 	m.Config.At = o.at
+	m.Config.When = o.when
 	if o.hasPhase {
 		m.Phase = o.phase
 	}

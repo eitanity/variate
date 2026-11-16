@@ -193,6 +193,9 @@ func setting(m *config.Model, key, value string) error {
 	case "at":
 		m.Config.At, err = levels(value)
 		return err
+	case "when":
+		m.Config.When, err = conditions(value)
+		return err
 	case "phase":
 		if m.Phase, err = strconv.Atoi(value); err != nil {
 			return errors.New("phase: not a whole number")
@@ -215,6 +218,23 @@ func levels(s string) ([]variate.Level, error) {
 			return nil, err
 		}
 		out = append(out, lv)
+	}
+	return out, nil
+}
+
+// conditions reads the when setting: conditions as --when writes them,
+// separated by semicolons.
+func conditions(s string) ([]variate.When, error) {
+	var out []variate.When
+	for _, part := range strings.Split(s, ";") {
+		if strings.TrimSpace(part) == "" {
+			continue
+		}
+		c, err := config.ParseWhen(part)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
 	}
 	return out, nil
 }

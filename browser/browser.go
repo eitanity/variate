@@ -27,6 +27,10 @@ const (
 	// MaxHeap is the most the TinyGo heap may reserve: any doubling from
 	// within it stays inside wasm32's 4 GB.
 	MaxHeap = 2 << 30
+	// MaxMemory is the workspace's memory unless the settings say
+	// otherwise, the rows a condition at a return period keeps with it:
+	// like a transform pass, a third of MaxHeap.
+	MaxMemory = 640 << 20
 )
 
 // Apply sets the browser's settings on cfg: one worker, and the
@@ -42,5 +46,8 @@ func Apply(cfg *variate.Config) {
 	}
 	if cfg.TransformBytes == 0 {
 		cfg.TransformBytes = TransformBytes
+	}
+	if cfg.MaxMemory == 0 {
+		cfg.MaxMemory = MaxMemory
 	}
 }

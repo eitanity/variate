@@ -80,6 +80,34 @@ func groupErr(n []int64, x func(g int) float64) float64 {
 	return math.Sqrt(ss * used / (used - 1))
 }
 
+// ratioErr is groupErr for a ratio of two sums: the standard error of
+// Σnum/Σden over the independent groups that ran periods, runs[g] > 0, by the delta method:
+// with G such groups and R the ratio, the square root of G/(G−1) ·
+// Σ (num_g − R·den_g)² over |Σden|. It is NaN with fewer than two groups
+// or a zero denominator.
+func ratioErr(runs []int64, num, den func(g int) float64) float64 {
+	var sn, sd, used float64
+	for g, n := range runs {
+		if n > 0 {
+			sn += num(g)
+			sd += den(g)
+			used++
+		}
+	}
+	if used < 2 || sd == 0 {
+		return math.NaN()
+	}
+	r := sn / sd
+	var ss float64
+	for g, n := range runs {
+		if n > 0 {
+			d := num(g) - r*den(g)
+			ss += d * d
+		}
+	}
+	return math.Sqrt(ss*used/(used-1)) / math.Abs(sd)
+}
+
 // minBlocks is the number of full blocks the batch-means error needs.
 const minBlocks = 16
 

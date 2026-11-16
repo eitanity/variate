@@ -60,7 +60,12 @@ risks, a plant as a block diagram, and a shift with its own period.
 `run` reports a table, JSON or CSV, and with `--at total=150` (or
 `--at category:labour=40`, repeated as needed) also the chance a
 period reaches each value and of staying under it, counted in the run
-with its standard error rather than read off the histogram; `plan` says how many periods each
+with its standard error rather than read off the histogram. With
+`--when total>=1/100` (a value, or `1/N` for the level reached once in
+N periods, or a band such as `--when "total in [1/10,1/100)"`) it also
+says what those periods are made of: each category's, source's and
+node's mean in them and share of their total, each with its standard
+error, and a return period's level with its error; `plan` says how many periods each
 convergence criterion needs and what the run will cost; `stream`
 writes the rounds, the path each event takes with the values it
 books, filtered to a node or a leaf; `sweep` moves each input the

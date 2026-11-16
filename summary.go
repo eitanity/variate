@@ -65,6 +65,7 @@ type Summary struct {
 	Plan       []PlanRow
 	Queues     map[string]QueueSummary // by the queue node's name
 	At         []LevelStat             // Config.At in its order
+	When       []WhenStat              // Config.When in its order
 }
 
 // LevelStat is the chance a quantity reaches one of Config.At's values:
@@ -147,6 +148,7 @@ func (w *Workspace) Summarize(dst *Summary) {
 		}
 		dst.At = append(dst.At, LevelStat{Level: lv.Level, N: a.N(), P: p, StdErr: a.StdErr(w.delays)})
 	}
+	w.summarizeWhen(dst)
 	dst.Plan = append(dst.Plan[:0], w.rows...)
 }
 

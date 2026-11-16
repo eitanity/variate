@@ -10,6 +10,7 @@ let lastGraph = null;  // the compiled graph of the last run, for the flow diagr
 let baseline = null;   // { keep, result, label } pinned for comparison
 const BANDS = 50;
 const DECADES = 1e4;   // the log histogram starts this far below its top
+const TAIL_PERIODS = [10, 100, 1000]; // the return periods the tail chart offers
 const COLOURS = { current: "#1f6feb", baseline: "#e08a1e" };
 
 // The engine cannot be interrupted once a call is running, so Cancel
@@ -159,6 +160,9 @@ async function run() {
   // counts the periods reaching it.
   const at = current.knobs.filter((k) => k.at).map((k) => k.at + "=" + k.current);
   if (at.length) settings.at = at.join(";");
+  // What the bad periods are made of, at each return period the tail
+  // chart offers, so that picking another needs no new run.
+  settings.when = TAIL_PERIODS.map((n) => "total>=1/" + n).join(";");
   try {
     const { result, ms, keep, blocks, graph } = await call("run", $("yaml").value, settings);
     $("blockNote").textContent = (blocks || []).map((b) => `Reliability block ${b.source}: ${fmt(b.rate, 3)} failures per period; system MTBF ${fmt(b.mtbf, 4)} hours; unavailability ${pct(b.unavailability)}.`).join(" ");
@@ -698,28 +702,33 @@ async function drawTornado(canvas, yaml) {
 }
 
 // drawTailContributions draws each source's share of the total over
-// the periods beyond the loss reached once in n periods, read at the
-// nearest tail threshold the run counted exactly.
+// the periods at or above the loss reached once in n periods, the run's
+// condition total>=1/n, with ± 2 standard errors.
 function drawTailContributions(canvas, r, n) {
   const { ctx, w, h, left, right, top } = setup(canvas);
-  const pts = r.exceedance.filter((p) => p.x > 0 && p.p > 0);
-  const loss = lossAt(pts, 1 / n);
-  const usable = (r.tail_shares || []).filter((t) => t.periods >= 30);
-  let pick = null;
-  for (const t of usable) if (loss === null || t.x <= loss) pick = t;
-  if (!pick) { $("tailNote").textContent = "Not enough periods beyond that loss to say; run more periods."; return; }
-  $("tailNote").textContent = `Loss reached once in ${n.toLocaleString()} periods: ${loss === null ? "beyond the run" : fmt(loss, 4)}. Shares over the ${pick.periods.toLocaleString()} periods whose total reached ${fmt(pick.x, 3)}, the nearest level the run counted exactly.`;
-  const rows = Object.entries(pick.by_source).sort((a, b) => b[1] - a[1]).slice(0, 16);
+  const c = (r.when || []).find((x) => x.condition === "total>=1/" + n);
+  if (!c) { $("tailNote").textContent = ""; return; }
+  if (c.reason) { $("tailNote").textContent = "No figures: " + c.reason + "."; return; }
+  const per = started() ? "repeats" : "periods";
+  if (c.met < 30) { $("tailNote").textContent = `Only ${c.met} ${per} at or above the loss reached once in ${n.toLocaleString()}; run more ${per}.`; return; }
+  $("tailNote").textContent = `Loss reached once in ${n.toLocaleString()} ${per}: ${fmt(c.level, 4)} ± ${fmt(c.level_stderr, 2)}. Shares of the total over the ${c.met.toLocaleString()} ${per} at or above it, each ± 2 standard errors.`;
+  const rows = c.parts.filter((p) => p.quantity.startsWith("source:")).map((p) => [p.quantity.slice(7), p.share, p.share_stderr])
+    .sort((a, b) => b[1] - a[1]).slice(0, 16);
+  if (rows.length === 0) return;
   const plotW = w - left - right - 60, plotH = h - top - labelBand, lx = left + 60;
   const slot = plotW / rows.length;
-  const peak = Math.max(...rows.map((x) => x[1]), 1e-9);
-  rows.forEach(([name, share], i) => {
-    const x = lx + slot * i, barH = plotH * share / peak;
+  const peak = Math.max(...rows.map((x) => x[1] + 2 * x[2]), 1e-9);
+  const Y = (v) => top + plotH * (1 - Math.max(0, v) / peak);
+  rows.forEach(([name, share, se], i) => {
+    const x = lx + slot * i;
     ctx.fillStyle = "#c77";
-    ctx.fillRect(x + 2, top + plotH - barH, slot - 4, barH);
+    ctx.fillRect(x + 2, Y(share), slot - 4, top + plotH - Y(share));
+    ctx.strokeStyle = "#333"; ctx.beginPath();
+    ctx.moveTo(x + slot / 2, Y(share + 2 * se)); ctx.lineTo(x + slot / 2, Y(share - 2 * se)); ctx.stroke();
     ctx.fillStyle = "#666";
-    if (ctx.measureText(pct(share)).width <= slot - 2) ctx.fillText(pct(share), x + 2, top + plotH - barH - 3);
-    else { ctx.save(); ctx.translate(x + slot / 2 + 4, top + plotH - barH - 4); ctx.rotate(-Math.PI / 2); ctx.fillText(pct(share), 0, 0); ctx.restore(); }
+    const label = pct(share), ly = Y(share + 2 * se) - 3;
+    if (ctx.measureText(label).width <= slot - 2) ctx.fillText(label, x + 2, ly);
+    else { ctx.save(); ctx.translate(x + slot / 2 + 4, ly - 1); ctx.rotate(-Math.PI / 2); ctx.fillText(label, 0, 0); ctx.restore(); }
     barLabel(ctx, name, x + slot / 2, top + plotH + 12);
   });
 }

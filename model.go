@@ -205,6 +205,12 @@ type Config struct {
 	// which the quantity is at least the value, with its error.
 	At []Level
 
+	// When names conditions on a quantity whose periods the run
+	// describes: for each, the chance of meeting it, and over the periods
+	// (repeats, in a started run) that meet it, every quantity's mean and
+	// share of their total, each with its error.
+	When []When
+
 	// NoBreakdownVariance leaves the per-category, per-source and
 	// per-node variances uncomputed, as on a large model they are most of
 	// what Compile costs: the breakdowns are still kept, and their
@@ -218,6 +224,21 @@ type Config struct {
 type Level struct {
 	Kind, Name string
 	X          float64
+}
+
+// When is a condition on one quantity, named as a Level names it: the
+// periods in which it is at least From and, with a To, below To.
+type When struct {
+	Kind, Name string
+	From       Bound
+	To         *Bound
+}
+
+// Bound is a level of a quantity: a value X, or, with OneIn ≥ 1, the
+// level reached once in OneIn periods, which the run estimates as the
+// (1 − 1/OneIn) quantile of what it saw.
+type Bound struct {
+	X, OneIn float64
 }
 
 // Watch selects which rounds an Observer receives: a round matches every
