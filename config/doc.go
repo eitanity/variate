@@ -5,4 +5,9 @@
 // independent copies. The file is untrusted input: it is capped in size,
 // walked as a node tree with every unknown key an error, and any data
 // file it names must sit beside it.
+//
+// A host that builds its model as data, not as a file, makes the
+// variate.Graph itself and converts what a file would convert through
+// the same functions the file reader uses: UnitScale for a time unit,
+// BlockChain and BlockSource for a reliability block.
 package config

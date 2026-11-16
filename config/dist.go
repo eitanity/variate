@@ -216,17 +216,11 @@ func (spec *distSpec) checkSlot(x node, s slot) error {
 // duration in the unit becomes periods; a rate per unit becomes a rate
 // per period.
 func (l *loader) scale(x node, unit string, s slot) (float64, error) {
-	if unit == "" || unit == unitPeriods {
-		return 1, nil
+	f, err := UnitScale(unit, l.periodHours, s == slotHolding)
+	if err != nil {
+		return 0, x.errorf("%v", err)
 	}
-	if l.periodHours == 0 {
-		return 0, x.errorf("unit: %s used but period: not declared", unit)
-	}
-	hours := unitHours(unit)
-	if s == slotHolding {
-		return hours / l.periodHours, nil
-	}
-	return l.periodHours / hours, nil
+	return f, nil
 }
 
 // build constructs the family with its parameters scaled by s.

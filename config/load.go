@@ -307,22 +307,9 @@ func parsePeriod(x node) (float64, error) {
 		if !(n > 0) || n > 1e9 {
 			return 0, v.errorf("period length must be positive")
 		}
-		return n * unitHours(key), nil
+		return n * HoursIn(key), nil
 	}
 	return 0, nil
-}
-
-// unitHours is the length of an exact unit in hours.
-func unitHours(unit string) float64 {
-	switch unit {
-	case "hours":
-		return 1
-	case "days":
-		return 24
-	case "weeks":
-		return 168
-	}
-	return 0
 }
 
 // settingKeys lists the run settings a file may declare.
