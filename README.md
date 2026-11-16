@@ -93,7 +93,10 @@ tornado chart;
 and the compiled graph as a flow diagram. A run can be
 pinned as a baseline and the next drawn beside it, for
 cheaper-and-slower against faster-and-dearer. The page lives under
-`web/`; `cmd/variate-wasm` is the engine's browser entry point.
+`web/`; `cmd/variate-wasm` is the engine's browser entry point. A host
+that builds the engine into its own WebAssembly applies the same limits
+with `browser.Apply`: one worker, and the transform's work and memory
+budgets that keep it within a browser's time and wasm32's memory.
 
 ## From Python
 

@@ -20,8 +20,8 @@ import (
 	"syscall/js"
 
 	"code.eitanity.com/variate"
+	"code.eitanity.com/variate/browser"
 	"code.eitanity.com/variate/config"
-	"code.eitanity.com/variate/internal/browser"
 	"code.eitanity.com/variate/report"
 )
 
@@ -113,6 +113,7 @@ func load(args []js.Value) (*config.Model, error) {
 		return nil, err
 	}
 	browser.Apply(&m.Config)
+	m.Config.NodeHist = true // the page draws any node's histogram
 	return m, nil
 }
 

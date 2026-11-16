@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"code.eitanity.com/variate"
+	"code.eitanity.com/variate/browser"
 	"code.eitanity.com/variate/config"
-	"code.eitanity.com/variate/internal/browser"
 )
 
 // TestBrowserExactCurves: with the browser's settings, the examples

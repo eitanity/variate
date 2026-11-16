@@ -11,8 +11,8 @@ import (
 	"runtime"
 
 	"code.eitanity.com/variate"
+	"code.eitanity.com/variate/browser"
 	"code.eitanity.com/variate/config"
-	"code.eitanity.com/variate/internal/browser"
 )
 
 func main() {
@@ -37,6 +37,7 @@ func check(path string) error {
 		return err
 	}
 	browser.Apply(&m.Config)
+	m.Config.NodeHist = true // as the page runs it
 	c, _, err := m.Graph.Compile(m.Config)
 	if err != nil {
 		return fmt.Errorf("compile: %w", err)

@@ -1,6 +1,8 @@
-// Package browser holds the settings the browser entry point applies to
-// every model, shared with the check that runs the engine under TinyGo
-// the way the page does.
+// Package browser holds the settings a model runs with in a browser,
+// built to WebAssembly: one worker, as the page has one thread, and the
+// transform's budgets and tolerance, which keep it within a browser's
+// time and wasm32's memory. Variate's own browser entry applies them, as
+// does any host that builds the engine into its own WebAssembly.
 package browser
 
 import "code.eitanity.com/variate"
@@ -27,11 +29,11 @@ const (
 	MaxHeap = 2 << 30
 )
 
-// Apply sets the browser's settings on cfg: one worker, the node
-// histograms the page draws, and the transform's budgets and tolerance where unset.
+// Apply sets the browser's settings on cfg: one worker, and the
+// transform's budgets and tolerance where unset. What the run keeps, such
+// as the node histograms, stays the caller's choice.
 func Apply(cfg *variate.Config) {
 	cfg.Workers = 1
-	cfg.NodeHist = true
 	if cfg.TransformWork == 0 {
 		cfg.TransformWork = TransformWork
 	}
