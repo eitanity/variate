@@ -57,7 +57,10 @@ risks, a plant as a block diagram, and a shift with its own period.
     go run ./cmd/variate stream -f examples/sequential.yaml --leaf undetected --rounds csv
     go run ./cmd/variate sweep -f examples/pump_station.yaml --figure p99 --top 5
 
-`run` reports a table, JSON or CSV; `plan` says how many periods each
+`run` reports a table, JSON or CSV, and with `--at total=150` (or
+`--at category:labour=40`, repeated as needed) also the chance a
+period reaches each value and of staying under it, counted in the run
+with its standard error rather than read off the histogram; `plan` says how many periods each
 convergence criterion needs and what the run will cost; `stream`
 writes the rounds, the path each event takes with the values it
 books, filtered to a node or a leaf; `sweep` moves each input the

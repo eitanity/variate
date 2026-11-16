@@ -296,6 +296,7 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 			fmt.Fprintf(w, "%-28s %12.4g %12.4g %12.4g %12.4g %12.4g\n", name, s.QSE[0], s.QSE[1], s.QSE[2], s.QSE[3], s.QSE[4])
 		}
 	})
+	rep.writeAtTable(w)
 	rep.writeQueueTable(w)
 	rep.writePeriodTable(w)
 	rep.writeReachTable(w)
@@ -314,6 +315,27 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 	rep.writeExceedanceTable(w)
 	if rep.Analytic {
 		rep.writeAnalyticTable(w)
+	}
+}
+
+// levelName is how a Config.At entry names its quantity: the total, or
+// kind:name.
+func levelName(lv variate.Level) string {
+	if lv.Name == "" {
+		return lv.Kind
+	}
+	return lv.Kind + ":" + lv.Name
+}
+
+// writeAtTable prints the chance each of Config.At's values is reached
+// in a period, or a repeat in a started run, and of staying below it.
+func (rep *Report) writeAtTable(w *bufio.Writer) {
+	if len(rep.Sum.At) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\n%-28s %12s %12s %12s %12s\n", "at", "value", "P(≥ value)", "P(< value)", "stderr")
+	for _, a := range rep.Sum.At {
+		fmt.Fprintf(w, "%-28s %12.6g %12.6g %12.6g %12.4g\n", levelName(a.Level), a.X, a.P, 1-a.P, a.StdErr)
 	}
 }
 
@@ -649,6 +671,7 @@ func (rep *Report) WriteJSON(w *bufio.Writer) {
 	rep.jsonLayers(j)
 	rep.jsonTriggerSums(j)
 	rep.jsonTailShares(j)
+	rep.jsonAt(j)
 	j.key("reach")
 	j.open('{')
 	for _, src := range rep.C.SourceIDs() {
@@ -690,6 +713,28 @@ func (j *jw) nums(k string, xs []float64) {
 	for _, x := range xs {
 		j.sep()
 		j.num(x)
+	}
+	j.closeC(']')
+}
+
+// jsonAt writes the chance each of Config.At's values is reached, when
+// the run names any.
+func (rep *Report) jsonAt(j *jw) {
+	if len(rep.Sum.At) == 0 {
+		return
+	}
+	j.key("at")
+	j.open('[')
+	for _, a := range rep.Sum.At {
+		j.sep()
+		j.open('{')
+		j.fieldStr("quantity", levelName(a.Level))
+		j.field("value", a.X)
+		j.fieldInt("n", a.N)
+		j.field("p_reached", a.P)
+		j.field("p_below", 1-a.P)
+		j.field("stderr", a.StdErr)
+		j.closeC('}')
 	}
 	j.closeC(']')
 }
@@ -903,6 +948,9 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 	}
 	for _, name := range sortedKeys(rep.Sum.Triggers) {
 		csvStat(w, "trigger", name, rep.Sum.Triggers[name])
+	}
+	for _, a := range rep.Sum.At {
+		fmt.Fprintf(w, "at,%s,%d,%s,%s,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(levelName(a.Level)+"="+csvNum(a.X)), a.N, csvNum(a.P), csvNum(a.StdErr))
 	}
 	rep.csvPeriods(w)
 	if rep.Analytic {

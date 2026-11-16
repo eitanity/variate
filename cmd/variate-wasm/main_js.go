@@ -16,6 +16,7 @@ import (
 	"math"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"syscall/js"
 
 	"code.eitanity.com/variate"
@@ -103,13 +104,7 @@ func load(args []js.Value) (*config.Model, error) {
 		keys := js.Global().Get("Object").Call("keys", args[1])
 		for i := 0; i < keys.Length(); i++ {
 			key := keys.Index(i).String()
-			if key == "phase" {
-				if m.Phase, err = strconv.Atoi(args[1].Get(key).String()); err != nil {
-					return nil, errors.New("phase: not a whole number")
-				}
-				continue
-			}
-			if err := config.SetSetting(&m.Config, key, args[1].Get(key).String()); err != nil {
+			if err := setting(m, key, args[1].Get(key).String()); err != nil {
 				return nil, err
 			}
 		}
@@ -189,6 +184,40 @@ const browserScreen = 0.1
 
 // run runs the model and returns the report JSON, extended with a
 // linear and a log-scaled histogram of the period total for drawing.
+// setting lays one setting over the model: the values to count, the
+// phase, or a run setting.
+func setting(m *config.Model, key, value string) error {
+	var err error
+	switch key {
+	case "at":
+		m.Config.At, err = levels(value)
+		return err
+	case "phase":
+		if m.Phase, err = strconv.Atoi(value); err != nil {
+			return errors.New("phase: not a whole number")
+		}
+		return nil
+	}
+	return config.SetSetting(&m.Config, key, value)
+}
+
+// levels reads the at setting: values to count, kind:name=x or total=x,
+// separated by semicolons.
+func levels(s string) ([]variate.Level, error) {
+	var out []variate.Level
+	for _, part := range strings.Split(s, ";") {
+		if strings.TrimSpace(part) == "" {
+			continue
+		}
+		lv, err := config.ParseLevel(part)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, lv)
+	}
+	return out, nil
+}
+
 func (s *session) run(_ js.Value, args []js.Value) any {
 	m, err := load(args)
 	if err != nil {

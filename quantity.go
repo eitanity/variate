@@ -11,11 +11,14 @@ import "math"
 // "source", "entries", "contrib", "layer", "trigger") and name; ok is false for a kind or
 // name the model does not have, and for a breakdown with Config.NoBreakdown.
 func (w *Workspace) QuantityRow(kind, name string) (row int, ok bool) {
-	l := w.l
+	return w.m.quantityRow(w.l, kind, name)
+}
+
+func (m *Compiled) quantityRow(l layout, kind, name string) (row int, ok bool) {
 	if kind == "total" {
 		return l.total(), true
 	}
-	names, at := w.quantityNames(kind)
+	names, at := m.quantityNames(l, kind)
 	for i, n := range names {
 		if n == name {
 			return at(i), true
@@ -25,30 +28,29 @@ func (w *Workspace) QuantityRow(kind, name string) (row int, ok bool) {
 }
 
 // quantityNames lists the names of a kind and the row of each.
-func (w *Workspace) quantityNames(kind string) (names []string, at func(int) int) {
-	l := w.l
-	if !w.m.crit.breakdown && (kind == "category" || kind == "source" || kind == "contrib") {
+func (m *Compiled) quantityNames(l layout, kind string) (names []string, at func(int) int) {
+	if !m.crit.breakdown && (kind == "category" || kind == "source" || kind == "contrib") {
 		return nil, nil
 	}
 	switch kind {
 	case "category":
-		return w.m.categories, func(i int) int { return l.cat(index(i)) }
+		return m.categories, func(i int) int { return l.cat(index(i)) }
 	case "source":
-		return w.m.sourceIDs, func(i int) int { return l.src(index(i)) }
+		return m.sourceIDs, func(i int) int { return l.src(index(i)) }
 	case "entries":
-		return w.m.nodeIDs, func(i int) int { return l.entry(index(i)) }
+		return m.nodeIDs, func(i int) int { return l.entry(index(i)) }
 	case "contrib":
-		return w.m.nodeIDs, func(i int) int { return l.contrib(index(i)) }
+		return m.nodeIDs, func(i int) int { return l.contrib(index(i)) }
 	case "layer":
-		names = make([]string, len(w.m.layers))
-		for i, y := range w.m.layers {
+		names = make([]string, len(m.layers))
+		for i, y := range m.layers {
 			names[i] = y.ID
 		}
 		return names, l.layer
 	case "trigger":
-		names = make([]string, len(w.m.trigs))
-		for i, tr := range w.m.trigs {
-			names[i] = w.m.sourceIDs[tr.src]
+		names = make([]string, len(m.trigs))
+		for i, tr := range m.trigs {
+			names[i] = m.sourceIDs[tr.src]
 		}
 		return names, l.trig
 	}

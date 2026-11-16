@@ -495,6 +495,7 @@ func (w *Workspace) allocResult() error {
 func (w *Workspace) allocQueues(res float64) {
 	m, r := w.m, &w.result
 	r.QueueCols = make([]Accum, queueCols*len(m.queues))
+	r.Levels = make([]Accum, len(m.levels))
 	r.Queues = make([]QueueResult, len(m.queues))
 	for c, q := range m.queues {
 		scale := m.poolMean[q.work] / q.speed
@@ -576,8 +577,10 @@ func (w *Workspace) accum(i int) *Accum {
 		return &w.result.Layers[i-l.layerAt]
 	case i < l.queueAt:
 		return &w.result.Triggers[i-l.trigAt]
-	default:
+	case i < l.levelAt:
 		return &w.result.QueueCols[i-l.queueAt]
+	default:
+		return &w.result.Levels[i-l.levelAt]
 	}
 }
 

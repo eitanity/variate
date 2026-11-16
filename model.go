@@ -200,11 +200,24 @@ type Config struct {
 	RoundScratch int
 	RecordBuffer int
 
+	// At names values whose chance of being reached the run counts:
+	// for each, the share of periods (of repeats, in a started run) in
+	// which the quantity is at least the value, with its error.
+	At []Level
+
 	// NoBreakdownVariance leaves the per-category, per-source and
 	// per-node variances uncomputed, as on a large model they are most of
 	// what Compile costs: the breakdowns are still kept, and their
 	// criteria are checked on what the run observes alone.
 	NoBreakdownVariance bool
+}
+
+// Level is a value X of a quantity, named as Workspace.QuantityRow
+// names one: Kind "total", "category", "source", "entries", "contrib",
+// "layer" or "trigger", and Name within it ("" for the total).
+type Level struct {
+	Kind, Name string
+	X          float64
 }
 
 // Watch selects which rounds an Observer receives: a round matches every

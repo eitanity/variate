@@ -40,6 +40,7 @@ type options struct {
 	watch      string
 	leaf       string
 	minValue   float64
+	at         []variate.Level
 	// sweep
 	figure string
 	screen float64
@@ -75,6 +76,11 @@ func parseFlags(name string, args []string, stderr io.Writer) (*options, error) 
 	fs.StringVar(&o.watch, "watch", "", "deliver rounds reaching any of these nodes (comma-separated)")
 	fs.StringVar(&o.leaf, "leaf", "", "deliver rounds ending at any of these leaves")
 	fs.Float64Var(&o.minValue, "min-value", 0, "deliver rounds booking at least this value")
+	fs.Func("at", "count the periods a quantity reaches a value, as kind:name=x or total=x (repeatable)", func(s string) error {
+		lv, err := config.ParseLevel(s)
+		o.at = append(o.at, lv)
+		return err
+	})
 	if name == "sweep" {
 		o.sweepFlags(fs)
 	}
@@ -155,6 +161,7 @@ func (o *options) apply() (*config.Model, error) {
 		m.Config.Transform = true
 	}
 	m.Config.Watch = variate.Watch{Nodes: splitList(o.watch), Leaves: splitList(o.leaf), MinValue: o.minValue}
+	m.Config.At = o.at
 	if o.hasPhase {
 		m.Phase = o.phase
 	}

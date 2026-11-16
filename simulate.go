@@ -396,6 +396,7 @@ func (w *Workspace) choose(wk *worker, v int32, n cnode) int32 {
 func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHist) {
 	l := &w.l
 	total := row[l.total()]
+	w.applyLevels(row)
 	if !w.m.crit.breakdown {
 		w.applyLayers(row, total)
 		w.fold(sl, row, 0, 1, hs)
@@ -428,6 +429,19 @@ func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHi
 	}
 	w.addTail(sl, row, total)
 	w.keepSeries(row, p)
+}
+
+// applyLevels sets each of Config.At's columns to 1 where its quantity
+// reaches the value, else 0.
+func (w *Workspace) applyLevels(row []float64) {
+	// bound: the levels
+	for i, lv := range w.m.levels {
+		x := 0.0
+		if row[lv.row] >= lv.x {
+			x = 1
+		}
+		row[w.l.level(i)] = x
+	}
 }
 
 // fold adds the row's quantities lo to hi to the slot statistics and

@@ -379,7 +379,7 @@
   "id": "pump_station",
   "title": "Pump station (the reference model)",
   "file": "pump_station.yaml",
-  "about": "Wear trips and grid outages merge at a fault check; sequential outcomes, holding times in hours and days, a per-day production cost and a chained inspection.",
+  "about": "Wear trips and grid outages merge at a fault check; sequential outcomes, holding times in hours and days, a per-day production cost and a chained inspection. The budget knob is a value of the year's total: the run counts the years that stay under it, so the chance of keeping to the budget is exact up to the run's error, not read off a histogram.",
   "knobs": [
    {
     "key": "wear_peak",
@@ -420,6 +420,15 @@
     "max": 100000,
     "step": 1000,
     "value": 20000
+   },
+   {
+    "key": "budget",
+    "label": "Budget a year (the chance of keeping to it)",
+    "at": "total",
+    "min": 100000,
+    "max": 5000000,
+    "step": 50000,
+    "value": 2000000
    }
   ]
  },

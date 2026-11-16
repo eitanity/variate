@@ -135,7 +135,7 @@ function refreshYAML() {
 function fillYAML() {
   let text = current.template;
   for (const k of current.knobs) {
-    text = text.split("{{" + k.key + "}}").join(String(k.current));
+    if (!k.at) text = text.split("{{" + k.key + "}}").join(String(k.current));
   }
   $("yaml").value = text;
 }
@@ -155,6 +155,10 @@ async function run() {
   }
   $("periodsLabel").textContent = isStarted ? "Repeats" : "Periods";
   if (!isStarted && $("keepseries").checked && Number($("periods").value) <= 400000) settings.series = "true";
+  // A knob with "at" is a value of a quantity, not of the model: the run
+  // counts the periods reaching it.
+  const at = current.knobs.filter((k) => k.at).map((k) => k.at + "=" + k.current);
+  if (at.length) settings.at = at.join(";");
   try {
     const { result, ms, keep, blocks, graph } = await call("run", $("yaml").value, settings);
     $("blockNote").textContent = (blocks || []).map((b) => `Reliability block ${b.source}: ${fmt(b.rate, 3)} failures per period; system MTBF ${fmt(b.mtbf, 4)} hours; unavailability ${pct(b.unavailability)}.`).join(" ");
@@ -591,6 +595,8 @@ function figures(series) {
   const row = (label, f) => [label, ...series.map((s) => f(s.result))];
   const rows = [
     row("mean per period", (r) => pm(r.total)),
+    ...(series[0].result.at || []).map((a, i) => row("chance of staying under " + fmt(a.value, 4) + (a.quantity === "total" ? "" : " (" + a.quantity + ")"),
+      (r) => r.at && r.at[i] ? pct(r.at[i].p_below) + " ± " + pct(r.at[i].stderr) : "–")),
     row("exact mean", (r) => fmt(r.analytic.mean, 4)),
     row("median", (r) => fmt(r.total.p50, 4)),
     row("99th percentile", (r) => fmt(r.total.p99, 4)),

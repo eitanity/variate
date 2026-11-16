@@ -84,6 +84,7 @@ type Compiled struct {
 	infVar                                       []bool // per row quantity: its variance is infinite
 	queueInfVar                                  []bool // per queue: its wait's and stay's variance is infinite
 	queueLong                                    []QueueLongRun
+	levels                                       []clevel // Config.At, each value with its quantity's row
 	fnPerTime                                    []bool
 	aliasProb                                    []float64
 	aliasIdx                                     []int32
@@ -146,6 +147,9 @@ func (g Graph) Compile(cfg Config) (*Compiled, []Warning, error) {
 	m.setWatch(cfg.Watch, b.nodeIndex)
 	m.maxPath = m.longestNodePath()
 	m.crit = criteriaFrom(cfg)
+	if err := m.compileLevels(cfg.At); err != nil {
+		return nil, nil, err
+	}
 	m.markInfiniteVariance(&warnings)
 	m.queueLong = m.longRunQueues()
 	m.plan = m.buildPlan(e, m.crit)

@@ -156,6 +156,7 @@ type Result struct {
 	Layers     []Accum // [layer]: the layer's payout per period
 	Triggers   []Accum // [trigger]: the sum the trigger tests per period
 	QueueCols  []Accum // [queue×queueCols]: each queue's joined, served, wait, stay, length, busy and unfinished per period
+	Levels     []Accum // [Config.At]: 1 in a period reaching the value, else 0
 	Queues     []QueueResult
 
 	Steps         uint64

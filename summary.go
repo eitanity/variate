@@ -64,6 +64,17 @@ type Summary struct {
 	TailShares []TailShare     // who the tail belongs to, at each threshold with a period
 	Plan       []PlanRow
 	Queues     map[string]QueueSummary // by the queue node's name
+	At         []LevelStat             // Config.At in its order
+}
+
+// LevelStat is the chance a quantity reaches one of Config.At's values:
+// P is the share of the N periods (repeats, in a started run) in which
+// it is at least X, and P(Q < X) is 1 − P; the standard error is
+// binomial, widened as a mean's is where periods are correlated.
+type LevelStat struct {
+	Level
+	N         int64
+	P, StdErr float64
 }
 
 // QueueSummary is a queue's figures: over the rounds it served, their
@@ -127,6 +138,15 @@ func (w *Workspace) Summarize(dst *Summary) {
 	dst.TailShares = w.tailShares(dst.TailShares)
 	w.summarizeReach(dst)
 	w.summarizeQueues(dst)
+	dst.At = dst.At[:0]
+	for i, lv := range w.m.levels {
+		a := &r.Levels[i]
+		p := 0.0
+		if n := a.N(); n > 0 {
+			p = a.Sum.Value() / float64(n)
+		}
+		dst.At = append(dst.At, LevelStat{Level: lv.Level, N: a.N(), P: p, StdErr: a.StdErr(w.delays)})
+	}
 	dst.Plan = append(dst.Plan[:0], w.rows...)
 }
 
