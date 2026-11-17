@@ -2,21 +2,23 @@ package variate
 
 // layout maps the per-period quantities onto one row of A values:
 // total, categories, sources, entries per node, contribution per node,
-// the layers of the total, the sum each trigger tests, the queues'
-// columns, and 1 or 0 for each of Config.At as its value is reached.
+// the named totals, the layers of the total, the sum each trigger
+// tests, the queues' columns, and 1 or 0 for each of Config.At as its
+// value is reached.
 type layout struct {
-	cats, srcs, nodes, layers, trigs, queues, levels int
-	width                                            int
+	cats, srcs, nodes, layers, totals, trigs, queues, levels int
+	width                                                    int
 	// The first row of each block, so that a booking adds one offset.
-	srcAt, entryAt, contribAt, layerAt, trigAt, queueAt, levelAt int
+	srcAt, entryAt, contribAt, layerAt, totalAt, trigAt, queueAt, levelAt int
 }
 
 func newLayout(m *Compiled) layout {
-	l := layout{cats: len(m.categories), srcs: len(m.srcs), nodes: len(m.nodes), layers: len(m.layers), trigs: len(m.trigs), queues: len(m.queues), levels: len(m.levels)}
+	l := layout{cats: len(m.categories), srcs: len(m.srcs), nodes: len(m.nodes), layers: len(m.layers), totals: len(m.totals), trigs: len(m.trigs), queues: len(m.queues), levels: len(m.levels)}
 	l.srcAt = 1 + l.cats
 	l.entryAt = l.srcAt + l.srcs
 	l.contribAt = l.entryAt + l.nodes
-	l.layerAt = l.contribAt + l.nodes
+	l.totalAt = l.contribAt + l.nodes
+	l.layerAt = l.totalAt + l.totals
 	l.trigAt = l.layerAt + l.layers
 	l.queueAt = l.trigAt + l.trigs
 	l.levelAt = l.queueAt + queueCols*l.queues
@@ -25,6 +27,7 @@ func newLayout(m *Compiled) layout {
 }
 
 func (l *layout) layer(j int) int { return l.layerAt + j }
+func (l *layout) named(i int) int { return l.totalAt + i }
 func (l *layout) trig(i int) int  { return l.trigAt + i }
 
 // queue is queue c's column col, one of the qJoined … qUnfinished.

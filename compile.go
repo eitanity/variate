@@ -106,6 +106,8 @@ type Compiled struct {
 	hasRepair                                    bool        // a source with the repair law or a reliability diagram: no closed variance
 	chains                                       []Chain     // every source's chains, in source order
 	layers                                       []Layer     // the model's layers, defaults filled
+	inTotal                                      []bool      // [category]: booked into the total, the sources and the nodes
+	totals                                       []ctotal    // the totals the model names
 	schedules                                    []schedule  // the model's schedules, with their pools
 	cycle                                        jointCycle  // the schedules' values over their combined cycle
 	scheduleRatio                                [][]float64 // [schedule][schedule]: E[a·b]/(E[a]·E[b]) over the combined cycle
@@ -172,17 +174,17 @@ func (g Graph) Compile(cfg Config) (*Compiled, []Warning, error) {
 func (m *Compiled) scaleMeans() *Expectation {
 	e, _, _, _ := m.means()
 	m.queueScale(e)
-	if !m.Started() {
-		return e
-	}
-	h := float64(m.horizon)
-	e.Mean *= h
-	for _, x := range [][]float64{e.MeanByCategory, e.MeanBySource, e.EntriesPer, e.Contrib} {
-		for i := range x {
-			x[i] *= h
+	if m.Started() {
+		h := float64(m.horizon)
+		e.Mean *= h
+		for _, x := range [][]float64{e.MeanByCategory, e.MeanBySource, e.EntriesPer, e.Contrib} {
+			for i := range x {
+				x[i] *= h
+			}
 		}
+		m.givenScale(e)
 	}
-	m.givenScale(e)
+	m.totalMeans(e)
 	return e
 }
 

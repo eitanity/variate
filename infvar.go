@@ -42,8 +42,17 @@ const infVarNote = "the standard errors of the quantities it reaches are unrelia
 
 // markBooked marks what function f books for source k's rounds.
 func (m *Compiled) markBooked(l *layout, k, f int32) {
+	c := m.fns[f].category
+	m.infVar[l.cat(c)] = true
+	for i, t := range m.totals {
+		if t.has[c] {
+			m.infVar[l.named(i)] = true
+		}
+	}
+	if !m.inTotal[c] {
+		return
+	}
 	m.infVar[l.total()] = true
-	m.infVar[l.cat(m.fns[f].category)] = true
 	m.infVar[l.src(k)] = true
 	m.infVar[l.contrib(m.fnNode[f])] = true
 }

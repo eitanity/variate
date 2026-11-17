@@ -513,7 +513,8 @@ type WhenStat struct {
 
 // WhenPart is a quantity over the periods meeting a condition: its mean
 // in them and its share of their total, each with its standard error;
-// the share is NaN for the total and for a node's entries.
+// the share is NaN for the total, a node's entries, and a category or
+// named total outside the total.
 type WhenPart struct {
 	Kind, Name         string
 	Mean, MeanStdErr   float64
@@ -521,10 +522,14 @@ type WhenPart struct {
 }
 
 // whenPartNames lists the quantities a condition reports: the total,
-// the categories and sources, each node's entries, and the contribution
-// of each node that books, the breakdowns as the run keeps them.
+// the named totals, the categories and sources, each node's entries,
+// and the contribution of each node that books, the breakdowns as the
+// run keeps them.
 func (w *Workspace) whenPartNames() []WhenPart {
 	parts := []WhenPart{{Kind: totalSubject}}
+	for _, id := range w.m.TotalIDs() {
+		parts = append(parts, WhenPart{Kind: totalSubject, Name: id})
+	}
 	for _, kind := range [4]string{kindCategory, kindSource, kindEntries, kindContrib} {
 		names, _ := w.m.quantityNames(w.l, kind)
 		for v, n := range names {
@@ -603,13 +608,10 @@ func (w *Workspace) whenParts(b *band) []WhenPart {
 	parts := slices.Clone(w.whenPartsTmpl)
 	for i := range parts {
 		p := &parts[i]
-		j := 0
-		if p.Kind != totalSubject {
-			j, _ = w.m.quantityRow(w.l, p.Kind, p.Name)
-		}
+		j, _ := w.m.quantityRow(w.l, p.Kind, p.Name)
 		p.Mean, p.MeanStdErr = b.ratio(j, false)
 		p.Share, p.ShareStdErr = math.NaN(), math.NaN()
-		if p.Kind == kindCategory || p.Kind == kindSource || p.Kind == kindContrib {
+		if w.sharesTotal(j) {
 			p.Share, p.ShareStdErr = b.ratio(j, true)
 		}
 	}

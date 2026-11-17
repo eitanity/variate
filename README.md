@@ -32,7 +32,9 @@ bracketed between rigorous bounds, with no sampling at all.
   reliability block that fired the event; values and probabilities
   drawn once per period and shared by every event in it.
 - **Structure:** several graphs in one model, templates instanced with
-  overrides, categories added across the model.
+  overrides, categories added across the model; totals the model names
+  over chosen categories, each reported as the total is, and categories
+  kept outside the total, such as hours beside money.
 - **Queues:** a node that serves its rounds first come, first served
   with a number of servers of one speed, each round bringing its own
   work, carrying its line from period to period or emptying it at each
@@ -45,7 +47,7 @@ bracketed between rigorous bounds, with no sampling at all.
   period's exact mean where the paths allow, beside the horizon's total.
 
 `docs/format.md` is the reference for the YAML model file, and
-`examples/` holds twenty-six complete models with a README saying what
+`examples/` holds twenty-seven complete models with a README saying what
 each shows, from a one-line compound loss to a register of a hundred
 risks, a plant as a block diagram, and a shift with its own period.
 

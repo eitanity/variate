@@ -486,6 +486,7 @@ func (w *Workspace) allocResult() error {
 	}
 	r.EntriesPer = make([]Accum, len(m.nodes))
 	w.allocLayers(e, res)
+	w.allocTotals(e, res)
 	w.allocTriggers(res)
 	w.allocQueues(res)
 	r.Contrib = make([]Accum, len(m.nodes))
@@ -587,8 +588,10 @@ func (w *Workspace) accum(i int) *Accum {
 		return &w.result.BySource[i-1-l.cats]
 	case i < 1+l.cats+l.srcs+l.nodes:
 		return &w.result.EntriesPer[i-1-l.cats-l.srcs]
-	case i < 1+l.cats+l.srcs+2*l.nodes:
+	case i < l.totalAt:
 		return &w.result.Contrib[i-1-l.cats-l.srcs-l.nodes]
+	case i < l.layerAt:
+		return &w.result.Totals[i-l.totalAt]
 	case i < l.trigAt:
 		return &w.result.Layers[i-l.layerAt]
 	case i < l.queueAt:

@@ -26,9 +26,10 @@ type wholeSum struct {
 
 // sumsWholeTotal reports whether trigger i is the model's only trigger
 // and sums every value the sources' rounds book, in a model without
-// delays or repair, whose total is then the sum and the walk alone.
+// delays or repair and with every category in the total, whose total is
+// then the sum and the walk alone.
 func (m *Compiled) sumsWholeTotal(i int) bool {
-	if len(m.trigs) != 1 || m.hasDelays || m.hasRepair || len(m.countedBy(index(i))) > 0 {
+	if len(m.trigs) != 1 || m.hasDelays || m.hasRepair || len(m.countedBy(index(i))) > 0 || m.countInTotal() < len(m.inTotal) {
 		return false
 	}
 	for v, n := range m.nodes {

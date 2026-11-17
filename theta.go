@@ -482,7 +482,7 @@ func (m *Compiled) zeroMix(v int32, n cnode, drawn, z []float64) float64 {
 	// bound: outcomes of one node
 	for j := n.outStart; j < n.outEnd; j++ {
 		zero := 1.0
-		if f := m.outs[j].fn; f != noIndex {
+		if f := m.outs[j].fn; f != noIndex && m.fnInTotal(f) {
 			zero = m.pools[m.fns[f].pool].CDF(0)
 		}
 		mix += m.outcomeProbWith(v, j, drawn) * zero * z[m.outs[j].to]
@@ -503,6 +503,7 @@ func (m *Compiled) zeroGiven(drawn, z []float64, rules []quadRule, srcs []int) f
 		for f := n.fnStart; f < n.fnEnd; f++ {
 			pool := m.fns[f].pool
 			switch {
+			case !m.fnInTotal(f):
 			case m.poolPeriod[pool] == noIndex:
 				pz *= m.pools[pool].CDF(0)
 			case drawn[pool] != 0:

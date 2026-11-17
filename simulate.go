@@ -59,8 +59,9 @@ func (w *Workspace) dropPending(sl *slot) {
 	}
 	// bound: the slot's segments
 	for i := 0; i < q.nSeg; i++ {
-		s := q.segs[i]
-		sl.dropped += s.rate * (s.hi - s.lo)
+		if s := q.segs[i]; w.m.inTotal[s.cat] {
+			sl.dropped += s.rate * (s.hi - s.lo)
+		}
 	}
 	q.reset()
 }
@@ -84,13 +85,15 @@ func (w *Workspace) closeRows(sl *slot, hs []*stats.LogHist) {
 
 // closeHorizon closes a started run's repeat as one row, its periods
 // summed, in the scratch row, which is free once the block is simulated.
-// The rows per period stay for the finaliser.
+// The rows per period, their named totals set, stay for the finaliser.
 func (w *Workspace) closeHorizon(sl *slot, hs []*stats.LogHist) {
 	row := sl.far
 	clear(row)
 	// bound: the horizon
 	for p := sl.a; p < sl.b; p++ {
-		for i, x := range sl.rowAt(w.l, p) {
+		pr := sl.rowAt(w.l, p)
+		w.applyTotals(pr)
+		for i, x := range pr {
 			row[i] += x
 		}
 	}
@@ -305,9 +308,13 @@ func (w *Workspace) rowFor(sl *slot, t float64, p int64) []float64 {
 }
 
 // book adds a value to a row's total, category, source and node
-// contribution.
+// contribution; a category outside the total gets it alone.
 func (w *Workspace) book(row []float64, k, v, cat int32, x float64) {
 	l := &w.l
+	if !w.m.inTotal[cat] {
+		row[l.cat(cat)] += x
+		return
+	}
 	row[l.total()] += x
 	row[l.cat(cat)] += x
 	row[l.src(k)] += x
@@ -337,7 +344,9 @@ func (w *Workspace) bookRate(wk *worker, sl *slot, k, v int32, n cnode, a, b flo
 		}
 		if b > end && w.started {
 			// A started run drops what lands past its horizon.
-			sl.dropped += rate * (b - math.Max(a, end))
+			if m.inTotal[cat] {
+				sl.dropped += rate * (b - math.Max(a, end))
+			}
 		} else if b > end {
 			lo := math.Max(a, end)
 			x := rate * (b - lo)
@@ -391,17 +400,18 @@ func (w *Workspace) choose(wk *worker, v int32, n cnode) int32 {
 
 // closeRow folds a finished period into the slot statistics and the
 // histograms, after checking that the breakdowns sum to the total; with
-// the breakdowns off, only the total, the entries, the layers and the
-// triggers' sums.
+// the breakdowns off, only the total, the entries, the named totals,
+// the layers and the triggers' sums.
 func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHist) {
 	l := &w.l
 	total := row[l.total()]
+	w.applyTotals(row)
 	w.applyLevels(row)
 	if !w.m.crit.breakdown {
 		w.applyLayers(row, total)
 		w.fold(sl, row, 0, 1, hs)
 		w.fold(sl, row, l.entryAt, l.contribAt, hs)
-		w.fold(sl, row, l.layerAt, l.width, hs)
+		w.fold(sl, row, l.totalAt, l.width, hs)
 		if w.m.tailX > 0 && total >= w.m.tailX {
 			sl.tail++
 		}
@@ -412,7 +422,9 @@ func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHi
 	var cats, srcs float64
 	// bound: row width
 	for c := 0; c < l.cats; c++ {
-		cats += row[l.cat(index(c))]
+		if w.m.inTotal[c] {
+			cats += row[l.cat(index(c))]
+		}
 	}
 	// bound: row width
 	for k := 0; k < l.srcs; k++ {
@@ -430,6 +442,21 @@ func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHi
 	}
 	w.addWhen(sl, row)
 	w.keepSeries(row, p)
+}
+
+// applyTotals sets each named total's column to the sum of its
+// categories' columns.
+func (w *Workspace) applyTotals(row []float64) {
+	l := &w.l
+	for i, t := range w.m.totals {
+		s := 0.0
+		for c, in := range t.has {
+			if in {
+				s += row[l.cat(index(c))]
+			}
+		}
+		row[l.named(i)] = s
+	}
 }
 
 // applyLevels sets each of Config.At's columns to 1 where its quantity

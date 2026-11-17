@@ -175,12 +175,17 @@ func (r *passResult) dominant(xStar float64) string {
 	}
 }
 
-// fill writes the bracket parts into the result.
-func (r *passResult) fill(out *Transformed) {
+// fill writes the bracket parts into the result: the first ncat
+// category brackets are the categories', the rest the named totals'.
+func (r *passResult) fill(out *Transformed, ncat int) {
 	out.H, out.M, out.Theta, out.PZero = r.h, r.m, r.theta, r.pzero
 	out.Total = r.bounds(r.total)
-	for _, c := range r.cats {
-		out.ByCategory = append(out.ByCategory, r.bounds(c))
+	for i, c := range r.cats {
+		if i < ncat {
+			out.ByCategory = append(out.ByCategory, r.bounds(c))
+		} else {
+			out.ByTotal = append(out.ByTotal, r.bounds(c))
+		}
 	}
 	for _, s := range r.srcs {
 		out.BySource = append(out.BySource, r.bounds(s))

@@ -945,6 +945,62 @@
   ]
  },
  {
+  "id": "line",
+  "title": "Totals the model names: a factory line's bill, its lost output and its hours",
+  "file": "line.yaml",
+  "about": "Stoppages a year, each booking spare parts and, over the days the line is down, the crew's cost, the production lost and the crew's hours. The model names three totals: maintenance, the bill for labour and parts; cost, the bill and the lost output, which is the period total; and worked, the crew's hours, kept outside the total so the total stays in money. Choose a named total in the charts to see its histogram and curve: lengthen the downtime and the lost output and the hours grow together while the parts do not.",
+  "knobs": [
+   {
+    "key": "rate",
+    "label": "Stoppages per year",
+    "min": 1,
+    "max": 30,
+    "step": 1,
+    "value": 8
+   },
+   {
+    "key": "down",
+    "label": "Days down, median",
+    "min": 0.5,
+    "max": 5,
+    "step": 0.5,
+    "value": 2
+   },
+   {
+    "key": "parts",
+    "label": "Spare parts, median",
+    "min": 500,
+    "max": 10000,
+    "step": 500,
+    "value": 3000
+   },
+   {
+    "key": "crew_day",
+    "label": "Crew cost a day",
+    "min": 500,
+    "max": 5000,
+    "step": 100,
+    "value": 1500
+   },
+   {
+    "key": "crew_hours",
+    "label": "Crew hours a day",
+    "min": 8,
+    "max": 72,
+    "step": 8,
+    "value": 24
+   },
+   {
+    "key": "output",
+    "label": "Lost output a day, most likely",
+    "min": 6000,
+    "max": 29000,
+    "step": 1000,
+    "value": 12000
+   }
+  ]
+ },
+ {
   "id": "capacity",
   "title": "Capacity: the crew's hours against the work",
   "file": "capacity.yaml",

@@ -455,7 +455,8 @@ func (p *pipeline) graphGiven() (*graphResult, string) {
 }
 
 // recurse computes the generating function of the period total booked
-// in category cat (−1 for all) as the product over the sources of their
+// in category cat (−1 for the total, from the number of categories on
+// a named total) as the product over the sources of their
 // compounded subgraphs. The nodes the sources reach are taken children
 // before parents, depth first from each source's target; a source is
 // compounded as soon as its target is complete, and a node's generating
@@ -639,7 +640,7 @@ func (p *pipeline) nodeFunctions(gv []complex128, n cnode, cat int32) {
 	m := p.t.m
 	// bound: functions of one node
 	for f := n.fnStart; f < n.fnEnd; f++ {
-		if cat != -1 && m.fns[f].category != cat {
+		if !m.selects(f, cat) {
 			continue
 		}
 		if m.poolPeriod[m.fns[f].pool] != noIndex {
@@ -664,7 +665,7 @@ func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, cat int32, g [][]c
 		pj := complex(m.outcomeProbWith(v, j, p.mix.drawn), 0)
 		to := m.outs[j].to
 		child := g[to]
-		if f := m.outs[j].fn; f != noIndex && (cat == -1 || m.fns[f].category == cat) {
+		if f := m.outs[j].fn; f != noIndex && m.selects(f, cat) {
 			if branch == nil {
 				branch = p.grid()
 			}

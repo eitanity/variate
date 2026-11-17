@@ -60,6 +60,7 @@ type Summary struct {
 	EntriesPer map[string]Stat
 	ContribPer map[string]Stat // value booked per period at each node
 	Layers     map[string]Stat // each layer's payout per period, its share that of the total's mean
+	Totals     map[string]Stat // each named total per period; its share NaN when a category of it is outside the total
 	Triggers   map[string]Stat // by the trigger's source name: the sum it tests per period
 	Plan       []PlanRow
 	Queues     map[string]QueueSummary // by the queue node's name
@@ -113,8 +114,12 @@ func (w *Workspace) Summarize(dst *Summary) {
 	clear(dst.ContribPer)
 	for c, name := range r.Categories {
 		if breakdown {
-			dst.ByCategory[name] = w.statAt(l.cat(index(c)), &r.ByCategory[c], r.Total.Mean())
+			dst.ByCategory[name] = w.statAt(l.cat(index(c)), &r.ByCategory[c], w.shareBase(l.cat(index(c))))
 		}
+	}
+	dst.Totals = ensureStats(dst.Totals)
+	for i, t := range w.m.totals {
+		dst.Totals[t.id] = w.statAt(l.named(i), &r.Totals[i], w.shareBase(l.named(i)))
 	}
 	for k, name := range r.Sources {
 		if breakdown {

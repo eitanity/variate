@@ -1,0 +1,23 @@
+# Totals the model names: stoppages of a factory line book parts, and
+# over the days down the crew's cost, the lost production and the
+# crew's hours; the hours stay outside the total.
+period: { days: 365 }
+totals:
+  - { id: maintenance, categories: [labour, parts] }
+  - { id: cost, categories: [labour, parts, production] }
+  - { id: worked, categories: [hours] }
+outside_total: [hours]
+graphs:
+  - id: line
+    sources:
+      - { id: stoppage, frequency: {{rate}}, to: repair }
+    nodes:
+      - id: repair
+        functions:
+          - { name: spares, category: parts,      basis: on_entry, lognormal: { median: {{parts}}, p90: 12000 } }
+          - { name: crew,   category: labour,     basis: per_time, unit: days, constant: {{crew_day}} }
+          - { name: hours,  category: hours,      basis: per_time, unit: days, constant: {{crew_hours}} }
+          - { name: output, category: production, basis: per_time, unit: days, pert: [5000, {{output}}, 30000] }
+        next: running
+        next_holding: { lognormal: { median: {{down}}, p90: 6 }, unit: days }
+      - id: running

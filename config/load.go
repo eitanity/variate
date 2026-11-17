@@ -149,7 +149,7 @@ type loader struct {
 
 // topKeys are the keys allowed at the top level besides the settings.
 func topKeys() []string {
-	return append([]string{"period", "phase", "start", "graphs", "templates", "factors", "schedules", "layers"}, settingKeys()...)
+	return append([]string{"period", "phase", "start", "graphs", "templates", "factors", "schedules", "layers", "totals", "outside_total"}, settingKeys()...)
 }
 
 func (l *loader) load(root node) (*Model, error) {
@@ -184,6 +184,9 @@ func (l *loader) load(root node) (*Model, error) {
 		if err := l.parseLayers(y); err != nil {
 			return nil, err
 		}
+	}
+	if err := l.parseTotals(top); err != nil {
+		return nil, err
 	}
 	graphs, ok := top["graphs"]
 	if !ok {

@@ -35,6 +35,8 @@ the line.
 | `factors` | shared multipliers on rates, each `{ id, <distribution> }` on [0, ∞), drawn once per period and shared by every source naming it: a common shock (below). |
 | `schedules` | cycles of multipliers on rates, each `{ id, values: [...] }`; period p uses the value at p modulo the cycle's length: a season or a shift pattern (below). |
 | `layers` | functions of the period total reported beside it, each `{ id, attachment, limit, share }`: an aggregate deductible, an aggregate limit or a reinsurance layer (below). |
+| `totals` | sums of chosen categories reported beside the total, each `{ id, categories: [...] }` (below). |
+| `outside_total` | categories booked and reported but added to no total but a named one, such as hours beside money (below). |
 | settings | any run setting by its snake_case name, e.g. `periods`, `seed`, `transform` (table at the end). |
 
 The file may hold one YAML document, without anchors, aliases or custom
@@ -602,6 +604,36 @@ layers:
   - { id: retained, limit: 2e5 }                                      # under the aggregate deductible
   - { id: reinsurance, attachment: 2e5, limit: 3e6, share: 0.9 }      # the layer above it, 90% placed
 ```
+
+## Totals the model names
+
+Every value is booked to a category, and the period total is the sum
+of the categories. A model can name totals of its own, each the sum of
+the categories it lists, and keep categories outside the total:
+
+```yaml
+totals:
+  - { id: maintenance, categories: [labour, parts] }               # the bill for a stoppage
+  - { id: cost, categories: [labour, parts, production] }          # the bill and the lost output
+  - { id: worked, categories: [hours] }                            # the crew's hours
+outside_total: [hours]
+```
+
+A category in `outside_total` is booked and reported as any other, in
+its own unit, but is added to neither the total nor the sources' and
+nodes' values, which stay in the total's unit; it has no share of the
+total, and it reaches a total only through a named one. The total is
+then the sum of every other category, which a model naming no totals
+and keeping no category outside has as before.
+
+A named total is a quantity like the total: it has the statistics,
+histogram, exceedance curve, series column and table by period of any
+quantity, and is named `total:<id>` in `--at` and `--when`, as in
+`--when total:maintenance>=1/100`. A condition lists the named totals
+among its parts. Its exact mean is the sum of its categories', and its
+exact variance and exact distribution are computed as the total's are,
+over its categories' values; its share of the total is given when all
+its categories are in it. Layers apply to the total alone.
 
 ## Reliability blocks
 

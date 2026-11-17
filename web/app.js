@@ -215,6 +215,7 @@ function show(r, ms) {
   lastResult = r;
   table($("breakdown"), ["quantity", "mean", "share", "P50", "P90", "P99", "P99.9"], [
     ["total", fmt(r.total.mean, 4), "", fmt(r.total.p50), fmt(r.total.p90), fmt(r.total.p99), fmt(r.total.p999)],
+    ...Object.entries(r.totals || {}).map(([name, s]) => ["total " + name, fmt(s.mean, 4), pct(s.share), fmt(s.p50), fmt(s.p90), fmt(s.p99), fmt(s.p999)]),
     ...Object.entries(r.by_category).map(([name, s]) => ["category " + name, fmt(s.mean, 4), pct(s.share), fmt(s.p50), fmt(s.p90), fmt(s.p99), fmt(s.p999)]),
     ...Object.entries(r.by_source).map(([name, s]) => ["source " + name, fmt(s.mean, 4), pct(s.share), fmt(s.p50), fmt(s.p90), fmt(s.p99), fmt(s.p999)]),
   ]);
@@ -293,13 +294,14 @@ function unpin() {
 }
 
 // fillQuantities lists what the two charts can draw: the total, each
-// category, source and layer, the sum each trigger tests, and each
+// named total, category, source and layer, the sum each trigger tests, and each
 // node's entries per period.
 function fillQuantities(r, graph) {
   const sel = $("quantity");
   sel.innerHTML = "";
   const add = (value, label) => { const o = document.createElement("option"); o.value = value; o.textContent = label; sel.appendChild(o); };
   add("total:", "period total");
+  for (const name of Object.keys(r.totals || {})) add("total:" + name, "total " + name);
   for (const name of Object.keys(r.by_category)) add("category:" + name, "category " + name);
   for (const name of Object.keys(r.by_source)) add("source:" + name, "source " + name);
   for (const name of Object.keys(r.layers || {})) add("layer:" + name, "layer " + name);
@@ -318,7 +320,7 @@ async function redraw() {
   if (!lastResult) return;
   const log = $("logx").checked;
   const [qkind, qname] = ($("quantity").value || "total:").split(":");
-  if (qkind !== "total") {
+  if (qkind !== "total" || qname) {
     const { result: q } = await call("quantity", null, null, { keep: lastKeep, qkind, qname, top: 0, bands: BANDS });
     const title = qkind === "entries" ? "events per period at " + qname : qkind === "trigger" ? "sum trigger " + qname + " tests" : qkind + " " + qname;
     $("histTitle").textContent = title;

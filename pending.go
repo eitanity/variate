@@ -155,7 +155,7 @@ func (w *Workspace) handOff(sl *slot) error {
 }
 
 // bookSeg books segment s's span up to hi into the slot's rows, a row per
-// period overlapped, and returns the value booked.
+// period overlapped, and returns the value booked into the total.
 func (w *Workspace) bookSeg(sl *slot, s pendSeg, hi float64) float64 {
 	total := 0.0
 	// bound: the periods of the block the segment overlaps
@@ -164,6 +164,9 @@ func (w *Workspace) bookSeg(sl *slot, s pendSeg, hi float64) float64 {
 		x := s.rate * (math.Min(hi, q+1) - lo)
 		w.book(sl.rowAt(w.l, s.p0+int64(q)), s.k, s.v, s.cat, x)
 		total += x
+	}
+	if !w.m.inTotal[s.cat] {
+		return 0
 	}
 	return total
 }
@@ -209,7 +212,7 @@ func (w *Workspace) flushPending(stop int64) {
 		}
 		// bound: the store's segments
 		for i := 0; i < st.nSeg; i++ {
-			if s := st.segs[i]; s.from < stop {
+			if s := st.segs[i]; s.from < stop && w.m.inTotal[s.cat] {
 				r.BeyondHorizon += s.rate * (s.hi - s.lo)
 			}
 		}

@@ -20,9 +20,11 @@ type Expectation struct {
 	DrawsMean, DrawsVar float64
 	MeanByCategory      []float64
 	MeanBySource        []float64
+	MeanByTotal         []float64 // [named total]
 	Contrib             []float64 // [node]
 	VarByCategory       []float64 // NaN with delays or above the pair budget
 	VarBySource         []float64
+	VarByTotal          []float64 // [named total]
 	ContribVar          []float64 // [node]
 	StepsPerPeriod      float64
 	ArrivalsPerPeriod   float64  // arrivals the renewal and chain sources draw beyond their rounds: the stream's events, the units' failures and repairs
@@ -37,8 +39,9 @@ type Expectation struct {
 }
 
 // valueFilter selects which function values the recursion books: every
-// function (filterAll), one category, one node, or the constant 1 per
-// function (the draws count).
+// function in the total (filterAll), one category, one node's in the
+// total, a named total's categories, or the constant 1 per function
+// (the draws count).
 type valueFilter struct {
 	kind  int
 	index int32
@@ -49,6 +52,7 @@ const (
 	filterCategory
 	filterNode
 	filterDraws
+	filterTotal
 )
 
 // nodeMoments are a node's own first and second moments under a filter:
@@ -65,12 +69,20 @@ type nodeMoments struct {
 func (m *Compiled) fnMoments(f int32, filt valueFilter) (mean, second float64, period bool) {
 	c := m.fns[f]
 	switch filt.kind {
+	case filterAll:
+		if !m.inTotal[c.category] {
+			return 0, 0, false
+		}
 	case filterCategory:
 		if c.category != filt.index {
 			return 0, 0, false
 		}
 	case filterNode:
-		if m.fnNode[f] != filt.index {
+		if m.fnNode[f] != filt.index || !m.inTotal[c.category] {
+			return 0, 0, false
+		}
+	case filterTotal:
+		if !m.totals[filt.index].has[c.category] {
 			return 0, 0, false
 		}
 	case filterDraws:
@@ -199,6 +211,7 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 	} else {
 		m.maskQueues(e)
 	}
+	m.totalMoments(e, lam)
 	return e, nil
 }
 

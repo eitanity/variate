@@ -60,10 +60,9 @@ func (b *builder) flatten() (*Compiled, error) {
 	if int64(len(m.pools)) >= maxDistributions {
 		return nil, modelError("graph", b.g.ID, "too many distributions")
 	}
-	m.categories = make([]string, len(cats))
-	// unordered: each category fills its own slot
-	for name, i := range cats {
-		m.categories[i] = name
+	m.categories = categoryNames(cats)
+	if err := m.flattenTotals(b.g.Totals, b.g.OutsideTotal, cats); err != nil {
+		return nil, err
 	}
 	b.flattenTriggers(m)
 	m.topo = b.topoOrder()
@@ -135,6 +134,16 @@ func (b *builder) flattenFunctions(m *Compiled, node int32, n Node, basis Basis,
 		}
 		m.addFunction(node, n.ID+":"+f.Name, f.Model, f.Scope, basis, categoryOf(cats, f.Category))
 	}
+}
+
+// categoryNames lists the categories by index.
+func categoryNames(cats map[string]int32) []string {
+	out := make([]string, len(cats))
+	// unordered: each category fills its own slot
+	for name, i := range cats {
+		out[i] = name
+	}
+	return out
 }
 
 // categoryOf returns a category's index, adding it when new.

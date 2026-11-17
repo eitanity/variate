@@ -276,8 +276,11 @@ func (m *Compiled) queueScale(e *Expectation) {
 		// bound: functions of one node
 		for f := n.rateStart; f < n.rateEnd; f++ {
 			x := m.poolMean[m.fns[f].pool] * service
-			e.Mean += x * e.EntriesPer[q.node]
 			e.MeanByCategory[m.fns[f].category] += x * e.EntriesPer[q.node]
+			if !m.fnInTotal(f) {
+				continue
+			}
+			e.Mean += x * e.EntriesPer[q.node]
 			e.Contrib[q.node] += x * e.EntriesPer[q.node]
 			for k := range m.srcs {
 				e.MeanBySource[k] += x * m.countMean[k] * m.reach[k][q.node]

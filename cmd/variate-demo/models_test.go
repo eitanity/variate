@@ -288,3 +288,48 @@ func TestDemoTailWhen(t *testing.T) {
 		t.Errorf("sources' shares sum to %v", sum)
 	}
 }
+
+// TestDemoTotals: the factory line's named totals are reported, cost
+// is the period total, the hours stay out of it, and since the crew's
+// cost and hours are both rates over the same days down, labour is
+// the hours at the crew's cost per hour in every period; doubling the
+// crew's hours a day doubles worked and leaves the total alone.
+func TestDemoTotals(t *testing.T) {
+	run := func(set map[string]float64) (*variate.Compiled, *variate.Result, variate.Summary) {
+		cfg := variate.Config{Periods: 5000, Seed: 1, AllowUnconverged: true, Series: true}
+		c, _, err := demoGraph(t, "line", set).Compile(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := c.NewWorkspace(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer w.Close()
+		r, err := w.Run(context.Background(), 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var s variate.Summary
+		w.Summarize(&s)
+		return c, r, s
+	}
+	c, r, s := run(nil)
+	if cost := s.Totals["cost"]; math.Abs(cost.Mean-s.Total.Mean) > 1e-12*s.Total.Mean || len(s.Totals) != 3 {
+		t.Fatalf("totals %v, total %v", s.Totals, s.Total.Mean)
+	}
+	cat := map[string]int{}
+	for i, name := range c.Categories() {
+		cat[name] = i
+	}
+	for p := range r.Series.Periods() {
+		hours, labour := r.Series.Category(cat["hours"], p), r.Series.Category(cat["labour"], p)
+		if math.Abs(labour-hours*1500/24) > 1e-6*math.Max(1, labour) {
+			t.Fatalf("period %d: labour %v for %v hours", p, labour, hours)
+		}
+	}
+	_, _, s2 := run(map[string]float64{"crew_hours": 48})
+	if math.Abs(s2.Total.Mean-s.Total.Mean) > 1e-12*s.Total.Mean || math.Abs(s2.Totals["worked"].Mean-2*s.Totals["worked"].Mean) > 1e-9*s.Totals["worked"].Mean {
+		t.Errorf("crew hours 48: total %v worked %v, against %v and %v", s2.Total.Mean, s2.Totals["worked"].Mean, s.Total.Mean, s.Totals["worked"].Mean)
+	}
+}

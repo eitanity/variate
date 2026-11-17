@@ -1,0 +1,28 @@
+# Totals the model names: a factory line stops eight times a year, and
+# each stoppage books spare parts on the spot and, over the days it is
+# down, the crew's cost, the production lost and the crew's hours. The
+# hours are kept outside the total (outside_total), which stays in
+# money; maintenance is the bill for labour and parts, cost adds the
+# lost production, and worked totals the hours, each a quantity with
+# its own statistics, curve, and figures in --at and --when, as in
+# --when total:maintenance>=1/100.
+period: { days: 365 }
+totals:
+  - { id: maintenance, categories: [labour, parts] }
+  - { id: cost, categories: [labour, parts, production] }
+  - { id: worked, categories: [hours] }
+outside_total: [hours]
+graphs:
+  - id: line
+    sources:
+      - { id: stoppage, frequency: { pert: [4, 8, 16] }, to: repair }
+    nodes:
+      - id: repair
+        functions:
+          - { name: spares, category: parts,      basis: on_entry, lognormal: { median: 3000, p90: 12000 } }
+          - { name: crew,   category: labour,     basis: per_time, unit: days, constant: 1500 }
+          - { name: hours,  category: hours,      basis: per_time, unit: days, constant: 24 }
+          - { name: output, category: production, basis: per_time, unit: days, pert: [5000, 12000, 30000] }
+        next: running
+        next_holding: { lognormal: { median: 2, p90: 6 }, unit: days }
+      - id: running

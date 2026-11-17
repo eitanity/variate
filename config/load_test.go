@@ -552,6 +552,35 @@ graphs:
 	parseErr(t, strings.Replace(text, "share: 0.9", "share: 0.9, basis: x", 1), "unknown key")
 }
 
+// TestTotalKeys: named totals and the categories outside the total
+// parse at the top level, in order.
+func TestTotalKeys(t *testing.T) {
+	text := `
+totals:
+  - { id: maintenance, categories: [labour, parts] }
+  - { id: worked, description: hours on the job, categories: [hours] }
+outside_total: [hours]
+graphs:
+  - id: g
+    sources:
+      - { id: a, frequency: 2, to: n }
+    nodes:
+      - id: n
+        functions:
+          - { name: crew, category: labour, constant: 1 }
+          - { name: spares, category: parts, constant: 2 }
+          - { name: time, category: hours, constant: 3 }
+`
+	m := parse(t, text)
+	g := m.Graph
+	if len(g.Totals) != 2 || g.Totals[0].ID != "maintenance" || strings.Join(g.Totals[0].Categories, ",") != "labour,parts" || g.Totals[1].Categories[0] != "hours" || len(g.OutsideTotal) != 1 || g.OutsideTotal[0] != "hours" {
+		t.Errorf("totals %+v outside %v", g.Totals, g.OutsideTotal)
+	}
+	parseErr(t, strings.Replace(text, ", categories: [labour, parts]", "", 1), "total maintenance has no categories")
+	parseErr(t, strings.Replace(text, "categories: [hours] }", "categories: [hours], limit: 4 }", 1), "unknown key")
+	parseErr(t, strings.Replace(text, "outside_total: [hours]", "outside_total: hours", 1), "")
+}
+
 // TestRangeKeys: range on any distribution reaches the graph, in the
 // distribution's unit converted as its values are, or as factors with
 // times; a schedule takes one beside its values; a template's copies

@@ -343,7 +343,7 @@ func (s *session) quantity(_ js.Value, args []js.Value) any {
 		}
 	}
 	unit := 0.0
-	if kind == "total" {
+	if kind == totalKind && name == "" {
 		unit = k.c.LatticeUnit()
 	}
 	if kind == "entries" {
@@ -415,27 +415,34 @@ func countsJSON(buf *bytes.Buffer, w *variate.Workspace, row int, maxSeen float6
 
 const maxCountBuckets = 400
 
-// quantityBounds is the transform's bracket on a category or source,
-// when the transform ran and kept it.
+// quantityBounds is the transform's bracket on the total, a named
+// total, a category or a source, when the transform ran and kept it.
 func (k keptRun) quantityBounds(kind, name string) (variate.Bounds, bool) {
 	tr := k.c.Transformed()
 	if tr == nil || !tr.Applicable {
 		return variate.Bounds{}, false
 	}
-	switch kind {
-	case "total":
+	switch {
+	case kind == totalKind && name == "":
 		return tr.Total, true
-	case "category":
-		for c, n := range k.c.Categories() {
-			if n == name && c < len(tr.ByCategory) {
-				return tr.ByCategory[c], true
-			}
-		}
-	case "source":
-		for i, n := range k.c.SourceIDs() {
-			if n == name && i < len(tr.BySource) {
-				return tr.BySource[i], true
-			}
+	case kind == totalKind:
+		return boundsNamed(k.c.TotalIDs(), tr.ByTotal, name)
+	case kind == "category":
+		return boundsNamed(k.c.Categories(), tr.ByCategory, name)
+	case kind == "source":
+		return boundsNamed(k.c.SourceIDs(), tr.BySource, name)
+	}
+	return variate.Bounds{}, false
+}
+
+// totalKind is the kind of the total and of the named totals.
+const totalKind = "total"
+
+// boundsNamed is the bracket of the quantity called name, when kept.
+func boundsNamed(names []string, bounds []variate.Bounds, name string) (variate.Bounds, bool) {
+	for i, n := range names {
+		if n == name && i < len(bounds) {
+			return bounds[i], true
 		}
 	}
 	return variate.Bounds{}, false

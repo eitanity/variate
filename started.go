@@ -82,7 +82,8 @@ func (m *Compiled) startedMeans(e *Expectation) {
 }
 
 // periodRows is the exact mean of every quantity in every period of the
-// horizon: NaN for the layers and the triggers' sums, and for all of
+// horizon: NaN for the layers and the triggers' sums, the named totals
+// the sums of their categories, and NaN for all of
 // them when the work would exceed its bound.
 func (m *Compiled) periodRows(l layout) [][]float64 {
 	rows := make([][]float64, m.horizon)
@@ -101,6 +102,9 @@ func (m *Compiled) periodRows(l layout) [][]float64 {
 		// bound: row width
 		for q := lo; q < l.width; q++ {
 			row[q] = math.NaN()
+		}
+		if ok {
+			m.sumTotals(row, l)
 		}
 	}
 	return rows

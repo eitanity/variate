@@ -182,6 +182,7 @@ type Result struct {
 	EntriesPer []Accum // [node]
 	Contrib    []Accum // [node]; zero for nodes without functions
 	Layers     []Accum // [layer]: the layer's payout per period
+	Totals     []Accum // [named total]: the sum of its categories per period
 	Triggers   []Accum // [trigger]: the sum the trigger tests per period
 	QueueCols  []Accum // [queue×queueCols]: each queue's joined, served, wait, stay, length, busy and unfinished per period
 	Levels     []Accum // [Config.At]: 1 in a period reaching the value, else 0
@@ -255,6 +256,9 @@ func (s *PeriodStats) Contrib(v, k int) PeriodStat { return s.at(k, s.l.contrib(
 
 // Trigger is the sum trigger i tested in period k.
 func (s *PeriodStats) Trigger(i, k int) PeriodStat { return s.at(k, s.l.trig(i)) }
+
+// Named is named total i in period k of the horizon.
+func (s *PeriodStats) Named(i, k int) PeriodStat { return s.at(k, s.l.named(i)) }
 
 // add folds one repeat's rows, a row per period of the horizon: each
 // queue's co-moments first, from the means before this repeat.
@@ -359,6 +363,9 @@ func (s *Series) TotalColumn(dst []float64) []float64 { return s.column(s.l.tota
 
 // LayerColumn copies a layer's payouts into dst.
 func (s *Series) LayerColumn(j int, dst []float64) []float64 { return s.column(s.l.layer(j), dst) }
+
+// NamedColumn copies named total i's values into dst.
+func (s *Series) NamedColumn(i int, dst []float64) []float64 { return s.column(s.l.named(i), dst) }
 
 // TriggerColumn copies the sums trigger i tested into dst.
 func (s *Series) TriggerColumn(i int, dst []float64) []float64 { return s.column(s.l.trig(i), dst) }

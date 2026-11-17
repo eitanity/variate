@@ -15,14 +15,15 @@ const (
 )
 
 // QuantityRow finds the row of a quantity by kind ("total", "category",
-// "source", "entries", "contrib", "layer", "trigger") and name; ok is false for a kind or
+// "source", "entries", "contrib", "layer", "trigger") and name, "total"
+// with a name for a named total; ok is false for a kind or
 // name the model does not have, and for a breakdown with Config.NoBreakdown.
 func (w *Workspace) QuantityRow(kind, name string) (row int, ok bool) {
 	return w.m.quantityRow(w.l, kind, name)
 }
 
 func (m *Compiled) quantityRow(l layout, kind, name string) (row int, ok bool) {
-	if kind == totalSubject {
+	if kind == totalSubject && name == "" {
 		return l.total(), true
 	}
 	names, at := m.quantityNames(l, kind)
@@ -40,6 +41,8 @@ func (m *Compiled) quantityNames(l layout, kind string) (names []string, at func
 		return nil, nil
 	}
 	switch kind {
+	case totalSubject:
+		return m.TotalIDs(), l.named
 	case kindCategory:
 		return m.categories, func(i int) int { return l.cat(index(i)) }
 	case kindSource:
@@ -92,8 +95,8 @@ func (w *Workspace) ExceedanceOf(row int, dst []ECPoint) []ECPoint {
 // share of the total for a category or source.
 func (w *Workspace) QuantityStat(row int) Stat {
 	total := 1.0
-	if (row > 0 && row < 1+w.l.cats+w.l.srcs) || row >= 1+w.l.cats+w.l.srcs+2*w.l.nodes {
-		total = w.result.Total.Mean()
+	if (row > 0 && row < 1+w.l.cats+w.l.srcs) || row >= w.l.totalAt {
+		total = w.shareBase(row)
 	}
 	return w.stat(w.accum(row), total)
 }
