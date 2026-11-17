@@ -176,15 +176,17 @@ func (r *passResult) dominant(xStar float64) string {
 }
 
 // fill writes the bracket parts into the result: the first ncat
-// category brackets are the categories', the rest the named totals'.
-func (r *passResult) fill(out *Transformed, ncat int) {
+// category brackets are the categories', the rest those of the named
+// totals in grid.
+func (r *passResult) fill(out *Transformed, ncat int, grid []int32, totals int) {
 	out.H, out.M, out.Theta, out.PZero = r.h, r.m, r.theta, r.pzero
 	out.Total = r.bounds(r.total)
+	out.ByTotal = make([]Bounds, totals)
 	for i, c := range r.cats {
 		if i < ncat {
 			out.ByCategory = append(out.ByCategory, r.bounds(c))
 		} else {
-			out.ByTotal = append(out.ByTotal, r.bounds(c))
+			out.ByTotal[grid[i-ncat]] = r.bounds(c)
 		}
 	}
 	for _, s := range r.srcs {

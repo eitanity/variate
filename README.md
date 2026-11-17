@@ -33,8 +33,10 @@ bracketed between rigorous bounds, with no sampling at all.
   drawn once per period and shared by every event in it.
 - **Structure:** several graphs in one model, templates instanced with
   overrides, categories added across the model; totals the model names
-  over chosen categories, each reported as the total is, and categories
-  kept outside the total, such as hours beside money.
+  over chosen categories, each reported as the total is, a net one
+  subtracting some of them with the chance it is at or below zero, and
+  categories kept outside the total, such as hours or revenue beside
+  cost.
 - **Queues:** a node that serves its rounds first come, first served
   with a number of servers of one speed, each round bringing its own
   work, carrying its line from period to period or emptying it at each

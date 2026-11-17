@@ -253,6 +253,8 @@ func TestTotalsRefusals(t *testing.T) {
 		{"no categories", []variate.Total{{ID: "x"}}, nil, `total "x": no categories`},
 		{"category twice", []variate.Total{{ID: "x", Categories: []string{"labour", "labour"}}}, nil, `total "x": category labour is listed twice`},
 		{"unknown outside", nil, []string{"fuel"}, `outside_total "fuel": no function books this category`},
+		{"added and subtracted", []variate.Total{{ID: "x", Categories: []string{"labour"}, Less: []string{"labour"}}}, nil, `total "x": category labour is listed twice`},
+		{"unknown subtracted", []variate.Total{{ID: "x", Categories: []string{"labour"}, Less: []string{"fuel"}}}, nil, `total "x": no function books category fuel`},
 		{"all outside", nil, []string{"labour", "parts", "hours", "production"}, `outside_total "labour": every category is outside the total`},
 	} {
 		g := factoryGraph()
@@ -290,5 +292,133 @@ func TestTotalsConditions(t *testing.T) {
 	}
 	if len(s.At) != 1 || s.At[0].N != 50000 || !(s.At[0].P > 0 && s.At[0].P < 1) {
 		t.Errorf("at %+v", s.At)
+	}
+}
+
+// netGraph: 4 sales a period each book revenue (gamma, mean 10, sd 3)
+// and their cost (gamma, mean 6, sd 2), and 3 stoppages a period each
+// book a loss (gamma, mean 4, sd 1); net is revenue less both. Its mean
+// is 4·10 − 4·6 − 3·4 = 4, and its variance 4·E[(R − C)²] + 3·E[D²] =
+// 4·(109 + 40 − 2·60) + 3·17 = 167.
+func netGraph() variate.Graph {
+	gamma := func(mean, sd float64) dist.Distribution {
+		d, _ := dist.NewGammaFromMeanSD(mean, sd)
+		return d
+	}
+	return variate.Graph{ID: "net",
+		Sources: []variate.Source{{ID: "sale", Frequency: C(4), To: "a"}, {ID: "stop", Frequency: C(3), To: "b"}},
+		Nodes: []variate.Node{
+			{ID: "a", Functions: []variate.Function{Fn("r", "revenue", gamma(10, 3)), Fn("c", "cost", gamma(6, 2))}},
+			{ID: "b", Functions: []variate.Function{Fn("d", "loss", gamma(4, 1))}},
+		},
+		Totals: []variate.Total{{ID: "net", Categories: []string{"revenue"}, Less: []string{"cost", "loss"}}},
+	}
+}
+
+// TestTotalsNet: a total that subtracts has the closed-form exact mean
+// and variance, the simulation agrees with them, its share is NaN, the
+// transform leaves it without a bracket, and P(net ≤ 0) is counted and
+// equals the share of periods the series has at or below 0.
+func TestTotalsNet(t *testing.T) {
+	c, _, err := netGraph().Compile(variate.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := c.Analytic()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(e.MeanByTotal[0]-4) > 1e-12 || math.Abs(e.VarByTotal[0]-167) > 1e-9 {
+		t.Errorf("exact mean %v var %v, want 4 and 167", e.MeanByTotal[0], e.VarByTotal[0])
+	}
+	const periods = 200000
+	cfg := variate.Config{Periods: periods, Series: true, Workers: 4, AllowUnconverged: true}
+	w, err := c.NewWorkspace(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	r, err := w.Run(context.Background(), 21)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s variate.Summary
+	w.Summarize(&s)
+	net := s.Totals["net"]
+	sd := math.Sqrt(167)
+	if math.Abs(net.Mean-4) > 4*net.StdErr || math.Abs(net.StdDev-sd) > 0.01*sd || !math.IsNaN(net.Share) {
+		t.Errorf("net mean %v ± %v sd %v share %v", net.Mean, net.StdErr, net.StdDev, net.Share)
+	}
+	col := r.Series.NamedColumn(0, make([]float64, periods))
+	below := 0
+	for _, x := range col {
+		if x <= 0 {
+			below++
+		}
+	}
+	if len(s.AtMostZero) != 1 || math.Abs(s.AtMostZero[0].P-float64(below)/periods) > 1e-12 || !(s.AtMostZero[0].StdErr > 0) {
+		t.Errorf("at most 0 %+v, series %d of %d", s.AtMostZero, below, periods)
+	}
+	if len(s.At) != 0 {
+		t.Errorf("the count above 0 shows among Config.At: %+v", s.At)
+	}
+	tr, err := c.Transform(variate.TransformConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Applicable || len(tr.ByTotal) != 1 || len(tr.ByTotal[0].Lower) != 0 {
+		t.Errorf("transform %v %q, net bracket %d points", tr.Applicable, tr.Reason, len(tr.ByTotal[0].Lower))
+	}
+}
+
+// TestTotalsSkellam: two Poisson counts of 1, at rates 3 and 2, the
+// second subtracted, differ by a Skellam variable: P(D ≤ 0) is
+// Σ_k P(N₁ = k)·P(N₂ ≥ k), within four standard errors of the count,
+// and each quantile is the Skellam quantile, the negative ones from the
+// signed histogram's mirror.
+func TestTotalsSkellam(t *testing.T) {
+	g := variate.Graph{ID: "skellam",
+		Sources: []variate.Source{{ID: "up", Frequency: C(3), To: "a"}, {ID: "down", Frequency: C(2), To: "b"}},
+		Nodes: []variate.Node{
+			{ID: "a", Functions: []variate.Function{Fn("one", "up", C(1))}},
+			{ID: "b", Functions: []variate.Function{Fn("one", "down", C(1))}},
+		},
+		Totals: []variate.Total{{ID: "d", Categories: []string{"up"}, Less: []string{"down"}}},
+	}
+	const periods = 400000
+	_, _, s := runSummary(t, g, periods, 4)
+	pmf := func(lam float64, k int) float64 {
+		lg, _ := math.Lgamma(float64(k + 1))
+		return math.Exp(float64(k)*math.Log(lam) - lam - lg)
+	}
+	// cdf[d+40] is P(D ≤ d) for d in [−40, 40].
+	cdf := make([]float64, 81)
+	for k1 := range 60 {
+		for k2 := range 60 {
+			if d := k1 - k2; d >= -40 && d <= 40 {
+				cdf[d+40] += pmf(3, k1) * pmf(2, k2)
+			}
+		}
+	}
+	for i := 1; i < len(cdf); i++ {
+		cdf[i] += cdf[i-1]
+	}
+	az := s.AtMostZero[0]
+	if math.Abs(az.P-cdf[40]) > 4*az.StdErr {
+		t.Errorf("P(D ≤ 0) %v ± %v, want %v", az.P, az.StdErr, cdf[40])
+	}
+	st := s.Totals["d"]
+	for i, p := range variate.QuantileLevels() {
+		want := 0
+		for cdf[want+40] < p {
+			want++
+		}
+		got := [5]float64{st.P50, st.P90, st.P95, st.P99, st.P999}[i]
+		if math.Abs(got-float64(want)) > 0.01*math.Abs(float64(want))+1e-9 {
+			t.Errorf("P%g: %v, want %d", 100*p, got, want)
+		}
+	}
+	if math.Abs(st.Mean-1) > 4*st.StdErr {
+		t.Errorf("mean %v ± %v, want 1", st.Mean, st.StdErr)
 	}
 }

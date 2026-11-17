@@ -1,15 +1,18 @@
 # Totals the model names: stoppages of a factory line book parts, and
 # over the days down the crew's cost, the lost production and the
-# crew's hours; the hours stay outside the total.
+# crew's hours; orders bring in a margin. The hours and the revenue
+# stay outside the total, and net is the revenue less the cost.
 period: { days: 365 }
 totals:
   - { id: maintenance, categories: [labour, parts] }
   - { id: cost, categories: [labour, parts, production] }
   - { id: worked, categories: [hours] }
-outside_total: [hours]
+  - { id: net, categories: [revenue], less: [labour, parts, production] }
+outside_total: [hours, revenue]
 graphs:
   - id: line
     sources:
+      - { id: order, frequency: {{orders}}, to: sale }
       - { id: stoppage, frequency: {{rate}}, to: repair }
     nodes:
       - id: repair
@@ -21,3 +24,6 @@ graphs:
         next: running
         next_holding: { lognormal: { median: {{down}}, p90: 6 }, unit: days }
       - id: running
+      - id: sale
+        functions:
+          - { name: margin, category: revenue, gamma: { mean: {{margin}}, sd: 1500 } }

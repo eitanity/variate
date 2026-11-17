@@ -31,6 +31,14 @@ func NewLogHist(mean, res float64) *LogHist {
 	return newHist(lo, hi, res, nil)
 }
 
+// NewSignedHist allocates a histogram that also counts negative values,
+// each by its magnitude over the same range.
+func NewSignedHist(mean, res float64) *LogHist {
+	h := NewLogHist(mean, res)
+	h.neg = NewLogHist(mean, res)
+	return h
+}
+
 // NewIntHist allocates an integer histogram: exact buckets for
 // 0 … 4095, then log bins up to 1e9·mean.
 func NewIntHist(mean, res float64) *LogHist {
@@ -48,6 +56,15 @@ func NewIntHist(mean, res float64) *LogHist {
 // histogram's coarse copy reaches down below the count 1 and holds its
 // exact buckets in its log bins.
 func NewCoarse(h *LogHist, res float64) *LogHist {
+	c := newCoarse(h, res)
+	if h.neg != nil {
+		c.neg = newCoarse(h.neg, res)
+	}
+	return c
+}
+
+// newCoarse is NewCoarse for h's own counts.
+func newCoarse(h *LogHist, res float64) *LogHist {
 	if h.exact == nil && (math.IsInf(h.lo, 0) || len(h.bins) == 0) {
 		return &LogHist{lo: h.lo, hi: h.hi}
 	}
@@ -84,6 +101,15 @@ func NewCoarse(h *LogHist, res float64) *LogHist {
 // Empty returns a histogram with h's layout and no counts. A coarse copy
 // shares its bin map with h.
 func (h *LogHist) Empty() *LogHist {
+	e := h.empty()
+	if h.neg != nil {
+		e.neg = h.neg.empty()
+	}
+	return e
+}
+
+// empty is Empty for h's own counts.
+func (h *LogHist) empty() *LogHist {
 	e := *h
 	e.bins = make([]int64, len(h.bins))
 	if h.exact != nil {

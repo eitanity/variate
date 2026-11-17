@@ -300,6 +300,7 @@ func (rep *Report) WriteTable(w *bufio.Writer) {
 		}
 	})
 	rep.writeAtTable(w)
+	rep.writeAtMostZero(w)
 	rep.writeWhenTable(w)
 	rep.writeQueueTable(w)
 	rep.writePeriodTable(w)
@@ -340,6 +341,18 @@ func (rep *Report) writeAtTable(w *bufio.Writer) {
 	fmt.Fprintf(w, "\n%-28s %12s %12s %12s %12s\n", "at", "value", "P(≥ value)", "P(< value)", "stderr")
 	for _, a := range rep.Sum.At {
 		fmt.Fprintf(w, "%-28s %12.6g %12.6g %12.6g %12.4g\n", levelName(a.Level), a.X, a.P, 1-a.P, a.StdErr)
+	}
+}
+
+// writeAtMostZero prints the chance each named total that subtracts is
+// at most 0.
+func (rep *Report) writeAtMostZero(w *bufio.Writer) {
+	if len(rep.Sum.AtMostZero) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\n%-28s %12s %12s\n", "at most 0", "P(≤ 0)", "stderr")
+	for _, a := range rep.Sum.AtMostZero {
+		fmt.Fprintf(w, "%-28s %12.6g %12.4g\n", levelName(a.Level), a.P, a.StdErr)
 	}
 }
 
@@ -765,6 +778,25 @@ func (j *jw) nums(k string, xs []float64) {
 
 // jsonAt writes the chance each of Config.At's values is reached, when
 // the run names any.
+// jsonAtMostZero writes the chance each named total that subtracts is
+// at most 0.
+func (rep *Report) jsonAtMostZero(j *jw) {
+	if len(rep.Sum.AtMostZero) == 0 {
+		return
+	}
+	j.key("at_most_zero")
+	j.open('{')
+	for _, a := range rep.Sum.AtMostZero {
+		j.key(a.Name)
+		j.open('{')
+		j.fieldInt("n", a.N)
+		j.field("p", a.P)
+		j.field("stderr", a.StdErr)
+		j.closeC('}')
+	}
+	j.closeC('}')
+}
+
 func (rep *Report) jsonAt(j *jw) {
 	if len(rep.Sum.At) == 0 {
 		return
@@ -790,6 +822,7 @@ func (rep *Report) jsonAt(j *jw) {
 // conditions.
 func (rep *Report) jsonAsked(j *jw) {
 	rep.jsonAt(j)
+	rep.jsonAtMostZero(j)
 	rep.jsonWhen(j)
 }
 
@@ -1054,6 +1087,9 @@ func (rep *Report) WriteCSV(w *bufio.Writer) {
 	}
 	for _, a := range rep.Sum.At {
 		fmt.Fprintf(w, "at,%s,%d,%s,%s,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(levelName(a.Level)+"="+csvNum(a.X)), a.N, csvNum(a.P), csvNum(a.StdErr))
+	}
+	for _, a := range rep.Sum.AtMostZero {
+		fmt.Fprintf(w, "at most 0,%s,%d,%s,%s,,,,,,,,,,"+csvQuantileGap+"\n", CSVField(levelName(a.Level)), a.N, csvNum(a.P), csvNum(a.StdErr))
 	}
 	rep.csvWhen(w)
 	rep.csvPeriods(w)

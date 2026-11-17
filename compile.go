@@ -84,7 +84,8 @@ type Compiled struct {
 	infVar                                       []bool // per row quantity: its variance is infinite
 	queueInfVar                                  []bool // per queue: its wait's and stay's variance is infinite
 	queueLong                                    []QueueLongRun
-	levels                                       []clevel // Config.At, each value with its quantity's row
+	levels                                       []clevel // Config.At, each value with its quantity's row, then a level above 0 for each named total that subtracts
+	userLevels                                   int      // how many of levels are Config.At's
 	whens                                        []cwhen  // Config.When, each with its quantity's row
 	fnPerTime                                    []bool
 	aliasProb                                    []float64
@@ -108,6 +109,7 @@ type Compiled struct {
 	layers                                       []Layer     // the model's layers, defaults filled
 	inTotal                                      []bool      // [category]: booked into the total, the sources and the nodes
 	totals                                       []ctotal    // the totals the model names
+	gridTotals                                   []int32     // those the transform brackets: the ones that only add
 	schedules                                    []schedule  // the model's schedules, with their pools
 	cycle                                        jointCycle  // the schedules' values over their combined cycle
 	scheduleRatio                                [][]float64 // [schedule][schedule]: E[a·b]/(E[a]·E[b]) over the combined cycle

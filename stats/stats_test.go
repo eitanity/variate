@@ -256,3 +256,60 @@ func BenchmarkNeumaierAdd(b *testing.B) {
 		n.Add(float64(i & 1023))
 	}
 }
+
+// TestSignedHist: a signed histogram of values drawn from −2000 to
+// 2000 gives each quantile within a bin of the sorted sample's, counts
+// P(X ≥ x) on both sides of 0 within a bin, and merges, coarse copies
+// and resets keep the negative values with the rest.
+func TestSignedHist(t *testing.T) {
+	r := rand.New(rand.NewPCG(3, 4))
+	const n = 100000
+	h := NewSignedHist(1000, 0.01)
+	o := h.Empty()
+	c := NewCoarse(h, 0.1)
+	xs := make([]float64, n)
+	for i := range xs {
+		xs[i] = 4000*r.Float64() - 2000
+		if i%7 == 0 {
+			xs[i] = 0
+		}
+		if i%2 == 0 {
+			h.AddPair(xs[i], c)
+		} else {
+			o.Add(xs[i])
+		}
+	}
+	h.Merge(o)
+	sort.Float64s(xs)
+	for _, p := range []float64{0.01, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99} {
+		got, clipped := h.Quantile(p)
+		want := xs[int(math.Ceil(p*n))-1]
+		if clipped || math.Abs(got-want) > 0.011*math.Abs(want)+1e-9 {
+			t.Errorf("P%g: %v, want %v (clipped %v)", 100*p, got, want, clipped)
+		}
+	}
+	for _, x := range []float64{-1500, -500, -10, 0, 10, 500, 1500} {
+		want := n - sort.SearchFloat64s(xs, x)
+		if got := h.AtOrAbove(x); math.Abs(float64(got-int64(want))) > 0.011*math.Abs(x)*n/4000+1 {
+			t.Errorf("≥ %v: %d, want %d", x, got, want)
+		}
+	}
+	if c.N != n/2 || c.neg.N == 0 || c.Bins() <= len(c.bins) {
+		t.Errorf("coarse copy: %d values, %d negative, %d bins", c.N, c.neg.N, c.Bins())
+	}
+	if h.N != n || h.neg.N+h.Zero+h.Under+h.Over+sum(h.bins) != n {
+		t.Errorf("%d values, %d negative, %d zeros", h.N, h.neg.N, h.Zero)
+	}
+	h.Reset()
+	if h.N != 0 || h.neg.N != 0 || sum(h.neg.bins) != 0 {
+		t.Errorf("reset left %d values, %d negative", h.N, h.neg.N)
+	}
+}
+
+func sum(v []int64) int64 {
+	s := int64(0)
+	for _, x := range v {
+		s += x
+	}
+	return s
+}

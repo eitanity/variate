@@ -218,6 +218,7 @@ function show(r, ms) {
     ...Object.entries(r.totals || {}).map(([name, s]) => ["total " + name, fmt(s.mean, 4), pct(s.share), fmt(s.p50), fmt(s.p90), fmt(s.p99), fmt(s.p999)]),
     ...Object.entries(r.by_category).map(([name, s]) => ["category " + name, fmt(s.mean, 4), pct(s.share), fmt(s.p50), fmt(s.p90), fmt(s.p99), fmt(s.p999)]),
     ...Object.entries(r.by_source).map(([name, s]) => ["source " + name, fmt(s.mean, 4), pct(s.share), fmt(s.p50), fmt(s.p90), fmt(s.p99), fmt(s.p999)]),
+    ...Object.entries(r.at_most_zero || {}).map(([name, a]) => ["P(total " + name + " ≤ 0)", pct(a.p) + " ± " + pct(a.stderr), "", "", "", "", ""]),
   ]);
   // Queues: each one's wait and stay over the rounds it served, and how
   // busy its servers were.

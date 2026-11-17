@@ -559,6 +559,7 @@ func TestTotalKeys(t *testing.T) {
 totals:
   - { id: maintenance, categories: [labour, parts] }
   - { id: worked, description: hours on the job, categories: [hours] }
+  - { id: net, categories: [parts], less: [labour] }
 outside_total: [hours]
 graphs:
   - id: g
@@ -573,7 +574,7 @@ graphs:
 `
 	m := parse(t, text)
 	g := m.Graph
-	if len(g.Totals) != 2 || g.Totals[0].ID != "maintenance" || strings.Join(g.Totals[0].Categories, ",") != "labour,parts" || g.Totals[1].Categories[0] != "hours" || len(g.OutsideTotal) != 1 || g.OutsideTotal[0] != "hours" {
+	if len(g.Totals) != 3 || g.Totals[2].Less[0] != "labour" || len(g.Totals[0].Less) != 0 || g.Totals[0].ID != "maintenance" || strings.Join(g.Totals[0].Categories, ",") != "labour,parts" || g.Totals[1].Categories[0] != "hours" || len(g.OutsideTotal) != 1 || g.OutsideTotal[0] != "hours" {
 		t.Errorf("totals %+v outside %v", g.Totals, g.OutsideTotal)
 	}
 	parseErr(t, strings.Replace(text, ", categories: [labour, parts]", "", 1), "total maintenance has no categories")

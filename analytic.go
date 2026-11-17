@@ -90,7 +90,12 @@ func (m *Compiled) fnMoments(f int32, filt valueFilter) (mean, second float64, p
 	}
 	d := m.pools[c.pool]
 	mean = d.Mean()
-	return mean, d.Var() + mean*mean, m.poolPeriod[c.pool] != noIndex
+	second = d.Var() + mean*mean
+	if filt.kind == filterTotal {
+		// A subtracted value's mean changes sign; its square does not.
+		mean *= m.totals[filt.index].sign(int(c.category))
+	}
+	return mean, second, m.poolPeriod[c.pool] != noIndex
 }
 
 // sumMoments combines independent terms: the mean, E[(Σ)²] and the

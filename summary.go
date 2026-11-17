@@ -65,6 +65,7 @@ type Summary struct {
 	Plan       []PlanRow
 	Queues     map[string]QueueSummary // by the queue node's name
 	At         []LevelStat             // Config.At in its order
+	AtMostZero []LevelStat             // P(Q ≤ 0) of each named total that subtracts, in the model's order
 	When       []WhenStat              // Config.When in its order
 }
 
@@ -143,13 +144,20 @@ func (w *Workspace) Summarize(dst *Summary) {
 	w.summarizeReach(dst)
 	w.summarizeQueues(dst)
 	dst.At = dst.At[:0]
+	dst.AtMostZero = dst.AtMostZero[:0]
 	for i, lv := range w.m.levels {
 		a := &r.Levels[i]
 		p := 0.0
 		if n := a.N(); n > 0 {
 			p = a.Sum.Value() / float64(n)
 		}
-		dst.At = append(dst.At, LevelStat{Level: lv.Level, N: a.N(), P: p, StdErr: a.StdErr(w.delays)})
+		s := LevelStat{Level: lv.Level, N: a.N(), P: p, StdErr: a.StdErr(w.delays)}
+		if i < w.m.userLevels {
+			dst.At = append(dst.At, s)
+			continue
+		}
+		s.X, s.P = 0, 1-p
+		dst.AtMostZero = append(dst.AtMostZero, s)
 	}
 	w.summarizeWhen(dst)
 	dst.Plan = append(dst.Plan[:0], w.rows...)

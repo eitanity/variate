@@ -5,16 +5,21 @@
 # money; maintenance is the bill for labour and parts, cost adds the
 # lost production, and worked totals the hours, each a quantity with
 # its own statistics, curve, and figures in --at and --when, as in
-# --when total:maintenance>=1/100.
+# --when total:maintenance>=1/100. Orders bring in a margin, revenue,
+# also outside the total; net is the revenue less the cost (less), so
+# it can be negative, and the report gives P(net ≤ 0), the chance of a
+# year that loses money.
 period: { days: 365 }
 totals:
   - { id: maintenance, categories: [labour, parts] }
   - { id: cost, categories: [labour, parts, production] }
   - { id: worked, categories: [hours] }
-outside_total: [hours]
+  - { id: net, categories: [revenue], less: [labour, parts, production] }
+outside_total: [hours, revenue]
 graphs:
   - id: line
     sources:
+      - { id: order, frequency: 120, to: sale }
       - { id: stoppage, frequency: { pert: [4, 8, 16] }, to: repair }
     nodes:
       - id: repair
@@ -26,3 +31,6 @@ graphs:
         next: running
         next_holding: { lognormal: { median: 2, p90: 6 }, unit: days }
       - id: running
+      - id: sale
+        functions:
+          - { name: margin, category: revenue, gamma: { mean: 4000, sd: 1500 } }

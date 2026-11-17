@@ -292,8 +292,10 @@ func TestDemoTailWhen(t *testing.T) {
 // TestDemoTotals: the factory line's named totals are reported, cost
 // is the period total, the hours stay out of it, and since the crew's
 // cost and hours are both rates over the same days down, labour is
-// the hours at the crew's cost per hour in every period; doubling the
-// crew's hours a day doubles worked and leaves the total alone.
+// the hours at the crew's cost per hour in every period; net is the
+// revenue less the cost, and doubling the margin makes a losing year
+// rarer; doubling the crew's hours a day doubles worked and leaves the
+// total alone.
 func TestDemoTotals(t *testing.T) {
 	run := func(set map[string]float64) (*variate.Compiled, *variate.Result, variate.Summary) {
 		cfg := variate.Config{Periods: 5000, Seed: 1, AllowUnconverged: true, Series: true}
@@ -315,18 +317,28 @@ func TestDemoTotals(t *testing.T) {
 		return c, r, s
 	}
 	c, r, s := run(nil)
-	if cost := s.Totals["cost"]; math.Abs(cost.Mean-s.Total.Mean) > 1e-12*s.Total.Mean || len(s.Totals) != 3 {
+	if cost := s.Totals["cost"]; math.Abs(cost.Mean-s.Total.Mean) > 1e-12*s.Total.Mean || len(s.Totals) != 4 {
 		t.Fatalf("totals %v, total %v", s.Totals, s.Total.Mean)
 	}
 	cat := map[string]int{}
 	for i, name := range c.Categories() {
 		cat[name] = i
 	}
+	net := r.Series.NamedColumn(3, make([]float64, r.Series.Periods()))
 	for p := range r.Series.Periods() {
 		hours, labour := r.Series.Category(cat["hours"], p), r.Series.Category(cat["labour"], p)
 		if math.Abs(labour-hours*1500/24) > 1e-6*math.Max(1, labour) {
 			t.Fatalf("period %d: labour %v for %v hours", p, labour, hours)
 		}
+		if want := r.Series.Category(cat["revenue"], p) - r.Series.Total(p); math.Abs(net[p]-want) > 1e-9*math.Max(1, math.Abs(want)) {
+			t.Fatalf("period %d: net %v, revenue less cost %v", p, net[p], want)
+		}
+	}
+	if len(s.AtMostZero) != 1 || !(s.AtMostZero[0].P > 0.05 && s.AtMostZero[0].P < 0.95) {
+		t.Errorf("P(net ≤ 0) %+v", s.AtMostZero)
+	}
+	if _, _, s3 := run(map[string]float64{"margin": 8000}); !(s3.AtMostZero[0].P < s.AtMostZero[0].P/4) {
+		t.Errorf("P(net ≤ 0) %v at a margin of 8000, %v at 4000", s3.AtMostZero[0].P, s.AtMostZero[0].P)
 	}
 	_, _, s2 := run(map[string]float64{"crew_hours": 48})
 	if math.Abs(s2.Total.Mean-s.Total.Mean) > 1e-12*s.Total.Mean || math.Abs(s2.Totals["worked"].Mean-2*s.Totals["worked"].Mean) > 1e-9*s.Totals["worked"].Mean {

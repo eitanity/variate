@@ -946,10 +946,26 @@
  },
  {
   "id": "line",
-  "title": "Totals the model names: a factory line's bill, its lost output and its hours",
+  "title": "Totals the model names: a factory line's bill, its lost output, its hours and what it nets",
   "file": "line.yaml",
-  "about": "Stoppages a year, each booking spare parts and, over the days the line is down, the crew's cost, the production lost and the crew's hours. The model names three totals: maintenance, the bill for labour and parts; cost, the bill and the lost output, which is the period total; and worked, the crew's hours, kept outside the total so the total stays in money. Choose a named total in the charts to see its histogram and curve: lengthen the downtime and the lost output and the hours grow together while the parts do not.",
+  "about": "Orders a year each bring in a margin, and stoppages a year each book spare parts and, over the days the line is down, the crew's cost, the production lost and the crew's hours. The model names four totals: maintenance, the bill for labour and parts; cost, the bill and the lost output, which is the period total; worked, the crew's hours; and net, the revenue less the cost. The hours and the revenue are kept outside the total, so the total stays the cost. Net can be negative, and the run counts the chance of a year at or below zero. Choose a named total in the charts to see its histogram and curve: lengthen the downtime and the lost output and the hours grow together while the parts do not, and net falls.",
   "knobs": [
+   {
+    "key": "orders",
+    "label": "Orders per year",
+    "min": 20,
+    "max": 300,
+    "step": 10,
+    "value": 120
+   },
+   {
+    "key": "margin",
+    "label": "Margin per order, mean",
+    "min": 2000,
+    "max": 10000,
+    "step": 250,
+    "value": 4000
+   },
    {
     "key": "rate",
     "label": "Stoppages per year",

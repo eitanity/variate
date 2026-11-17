@@ -445,14 +445,15 @@ func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHi
 }
 
 // applyTotals sets each named total's column to the sum of its
-// categories' columns.
+// categories' columns, less those it subtracts.
 func (w *Workspace) applyTotals(row []float64) {
 	l := &w.l
-	for i, t := range w.m.totals {
+	for i := range w.m.totals {
+		t := &w.m.totals[i]
 		s := 0.0
 		for c, in := range t.has {
 			if in {
-				s += row[l.cat(index(c))]
+				s += t.sign(c) * row[l.cat(index(c))]
 			}
 		}
 		row[l.named(i)] = s

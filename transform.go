@@ -32,7 +32,7 @@ type Transformed struct {
 	Bytes      int64 // the most one pass allocated, the figure MaxBytes bounds
 	Total      Bounds
 	ByCategory []Bounds
-	ByTotal    []Bounds // [named total]
+	ByTotal    []Bounds // [named total]; empty Bounds for one that subtracts
 	BySource   []Bounds // nil when the model has more than maxSourceBounds sources
 }
 
@@ -374,7 +374,7 @@ func (t *transformer) run(out *Transformed) error {
 		// Nothing to resolve: the TailP quantile sits at the bottom of the
 		// grid (a rate so low that P(T = 0) exceeds TailP). A finer lattice
 		// would shrink without bound and fold every value beyond it.
-		first.fill(out, len(t.m.categories))
+		first.fill(out, len(t.m.categories), t.m.gridTotals, len(t.m.totals))
 		out.Applicable = true
 		out.QuadNodes = t.quadN
 		out.Passes = t.passes
@@ -394,7 +394,7 @@ func (t *transformer) run(out *Transformed) error {
 		out.Reason = reason
 		return nil
 	}
-	second.fill(out, len(t.m.categories))
+	second.fill(out, len(t.m.categories), t.m.gridTotals, len(t.m.totals))
 	out.Applicable = true
 	out.QuadNodes = t.quadN
 	out.Passes = t.passes
@@ -447,7 +447,7 @@ func (t *transformer) categories() int {
 	if t.totalOnly {
 		return 0
 	}
-	return len(t.m.categories) + len(t.m.totals)
+	return len(t.m.categories) + len(t.m.gridTotals)
 }
 
 // sourceBounds reports whether the transform brackets each source: not
@@ -497,7 +497,7 @@ func (t *transformer) runAtLevel(out *Transformed, c float64) error {
 			return nil
 		}
 	}
-	r.fill(out, len(t.m.categories))
+	r.fill(out, len(t.m.categories), t.m.gridTotals, len(t.m.totals))
 	out.Applicable = true
 	out.QuadNodes = t.quadN
 	out.Passes = t.passes

@@ -238,7 +238,6 @@ func (w *Workspace) setupStream(nw int) error {
 // and finaliser goroutines, the only goroutines the engine creates.
 func (w *Workspace) startPool(nw, pool int) {
 	m := w.m
-	res := w.histRes()
 	// bound: workers or slots, fixed at construction
 	for i := 0; i < nw; i++ {
 		wk := &worker{ss: dist.NewSamplerSet(m.pools, pool), period: make([]float64, m.periodSlots), sums: make([]float64, len(m.trigs))}
@@ -266,7 +265,7 @@ func (w *Workspace) startPool(nw, pool int) {
 			wk.hists[par] = make([]*stats.LogHist, w.l.width)
 			for q, h := range w.hists {
 				if h != nil {
-					wk.hists[par][q] = w.newHistLike(q, res)
+					wk.hists[par][q] = w.newHistLike(q)
 				}
 			}
 		}
@@ -298,12 +297,9 @@ func (w *Workspace) histRes() float64 {
 }
 
 // newHistLike allocates a worker histogram with the layout of global
-// quantity q's: the integer histogram where the global one is.
-func (w *Workspace) newHistLike(q int, res float64) *stats.LogHist {
-	if exactBucketsOf(w.hists[q]) > 0 {
-		return stats.NewIntHist(w.means[q], res)
-	}
-	return stats.NewLogHist(w.means[q], res)
+// quantity q's.
+func (w *Workspace) newHistLike(q int) *stats.LogHist {
+	return w.hists[q].Empty()
 }
 
 // allocLayers gives each layer its accumulator and histogram, ranged

@@ -30,13 +30,22 @@ func (m *Compiled) compileLevels(at []Level) error {
 		}
 		m.levels = append(m.levels, clevel{Level: lv, row: row, x: lv.X})
 	}
+	m.userLevels = len(m.levels)
+	// A named total that subtracts counts the periods it is above 0, so
+	// that P(Q ≤ 0) is counted as the levels are.
+	for i := range m.totals {
+		if t := &m.totals[i]; t.signed() {
+			lv := Level{Kind: totalSubject, Name: t.id, X: math.SmallestNonzeroFloat64}
+			m.levels = append(m.levels, clevel{Level: lv, row: l.named(i), x: lv.X})
+		}
+	}
 	return nil
 }
 
 // Levels returns Config.At as compiled.
 func (m *Compiled) Levels() []Level {
-	out := make([]Level, len(m.levels))
-	for i, lv := range m.levels {
+	out := make([]Level, m.userLevels)
+	for i, lv := range m.levels[:m.userLevels] {
 		out[i] = lv.Level
 	}
 	return out

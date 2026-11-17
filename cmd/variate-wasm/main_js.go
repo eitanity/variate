@@ -438,10 +438,11 @@ func (k keptRun) quantityBounds(kind, name string) (variate.Bounds, bool) {
 // totalKind is the kind of the total and of the named totals.
 const totalKind = "total"
 
-// boundsNamed is the bracket of the quantity called name, when kept.
+// boundsNamed is the bracket of the quantity called name, when one was
+// computed for it.
 func boundsNamed(names []string, bounds []variate.Bounds, name string) (variate.Bounds, bool) {
 	for i, n := range names {
-		if n == name && i < len(bounds) {
+		if n == name && i < len(bounds) && len(bounds[i].Lower) > 0 {
 			return bounds[i], true
 		}
 	}

@@ -9,7 +9,9 @@ import (
 // [lo, hi): bin k covers [lo·(1+res)^k, lo·(1+res)^(k+1)). Exact zeros,
 // non-zero values below lo and values at or above hi are counted apart.
 // An integer histogram adds exact buckets for 0 … exact−1 before the log
-// bins and has no lower edge. Counts are integers, so merges are exact.
+// bins and has no lower edge. A signed histogram counts a negative value
+// x in neg, a histogram of the same layout, as −x. Counts are integers,
+// so merges are exact.
 type LogHist struct {
 	lo, hi    float64
 	logLo     float64 // ln lo
@@ -20,8 +22,9 @@ type LogHist struct {
 	Zero      int64
 	Under     int64
 	Over      int64
-	N         int64      // every Add
+	N         int64      // every Add, negative values included
 	pair      *coarseMap // on a coarse copy: its bin for each bin of the fine histogram
+	neg       *LogHist   // a signed histogram's negative values, by magnitude; nil otherwise
 }
 
 // coarseMap maps the bins of a fine histogram onto its coarse copy's.
@@ -45,6 +48,17 @@ func (m *coarseMap) bin(k int) int {
 // AddPair counts x in h and in c, a coarse copy of h from NewCoarse,
 // finding c's bin from h's.
 func (h *LogHist) AddPair(x float64, c *LogHist) {
+	if x < 0 && h.neg != nil {
+		h.N++
+		c.N++
+		h.neg.addPair(-x, c.neg)
+		return
+	}
+	h.addPair(x, c)
+}
+
+// addPair counts x, not negative in a signed histogram, in h and c.
+func (h *LogHist) addPair(x float64, c *LogHist) {
 	h.N++
 	c.N++
 	switch {
@@ -70,6 +84,16 @@ func (h *LogHist) AddPair(x float64, c *LogHist) {
 
 // Add counts x.
 func (h *LogHist) Add(x float64) {
+	if x < 0 && h.neg != nil {
+		h.N++
+		h.neg.add(-x)
+		return
+	}
+	h.add(x)
+}
+
+// add counts x, not negative in a signed histogram.
+func (h *LogHist) add(x float64) {
 	h.N++
 	switch {
 	case x == 0:
@@ -99,6 +123,14 @@ func (h *LogHist) index(x float64) int {
 
 // Merge adds another histogram with the same layout.
 func (h *LogHist) Merge(o *LogHist) {
+	if h.neg != nil {
+		h.neg.merge(o.neg)
+	}
+	h.merge(o)
+}
+
+// merge adds o's own counts, not its negative values'.
+func (h *LogHist) merge(o *LogHist) {
 	if o.N == 0 {
 		return // every count moves with N, so o is empty
 	}
@@ -116,6 +148,14 @@ func (h *LogHist) Merge(o *LogHist) {
 
 // Reset clears every count.
 func (h *LogHist) Reset() {
+	if h.neg != nil {
+		h.neg.reset()
+	}
+	h.reset()
+}
+
+// reset clears h's own counts.
+func (h *LogHist) reset() {
 	if h.N == 0 {
 		return
 	}
@@ -148,15 +188,23 @@ func (h *LogHist) MapBytes() int64 {
 	return 4 * int64(len(h.pair.exact))
 }
 
-// Bins returns the number of log bins.
-func (h *LogHist) Bins() int { return len(h.bins) }
+// Bins returns the number of log bins, a signed histogram's negative
+// ones included.
+func (h *LogHist) Bins() int {
+	if h.neg != nil {
+		return len(h.bins) + len(h.neg.bins)
+	}
+	return len(h.bins)
+}
 
 // Range returns the covered interval [lo, hi).
 func (h *LogHist) Range() (lo, hi float64) { return h.lo, h.hi }
 
 // Quantile returns a value within one bin of the p-quantile, as the
 // geometric midpoint of the bin the p-quantile falls in. clipped is set
-// when it falls in Under or Over, and the range edge is returned.
+// when it falls in Under or Over, and the range edge is returned. A
+// signed histogram's negative values come first, the largest in
+// magnitude first.
 func (h *LogHist) Quantile(p float64) (x float64, clipped bool) {
 	if h.N == 0 {
 		return math.NaN(), false
@@ -165,7 +213,30 @@ func (h *LogHist) Quantile(p float64) (x float64, clipped bool) {
 	if target < 1 {
 		target = 1
 	}
-	cum := h.Zero
+	cum := int64(0)
+	if n := h.neg; n != nil {
+		cum = n.Over
+		if cum >= target {
+			return -n.hi, true
+		}
+		for k := len(n.bins) - 1; k >= 0; k-- {
+			cum += n.bins[k]
+			if cum >= target {
+				return -math.Exp(n.logLo + (float64(k)+0.5)*n.logRes), false
+			}
+		}
+		cum += n.Under
+		if cum >= target {
+			return -n.lo, true
+		}
+	}
+	return h.quantileFrom(cum, target)
+}
+
+// quantileFrom finds the target-th value among h's own counts, cum of
+// them below its range.
+func (h *LogHist) quantileFrom(cum, target int64) (x float64, clipped bool) {
+	cum += h.Zero
 	if cum >= target {
 		return 0, false
 	}
@@ -207,7 +278,17 @@ func (h *LogHist) QuantileInterval(p, d float64) (lo, hi float64, clipped bool) 
 // AtOrAbove returns the count of values ≥ x. It is exact when x is 0, an
 // exact bucket, a bin edge, or beyond the range; otherwise the bin
 // holding x is counted whole, so the answer is off by at most that bin.
+// For a signed histogram and x ≤ 0 it is the values not negative and
+// the negative ones of magnitude below the bin holding −x.
 func (h *LogHist) AtOrAbove(x float64) int64 {
+	if n := h.neg; n != nil && x <= 0 {
+		return h.N - n.atOrAbove(-x)
+	}
+	return h.atOrAbove(x)
+}
+
+// atOrAbove counts h's own values ≥ x.
+func (h *LogHist) atOrAbove(x float64) int64 {
 	switch {
 	case x <= 0:
 		return h.N

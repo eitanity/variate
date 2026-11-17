@@ -35,7 +35,7 @@ the line.
 | `factors` | shared multipliers on rates, each `{ id, <distribution> }` on [0, ∞), drawn once per period and shared by every source naming it: a common shock (below). |
 | `schedules` | cycles of multipliers on rates, each `{ id, values: [...] }`; period p uses the value at p modulo the cycle's length: a season or a shift pattern (below). |
 | `layers` | functions of the period total reported beside it, each `{ id, attachment, limit, share }`: an aggregate deductible, an aggregate limit or a reinsurance layer (below). |
-| `totals` | sums of chosen categories reported beside the total, each `{ id, categories: [...] }` (below). |
+| `totals` | sums of chosen categories reported beside the total, each `{ id, categories: [...], less: [...] }`, `less` optional (below). |
 | `outside_total` | categories booked and reported but added to no total but a named one, such as hours beside money (below). |
 | settings | any run setting by its snake_case name, e.g. `periods`, `seed`, `transform` (table at the end). |
 
@@ -634,6 +634,23 @@ among its parts. Its exact mean is the sum of its categories', and its
 exact variance and exact distribution are computed as the total's are,
 over its categories' values; its share of the total is given when all
 its categories are in it. Layers apply to the total alone.
+
+A named total may also subtract categories, listed in `less`, as a net
+revenue is the revenue less the cost:
+
+```yaml
+totals:
+  - { id: net, categories: [revenue], less: [labour, parts, production] }
+outside_total: [revenue]
+```
+
+Values themselves are never negative, but such a total can be, and
+it is reported as any named total, with these differences: its
+histogram counts negative values too, so its quantiles run below 0;
+the report gives P(Q ≤ 0), the chance of a period at or below 0,
+counted in the run with its standard error; it has no share of the
+total; and its exact mean and variance are computed, but not its
+exact distribution. Its exceedance curve covers its positive values.
 
 ## Reliability blocks
 
