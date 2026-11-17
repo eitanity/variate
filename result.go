@@ -190,11 +190,6 @@ type Result struct {
 	Steps         uint64
 	BeyondHorizon float64
 	TailPeriods   int64
-	// Per tail threshold (Compiled.TailThresholds), the periods whose
-	// total reached it and their total, categories and sources summed,
-	// in the row order, for the tail shares.
-	TailCounts []int64
-	TailSums   [][]float64
 
 	Series *Series // raw per-period rows; fixed runs with Config.Series only
 

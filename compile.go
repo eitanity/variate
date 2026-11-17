@@ -123,7 +123,6 @@ type Compiled struct {
 	maxPath                                      int // nodes on the longest source-to-leaf path
 	transformed                                  *Transformed
 	tailX                                        float64   // upper bound on the TailP quantile of T; 0 when unknown
-	tailThresholds                               []float64 // levels the tail shares are counted against
 	trigs                                        []ctrig   // the triggers, each also a source after the model's own
 	feedStart                                    []int32   // per function, its start in feeds; one more entry than functions
 	feeds                                        []int32   // the triggers each function's bookings add to
@@ -144,7 +143,6 @@ func (g Graph) Compile(cfg Config) (*Compiled, []Warning, error) {
 		return nil, nil, err
 	}
 	m.expect = e
-	m.tailThresholds = tailLevels(m.sizingMean(e))
 	m.setWatch(cfg.Watch, b.nodeIndex)
 	m.maxPath = m.longestNodePath()
 	m.crit = criteriaFrom(cfg)
@@ -166,15 +164,6 @@ func (g Graph) Compile(cfg Config) (*Compiled, []Warning, error) {
 		}
 	}
 	return m, warnings, nil
-}
-
-// sizingMean is the exact mean, or where a trigger's P(fire) is unknown,
-// the mean with its upper bound standing in: a scale for the tail levels.
-func (m *Compiled) sizingMean(e *Expectation) float64 {
-	if !math.IsNaN(e.Mean) {
-		return e.Mean
-	}
-	return m.scaleMeans().Mean
 }
 
 // scaleMeans are the steady-state means per period, which size the
@@ -278,9 +267,6 @@ func (m *Compiled) transformAtCompile(ws *[]Warning) error {
 
 // Transformed returns the transform computed at compile, or nil.
 func (m *Compiled) Transformed() *Transformed { return m.transformed }
-
-// TailThresholds are the totals the tail shares are counted against.
-func (m *Compiled) TailThresholds() []float64 { return m.tailThresholds }
 
 // NodeIDs returns the node names in index order.
 func (m *Compiled) NodeIDs() []string { return m.nodeIDs }

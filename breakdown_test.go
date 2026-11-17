@@ -53,11 +53,11 @@ func TestNoBreakdown(t *testing.T) {
 			t.Errorf("entries at %s differ", name)
 		}
 	}
-	if len(sa.ByCategory) == 0 || len(sa.TailShares) == 0 {
+	if len(sa.ByCategory) == 0 {
 		t.Fatal("the breakdown run has no breakdown")
 	}
-	if len(sb.ByCategory)+len(sb.BySource)+len(sb.ContribPer)+len(sb.TailShares) != 0 {
-		t.Errorf("breakdowns kept: %d categories, %d sources, %d nodes, %d tail shares", len(sb.ByCategory), len(sb.BySource), len(sb.ContribPer), len(sb.TailShares))
+	if len(sb.ByCategory)+len(sb.BySource)+len(sb.ContribPer) != 0 {
+		t.Errorf("breakdowns kept: %d categories, %d sources, %d nodes", len(sb.ByCategory), len(sb.BySource), len(sb.ContribPer))
 	}
 	if a.Steps != b.Steps || a.Periods != b.Periods {
 		t.Errorf("steps %d/%d, periods %d/%d", a.Steps, b.Steps, a.Periods, b.Periods)
@@ -140,9 +140,6 @@ func TestNoBreakdownVariance(t *testing.T) {
 				t.Errorf("%s %s differs:\n%+v\n%+v", kv.name, name, s, kv.b[name])
 			}
 		}
-	}
-	if len(sa.TailShares) != len(sb.TailShares) {
-		t.Errorf("%d tail shares, %d without the variances", len(sa.TailShares), len(sb.TailShares))
 	}
 	pa, pb := ca.Plan(), cb.Plan()
 	if len(pa) != len(pb) {

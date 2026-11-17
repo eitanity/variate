@@ -51,7 +51,7 @@ type PlanRow struct {
 type Summary struct {
 	Total      Stat
 	Exceedance []ECPoint
-	ByCategory map[string]Stat // empty, as are BySource, ContribPer and TailShares, with Config.NoBreakdown
+	ByCategory map[string]Stat // empty, as are BySource and ContribPer, with Config.NoBreakdown
 	BySource   map[string]Stat
 
 	ReachProb  map[string]map[string]Prop
@@ -61,7 +61,6 @@ type Summary struct {
 	ContribPer map[string]Stat // value booked per period at each node
 	Layers     map[string]Stat // each layer's payout per period, its share that of the total's mean
 	Triggers   map[string]Stat // by the trigger's source name: the sum it tests per period
-	TailShares []TailShare     // who the tail belongs to, at each threshold with a period
 	Plan       []PlanRow
 	Queues     map[string]QueueSummary // by the queue node's name
 	At         []LevelStat             // Config.At in its order
@@ -136,7 +135,6 @@ func (w *Workspace) Summarize(dst *Summary) {
 	for i, tr := range w.m.trigs {
 		dst.Triggers[r.Sources[tr.src]] = w.stat(&r.Triggers[i], 1)
 	}
-	dst.TailShares = w.tailShares(dst.TailShares)
 	w.summarizeReach(dst)
 	w.summarizeQueues(dst)
 	dst.At = dst.At[:0]

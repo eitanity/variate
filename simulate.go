@@ -428,7 +428,6 @@ func (w *Workspace) closeRow(sl *slot, row []float64, p int64, hs []*stats.LogHi
 	if w.m.tailX > 0 && total >= w.m.tailX {
 		sl.tail++
 	}
-	w.addTail(sl, row, total)
 	w.addWhen(sl, row)
 	w.keepSeries(row, p)
 }

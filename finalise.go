@@ -74,13 +74,5 @@ func (w *Workspace) mergeSlot(sl *slot) {
 			copy(s.rows[int(sl.task)*len(sl.rows):], sl.rows)
 		}
 	}
-	width := w.l.tailWidth()
-	for j := range r.TailCounts {
-		r.TailCounts[j] += sl.tailCounts[j]
-		sums := sl.tailSums[j*width : (j+1)*width]
-		for i, v := range sums {
-			r.TailSums[j][i] += v
-		}
-	}
 	w.mergeWhen(sl)
 }

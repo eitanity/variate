@@ -2,7 +2,6 @@ package suite
 
 import (
 	"context"
-	"math"
 	"testing"
 
 	"code.eitanity.com/variate"
@@ -28,7 +27,7 @@ func TestQuantityAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer w.Close()
-	r, err := w.Run(context.Background(), 4)
+	_, err = w.Run(context.Background(), 4)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,33 +60,6 @@ func TestQuantityAccess(t *testing.T) {
 	}
 	if sum.ContribPer["major_repair"].Mean <= 0 || sum.ContribPer["auto_restart"].Mean != 0 {
 		t.Errorf("contrib per node: %+v", sum.ContribPer)
-	}
-	// Tail shares: at every threshold with a period the sources' shares
-	// and the categories' shares each sum to one, and the periods fall as
-	// the threshold rises; the lowest threshold is below the mean, so it
-	// counts most periods.
-	if len(sum.TailShares) == 0 {
-		t.Fatal("no tail shares")
-	}
-	last := int64(math.MaxInt64)
-	for _, ts := range sum.TailShares {
-		src, cat := 0.0, 0.0
-		for _, v := range ts.BySource {
-			src += v
-		}
-		for _, v := range ts.ByCategory {
-			cat += v
-		}
-		if math.Abs(src-1) > 1e-9 || math.Abs(cat-1) > 1e-9 {
-			t.Errorf("x %g: shares sum to %g and %g", ts.X, src, cat)
-		}
-		if ts.Periods > last {
-			t.Errorf("x %g: %d periods, more than at the lower threshold", ts.X, ts.Periods)
-		}
-		last = ts.Periods
-	}
-	if sum.TailShares[0].Periods < r.Periods/2 {
-		t.Errorf("the lowest threshold counts %d of %d periods", sum.TailShares[0].Periods, r.Periods)
 	}
 	s := c.Structure()
 	if len(s.Nodes) != len(c.NodeIDs()) || len(s.Outcomes) != len(c.OutcomeNames()) || len(s.Sources) != 2 || s.Sources[0].To != "trip" {

@@ -509,7 +509,7 @@ total is the report's `beyond horizon`.
 
 The report then has two parts. The usual figures describe the
 horizon: each repeat adds up its periods into one horizon total, and
-the mean, quantiles, exceedance curve, tail shares, layers (an annual
+the mean, quantiles, exceedance curve, layers (an annual
 deductible applies to the horizon's total) and the breakdown are over
 those totals, one per repeat; the criteria bind them and the plan
 counts repeats. A table by period gives, for each period of the
@@ -686,7 +686,7 @@ flag wins.
 | `batch`, `pool_size`, `burn_in`, `max_memory`, `round_scratch`, `record_buffer` | sizing of the run's buffers; the defaults suit nearly every model. |
 | `hist_res` | the relative width of the histogram bins the quantiles come from (default 0.001). |
 | `series` | keep every period's totals for output. |
-| `no_breakdown` | skip the per-category, per-source and per-node contribution figures, their precision criteria and the tail shares, so the run is sized by the total alone: much faster when a breakdown sets the length. |
+| `no_breakdown` | skip the per-category, per-source and per-node contribution figures and their precision criteria, so the run is sized by the total alone: much faster when a breakdown sets the length. |
 | `node_hist` | keep histograms of entries per node. |
 | `pace` | when streaming rounds, play them at this duration per period (`1.5s`). |
 

@@ -34,7 +34,6 @@ func (l *layout) queue(c, col int) int { return l.queueAt + queueCols*c + col }
 func (l *layout) level(i int) int { return l.levelAt + i }
 
 func (l *layout) total() int          { return 0 }
-func (l *layout) tailWidth() int      { return l.srcAt + l.srcs } // the rows the tail shares sum
 func (l *layout) cat(c int32) int     { return 1 + int(c) }
 func (l *layout) src(k int32) int     { return l.srcAt + int(k) }
 func (l *layout) entry(v int32) int   { return l.entryAt + int(v) }

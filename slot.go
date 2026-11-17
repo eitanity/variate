@@ -59,9 +59,6 @@ type slot struct {
 	steps                        uint64
 	closed                       int64 // periods closed by the task
 	tail                         int64 // closed periods with Total at or beyond the tail quantile bound
-	// Per tail threshold, the periods that reached it and their rows summed.
-	tailCounts []int64
-	tailSums   []float64 // [threshold×width]
 	// Config.When: the sums of its value half-lines over the block, and
 	// in a started run the horizon's row its return periods keep.
 	when []float64
@@ -93,8 +90,6 @@ func (sl *slot) reset() {
 	clear(sl.events)
 	clear(sl.reach)
 	clear(sl.outs)
-	clear(sl.tailCounts)
-	clear(sl.tailSums)
 	clear(sl.when)
 	sl.steps = 0
 	sl.dropped = 0

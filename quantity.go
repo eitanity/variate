@@ -1,7 +1,5 @@
 package variate
 
-import "math"
-
 // Quantities a run keeps a histogram of, beyond the total: each
 // category, each source, and each node's entries and contribution when
 // Config.NodeHist asks for them. These accessors let a report draw any
@@ -98,84 +96,6 @@ func (w *Workspace) QuantityStat(row int) Stat {
 		total = w.result.Total.Mean()
 	}
 	return w.stat(w.accum(row), total)
-}
-
-// TailShare is the share of the total each source and category booked
-// over the periods whose total reached X: who the tail belongs to.
-type TailShare struct {
-	X          float64
-	Periods    int64
-	BySource   map[string]float64
-	ByCategory map[string]float64
-}
-
-// tailShares computes the shares at every threshold with a period.
-func (w *Workspace) tailShares(dst []TailShare) []TailShare {
-	r := &w.result
-	l := w.l
-	dst = dst[:0]
-	for j, x := range w.m.tailThresholds {
-		if r.TailCounts[j] == 0 {
-			continue
-		}
-		sums := r.TailSums[j]
-		total := sums[l.total()]
-		ts := TailShare{X: x, Periods: r.TailCounts[j], BySource: map[string]float64{}, ByCategory: map[string]float64{}}
-		for k, name := range r.Sources {
-			ts.BySource[name] = share(sums[l.src(index(k))], total)
-		}
-		for c, name := range r.Categories {
-			ts.ByCategory[name] = share(sums[l.cat(index(c))], total)
-		}
-		dst = append(dst, ts)
-	}
-	return dst
-}
-
-func share(part, total float64) float64 {
-	if total == 0 {
-		return math.NaN()
-	}
-	return part / total
-}
-
-// addTail adds a closed period's total, categories and sources to the
-// sums of every threshold its total reached; the thresholds ascend, so
-// the first miss ends it.
-func (w *Workspace) addTail(sl *slot, row []float64, total float64) {
-	width := w.l.tailWidth()
-	// bound: tail thresholds
-	for j, x := range w.m.tailThresholds {
-		if total < x {
-			return
-		}
-		sl.tailCounts[j]++
-		sums := sl.tailSums[j*width : (j+1)*width]
-		for i := range sums {
-			sums[i] += row[i]
-		}
-	}
-}
-
-// Thresholds of the tail shares: powers of two about the exact mean,
-// from a sixteenth to 2^19 of it, fixed at compile so that every period
-// is counted against the same levels.
-const (
-	tailThresholdCount = 24
-	tailThresholdFirst = -4
-)
-
-// tailLevels is the thresholds for a mean, or none for a mean that is
-// not positive and finite.
-func tailLevels(mean float64) []float64 {
-	if !(mean > 0) || math.IsInf(mean, 1) {
-		return nil
-	}
-	out := make([]float64, tailThresholdCount)
-	for j := range out {
-		out[j] = mean * math.Pow(2, float64(j+tailThresholdFirst))
-	}
-	return out
 }
 
 // Structure describes the compiled graph for drawing: the nodes with

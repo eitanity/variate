@@ -707,7 +707,6 @@ func (rep *Report) WriteJSON(w *bufio.Writer) {
 	j.stats("contrib_per", rep.Sum.ContribPer)
 	rep.jsonLayers(j)
 	rep.jsonTriggerSums(j)
-	rep.jsonTailShares(j)
 	rep.jsonAsked(j)
 	j.key("reach")
 	j.open('{')
@@ -878,32 +877,6 @@ func (rep *Report) jsonTriggerSums(j *jw) {
 	if len(rep.Sum.Triggers) > 0 {
 		j.stats("trigger_sums", rep.Sum.Triggers)
 	}
-}
-
-// jsonTailShares writes who the tail belongs to at each threshold.
-func (rep *Report) jsonTailShares(j *jw) {
-	j.key("tail_shares")
-	j.open('[')
-	for _, ts := range rep.Sum.TailShares {
-		j.sep()
-		j.open('{')
-		j.field("x", ts.X)
-		j.fieldInt("periods", ts.Periods)
-		j.key("by_source")
-		j.open('{')
-		for _, name := range sortedKeys(ts.BySource) {
-			j.field(name, ts.BySource[name])
-		}
-		j.closeC('}')
-		j.key("by_category")
-		j.open('{')
-		for _, name := range sortedKeys(ts.ByCategory) {
-			j.field(name, ts.ByCategory[name])
-		}
-		j.closeC('}')
-		j.closeC('}')
-	}
-	j.closeC(']')
 }
 
 func (rep *Report) jsonExceedance(j *jw) {

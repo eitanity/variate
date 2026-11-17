@@ -189,7 +189,7 @@ func (w *Workspace) allocSlots(nslots int) {
 	}
 	// bound: slots, fixed at construction
 	for i := 0; i < nslots; i++ {
-		sl := newSlot(w.l, w.block, m.pendCap, nslots, len(m.srcs), len(m.nodes), len(m.outs), len(m.tailThresholds))
+		sl := newSlot(w.l, w.block, m.pendCap, nslots, len(m.srcs), len(m.nodes), len(m.outs))
 		sl.coarse = w.slotCoarse()
 		sl.when = make([]float64, w.slotWhen)
 		if w.anyOneIn && w.started {
@@ -393,9 +393,8 @@ func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
 			bins += int64(h.Bins()) + exactBucketsOf(h)
 		}
 	}
-	// Each slot also counts events, reach and outcomes per source, and
-	// the rows summed per tail threshold.
-	counters := int64(len(w.m.srcs))*int64(1+len(w.m.nodes)+len(w.m.outs)) + int64(len(w.m.tailThresholds))*int64(w.l.tailWidth()+1)
+	// Each slot also counts events, reach and outcomes per source.
+	counters := int64(len(w.m.srcs)) * int64(1+len(w.m.nodes)+len(w.m.outs))
 	// With delays, each quantity with a histogram has batch-group
 	// histograms, and each slot a coarse copy of one, all sharing a bin map.
 	coarse, coarseMaps := int64(0), int64(0)
@@ -486,11 +485,6 @@ func (w *Workspace) allocResult() error {
 		}
 	}
 	r.EntriesPer = make([]Accum, len(m.nodes))
-	r.TailCounts = make([]int64, len(m.tailThresholds))
-	r.TailSums = make([][]float64, len(m.tailThresholds))
-	for j := range r.TailSums {
-		r.TailSums[j] = make([]float64, w.l.tailWidth())
-	}
 	w.allocLayers(e, res)
 	w.allocTriggers(res)
 	w.allocQueues(res)
