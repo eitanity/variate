@@ -416,7 +416,14 @@ func (m *Compiled) addNode(rows [][]float64, l layout, k int, v int32, c started
 	}
 	held, heldOK := m.heldTime(v, c, hl, carried, len(rows))
 	book := func(q int, filt valueFilter) {
-		m.bookPeriods(rows, q, v, filt, entries, held, heldOK)
+		if m.discount == nil {
+			m.bookPeriods(rows, q, v, filt, entries, held, heldOK, nil)
+			return
+		}
+		filt.disc = discNone
+		m.bookPeriods(rows, q, v, filt, entries, held, heldOK, nil)
+		filt.disc = discOnly
+		m.bookPeriods(rows, q, v, filt, entries, held, heldOK, m.discount)
 	}
 	book(l.total(), valueFilter{kind: filterAll})
 	book(l.src(index(k)), valueFilter{kind: filterAll})
@@ -455,8 +462,9 @@ func (m *Compiled) heldTime(v int32, c startedClass, hl holdList, carried [][]fl
 
 // bookPeriods adds to column q of each period's row node v's value under
 // the filter: its entry value times the entries, and its rate times the
-// time held, NaN where that has no closed form.
-func (m *Compiled) bookPeriods(rows [][]float64, q int, v int32, filt valueFilter, entries, held []float64, heldOK bool) {
+// time held, NaN where that has no closed form; each period's times its
+// factor, when factors is not nil.
+func (m *Compiled) bookPeriods(rows [][]float64, q int, v int32, filt valueFilter, entries, held []float64, heldOK bool, factors []float64) {
 	n := m.nodes[v]
 	nm := m.nodeMomentsFor(v, filt)
 	own := nm.a
@@ -473,6 +481,9 @@ func (m *Compiled) bookPeriods(rows [][]float64, q int, v int32, filt valueFilte
 			x += nm.rho * held[i]
 		default:
 			x = math.NaN()
+		}
+		if factors != nil {
+			x *= factors[i]
 		}
 		row[q] += x
 	}

@@ -5,7 +5,10 @@
 # report gives each month's figures across the repeats, rising as the
 # open work builds up, beside the year's total; each month's mean is
 # exact, from the share of each earlier month's requests still open.
+# discount gives present values: each month's cost is discounted to
+# today at the rate a month, upkeep and closing alike; at 0 it is off.
 start: { from: empty, horizon: 12 }
+discount: { rate: 0, categories: [running, closing] }
 graphs:
   - id: team
     sources:

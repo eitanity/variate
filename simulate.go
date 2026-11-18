@@ -180,11 +180,12 @@ func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p int64) {
 		if p >= 0 && !wk.given {
 			sl.reach[int(k)*nodes+int(v)]++
 		}
-		row := w.rowFor(sl, t, p)
+		q := p + int64(math.Floor(t))
+		row := w.rowFor(sl, q)
 		row[w.l.entry(v)]++
 		w.count(wk, v)
 		n := m.nodes[v]
-		booked := w.bookEntry(wk, row, k, v, n)
+		booked := w.bookEntry(wk, row, k, v, n, w.factor(q))
 		if w.stopsAt(wk, sl, k, n, t, p) {
 			return
 		}
@@ -274,21 +275,22 @@ func (w *Workspace) advance(wk *worker, sl *slot, k, v int32, n cnode, t float64
 	return hop{out: j, to: o.to}, tau, booked, true
 }
 
-// bookEntry books node v's OnEntry functions into the row and returns the
+// bookEntry books node v's OnEntry functions into the row, d the row's
+// discount factor, and returns the
 // value booked.
-func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode) float64 {
+func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode, d float64) float64 {
 	m := w.m
 	booked := 0.0
 	// bound: functions of one node
 	for f := n.fnStart; f < n.fnEnd; f++ {
 		x := w.draw(wk, m.fns[f].pool)
-		w.book(row, k, v, m.fns[f].category, x)
+		w.book(row, k, v, m.fns[f].category, x, d)
 		w.feed(wk, f, x)
 		booked += x
 	}
 	if n.thresh != noIndex {
 		x := w.draw(wk, m.fns[n.thresh].pool)
-		w.book(row, k, v, m.fns[n.thresh].category, x)
+		w.book(row, k, v, m.fns[n.thresh].category, x, d)
 		w.feed(wk, n.thresh, x)
 		booked += x
 		wk.tested = x
@@ -296,11 +298,10 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode) fl
 	return booked
 }
 
-// rowFor returns the row for a booking at time t from the start of
-// arrival period p: the period's row within the block, else the scratch
-// row, which the caller flushes to the pending list.
-func (w *Workspace) rowFor(sl *slot, t float64, p int64) []float64 {
-	q := p + int64(math.Floor(t))
+// rowFor returns the row for a booking in period q: the period's row
+// within the block, else the scratch row, which the caller flushes to the
+// pending list.
+func (w *Workspace) rowFor(sl *slot, q int64) []float64 {
 	if q < sl.b {
 		return sl.rowAt(w.l, q)
 	}
@@ -308,9 +309,14 @@ func (w *Workspace) rowFor(sl *slot, t float64, p int64) []float64 {
 }
 
 // book adds a value to a row's total, category, source and node
-// contribution; a category outside the total gets it alone.
-func (w *Workspace) book(row []float64, k, v, cat int32, x float64) {
+// contribution; a category outside the total gets it alone. A
+// discounted category books it times d, the row's period's factor: the
+// one place a value is discounted, so what it feeds on is not.
+func (w *Workspace) book(row []float64, k, v, cat int32, x, d float64) {
 	l := &w.l
+	if w.m.discounted[cat] {
+		x *= d
+	}
 	if !w.m.inTotal[cat] {
 		row[l.cat(cat)] += x
 		return
@@ -338,7 +344,7 @@ func (w *Workspace) bookRate(wk *worker, sl *slot, k, v int32, n cnode, a, b flo
 			lo := math.Max(a, q)
 			hi := math.Min(b, q+1)
 			x := rate * (hi - lo)
-			w.book(sl.rowAt(w.l, p+int64(q)), k, v, cat, x)
+			w.book(sl.rowAt(w.l, p+int64(q)), k, v, cat, x, w.factor(p+int64(q)))
 			w.feed(wk, f, x)
 			total += x
 		}

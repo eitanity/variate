@@ -149,7 +149,7 @@ type loader struct {
 
 // topKeys are the keys allowed at the top level besides the settings.
 func topKeys() []string {
-	return append([]string{"period", "phase", "start", "graphs", "templates", "factors", "schedules", "layers", "totals", "outside_total"}, settingKeys()...)
+	return append([]string{"period", "phase", "start", "graphs", "templates", "factors", "schedules", "layers", "totals", "outside_total", "discount"}, settingKeys()...)
 }
 
 func (l *loader) load(root node) (*Model, error) {

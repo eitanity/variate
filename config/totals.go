@@ -3,8 +3,8 @@ package config
 import "code.eitanity.com/variate"
 
 // parseTotals reads the named totals, each an id, the categories it
-// sums and those it subtracts, and the categories kept outside the
-// total.
+// sums and those it subtracts, the categories kept outside the total,
+// and the discount.
 func (l *loader) parseTotals(top map[string]node) error {
 	if x, ok := top["totals"]; ok {
 		items, err := x.items()
@@ -26,7 +26,7 @@ func (l *loader) parseTotals(top map[string]node) error {
 		}
 		l.model.Graph.OutsideTotal = out
 	}
-	return nil
+	return l.parseDiscount(top)
 }
 
 // parseTotal reads one named total.
@@ -69,4 +69,39 @@ func names(x node) ([]string, error) {
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// parseDiscount reads discount: { rate | factors, categories }, a
+// started run's discount on the categories it names.
+func (l *loader) parseDiscount(top map[string]node) error {
+	x, ok := top["discount"]
+	if !ok {
+		return nil
+	}
+	m, err := x.mapping("rate", "factors", "categories")
+	if err != nil {
+		return err
+	}
+	d := &l.model.Graph.Discount
+	c, ok := m["categories"]
+	if !ok {
+		return x.errorf("discount names no categories")
+	}
+	if d.Categories, err = names(c); err != nil {
+		return err
+	}
+	if r, ok := m["rate"]; ok {
+		if d.Rate, err = r.float(); err != nil {
+			return err
+		}
+	}
+	if f, ok := m["factors"]; ok {
+		if d.Factors, err = f.floats(0); err != nil {
+			return err
+		}
+	}
+	if _, ok := m["rate"]; !ok && d.Factors == nil {
+		return x.errorf("discount needs a rate or factors")
+	}
+	return nil
 }

@@ -61,7 +61,7 @@ func (b *builder) flatten() (*Compiled, error) {
 		return nil, modelError("graph", b.g.ID, "too many distributions")
 	}
 	m.categories = categoryNames(cats)
-	if err := m.flattenTotals(b.g.Totals, b.g.OutsideTotal, cats); err != nil {
+	if err := b.flattenBooks(m, cats); err != nil {
 		return nil, err
 	}
 	b.flattenTriggers(m)

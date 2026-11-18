@@ -162,7 +162,7 @@ func (w *Workspace) bookSeg(sl *slot, s pendSeg, hi float64) float64 {
 	for q := math.Floor(s.lo); q < hi; q++ {
 		lo := math.Max(s.lo, q)
 		x := s.rate * (math.Min(hi, q+1) - lo)
-		w.book(sl.rowAt(w.l, s.p0+int64(q)), s.k, s.v, s.cat, x)
+		w.book(sl.rowAt(w.l, s.p0+int64(q)), s.k, s.v, s.cat, x, w.factor(s.p0+int64(q)))
 		total += x
 	}
 	if !w.m.inTotal[s.cat] {

@@ -45,7 +45,14 @@ type Expectation struct {
 type valueFilter struct {
 	kind  int
 	index int32
+	disc  int8 // discAny, or only the discounted categories or the others
 }
+
+const (
+	discAny = iota
+	discOnly
+	discNone
+)
 
 const (
 	filterAll = iota
@@ -68,6 +75,9 @@ type nodeMoments struct {
 // function f under the filter; a filtered-out function contributes 0.
 func (m *Compiled) fnMoments(f int32, filt valueFilter) (mean, second float64, period bool) {
 	c := m.fns[f]
+	if filt.disc != discAny && m.discounted[c.category] != (filt.disc == discOnly) {
+		return 0, 0, false
+	}
 	switch filt.kind {
 	case filterAll:
 		if !m.inTotal[c.category] {

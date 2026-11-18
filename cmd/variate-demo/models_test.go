@@ -345,3 +345,37 @@ func TestDemoTotals(t *testing.T) {
 		t.Errorf("crew hours 48: total %v worked %v, against %v and %v", s2.Total.Mean, s2.Totals["worked"].Mean, s.Total.Mean, s.Totals["worked"].Mean)
 	}
 }
+
+// TestDemoDiscount: the started team at 1% a month simulates the same
+// requests as without a discount, at the same seed, and each month's
+// cost, simulated and exact, is (1.01)^-month times the undiscounted.
+func TestDemoDiscount(t *testing.T) {
+	run := func(rate float64) (*variate.Result, *variate.Expectation) {
+		cfg := variate.Config{Repeats: 2000, Seed: 1, AllowUnconverged: true}
+		c, _, err := demoGraph(t, "startup", map[string]float64{"discount": rate}).Compile(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, err := c.Analytic()
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := c.Simulate(context.Background(), cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r, e
+	}
+	plain, pe := run(0)
+	disc, de := run(0.01)
+	for k := range plain.ByPeriod.Periods() {
+		f := math.Pow(1.01, -float64(k+1))
+		got, want := disc.ByPeriod.Total(k).Mean, f*plain.ByPeriod.Total(k).Mean
+		if math.Abs(got-want) > 1e-9*want || math.Abs(de.ByPeriod[k][0]-f*pe.ByPeriod[k][0]) > 1e-9*want {
+			t.Errorf("month %d: %v, want %v; exact %v, want %v", k+1, got, want, de.ByPeriod[k][0], f*pe.ByPeriod[k][0])
+		}
+		if disc.ByPeriod.Entries(0, k).Mean != plain.ByPeriod.Entries(0, k).Mean {
+			t.Errorf("month %d: the requests differ", k+1)
+		}
+	}
+}

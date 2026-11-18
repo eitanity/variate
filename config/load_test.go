@@ -656,3 +656,31 @@ graphs:
 	parseErr(t, strings.Replace(text, "range: [1.5, 3]", "range: { by: [1, 2] }", 1), "range")
 	parseErr(t, strings.Replace(text, "range: [1.5, 3]", "range: 2", 1), "range")
 }
+
+// TestDiscountKeys: discount reads a rate or factors and the categories
+// it applies to, and needs both.
+func TestDiscountKeys(t *testing.T) {
+	text := `
+start: { from: empty, horizon: 3 }
+discount: { rate: 0.05, categories: [labour] }
+graphs:
+  - id: g
+    sources:
+      - { id: a, frequency: 2, to: n }
+    nodes:
+      - id: n
+        functions:
+          - { name: crew, category: labour, constant: 1 }
+`
+	d := parse(t, text).Graph.Discount
+	if d.Rate != 0.05 || d.Factors != nil || strings.Join(d.Categories, ",") != "labour" {
+		t.Errorf("discount %+v", d)
+	}
+	d = parse(t, strings.Replace(text, "rate: 0.05", "factors: [0.9, 0.8, 0.7]", 1)).Graph.Discount
+	if d.Rate != 0 || len(d.Factors) != 3 || d.Factors[2] != 0.7 {
+		t.Errorf("discount %+v", d)
+	}
+	parseErr(t, strings.Replace(text, ", categories: [labour]", "", 1), "discount names no categories")
+	parseErr(t, strings.Replace(text, "rate: 0.05, ", "", 1), "discount needs a rate or factors")
+	parseErr(t, strings.Replace(text, "rate: 0.05", "rate: 0.05, mid: true", 1), "unknown key")
+}

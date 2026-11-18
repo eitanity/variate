@@ -259,10 +259,15 @@ func StartFrom(c *variate.Compiled) string {
 	return "empty"
 }
 
-// WriteStartState writes a given state's entries, a line each.
+// WriteStartState writes a given state's entries, a line each, and the
+// discount, if any.
 func WriteStartState(w io.Writer, c *variate.Compiled) {
 	for _, s := range c.StartState() {
 		fmt.Fprintf(w, "  at the start: %s\n", s)
+	}
+	if f := c.DiscountFactors(); f != nil {
+		fmt.Fprintf(w, "  discounted: %s, period 1 times %.6g to period %d times %.6g; their figures are present values\n",
+			strings.Join(c.DiscountedCategories(), ", "), f[0], len(f), f[len(f)-1])
 	}
 }
 
@@ -1347,9 +1352,30 @@ func (rep *Report) jsonLength(j *jw) {
 			}
 			j.closeC(']')
 		}
+		jsonDiscount(j, rep.C)
 		return
 	}
 	j.fieldInt("periods", rep.R.Periods)
+}
+
+// jsonDiscount writes the discount: the categories and each period's
+// factor.
+func jsonDiscount(j *jw, c *variate.Compiled) {
+	f := c.DiscountFactors()
+	if f == nil {
+		return
+	}
+	j.key("discount")
+	j.open('{')
+	j.key("categories")
+	j.open('[')
+	for _, name := range c.DiscountedCategories() {
+		j.sep()
+		j.str(name)
+	}
+	j.closeC(']')
+	j.nums("factors", f)
+	j.closeC('}')
 }
 
 // jsonPeriods writes a started run's per-period figures: per quantity,

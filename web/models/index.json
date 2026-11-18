@@ -211,7 +211,7 @@
   "id": "startup",
   "title": "From an empty start (a started run)",
   "file": "startup.yaml",
-  "about": "A team starts today with nothing in progress. Requests arrive each month and stay open for a lognormal time, costing upkeep while open and a fee when closed. The run repeats the first months from empty, so the period-by-period chart shows the cost building up month by month to its steady level, each month's exact mean beside the simulated one. The other charts describe the horizon's total, one per repeat.",
+  "about": "A team starts today with nothing in progress. Requests arrive each month and stay open for a lognormal time, costing upkeep while open and a fee when closed. The run repeats the first months from empty, so the period-by-period chart shows the cost building up month by month to its steady level, each month's exact mean beside the simulated one. The other charts describe the horizon's total, one per repeat. A discount per month turns every figure into a present value: later months count for less, and the same requests are simulated.",
   "knobs": [
    {
     "key": "horizon",
@@ -252,6 +252,14 @@
     "max": 500,
     "step": 10,
     "value": 200
+   },
+   {
+    "key": "discount",
+    "label": "Discount rate per month (0.01 is 1%)",
+    "min": 0,
+    "max": 0.05,
+    "step": 0.001,
+    "value": 0
    }
   ]
  },

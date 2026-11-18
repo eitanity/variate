@@ -110,6 +110,8 @@ type Compiled struct {
 	inTotal                                      []bool      // [category]: booked into the total, the sources and the nodes
 	totals                                       []ctotal    // the totals the model names
 	gridTotals                                   []int32     // those the transform brackets: the ones that only add
+	discounted                                   []bool      // [category]: booked times its period's discount factor
+	discount                                     []float64   // [period]: a started run's discount factors; nil = none
 	schedules                                    []schedule  // the model's schedules, with their pools
 	cycle                                        jointCycle  // the schedules' values over their combined cycle
 	scheduleRatio                                [][]float64 // [schedule][schedule]: E[a·b]/(E[a]·E[b]) over the combined cycle

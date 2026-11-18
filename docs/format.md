@@ -37,6 +37,7 @@ the line.
 | `layers` | functions of the period total reported beside it, each `{ id, attachment, limit, share }`: an aggregate deductible, an aggregate limit or a reinsurance layer (below). |
 | `totals` | sums of chosen categories reported beside the total, each `{ id, categories: [...], less: [...] }`, `less` optional (below). |
 | `outside_total` | categories booked and reported but added to no total but a named one, such as hours beside money (below). |
+| `discount` | in a started run, the categories whose values are discounted by the period they land in, `{ rate: r, categories: [...] }` or `{ factors: [...], categories: [...] }` (below). |
 | settings | any run setting by its snake_case name, e.g. `periods`, `seed`, `transform` (table at the end). |
 
 The file may hold one YAML document, without anchors, aliases or custom
@@ -588,6 +589,38 @@ the block's time down, which a state does not hold. What the given
 rounds reach has no exact per-period mean and is simulated; another
 source's rounds keep theirs. The round stream is refused, as it follows
 a round from its arrival.
+
+### Discounting
+
+A started run can give present values: a value booked in a later period
+of the horizon is worth less today than the same value in period 1.
+Discounting is off unless the model asks for it, and applies only to
+the categories it names:
+
+```yaml
+discount: { rate: 0.05, categories: [revenue, labour, parts] }
+```
+
+A value in a named category booked in period p is booked times
+(1 + rate)^-p, discounted to the start from the end of its period;
+`factors: [...]`, one per period of the horizon, each 0 or more, give
+any other curve in place of `rate`, such as (1 + rate)^-(p - 1/2) for
+the middle of the period. A category not named, such as hours, is never
+discounted.
+
+A value is discounted once, as it is booked, and nowhere else. Every
+figure of a named category is of present values: the table by period,
+the horizon's total, its quantiles, layers, `--at`, `--when`, the
+breakdowns by category, source and node, and a named total, which is
+discounted through its categories and is refused in the list itself.
+What the model does with a value is not discounted: what a node feeds a
+trigger or a threshold, which rounds take which outcome and how long
+they hold, so a discounted run simulates the same rounds as one without
+it at the same seed. Each period's exact mean is the factor times the
+undiscounted one. What a repeat books past the horizon, the report's
+`beyond horizon`, is not discounted. A discount whose every factor is 1
+changes nothing. The report names the categories and the first and last
+factors, and the JSON gives `discount` with every factor.
 
 ## Layers of the period total
 

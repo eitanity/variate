@@ -162,8 +162,9 @@ type Graph struct {
 	Layers          []Layer // functions of the period total reported beside it
 	Totals          []Total // sums of chosen categories reported beside the total
 	OutsideTotal    []string
-	Phased          Phase // set by Phase: the place in the cycle every schedule is fixed at
-	Start           Start // where a run begins: steady state, or a started run's horizon
+	Phased          Phase    // set by Phase: the place in the cycle every schedule is fixed at
+	Start           Start    // where a run begins: steady state, or a started run's horizon
+	Discount        Discount // a started run's discount on chosen categories; zero = none
 }
 
 // Config holds every run setting; each field's zero value selects the
