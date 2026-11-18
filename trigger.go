@@ -325,7 +325,10 @@ func fireOf(g Graph, id string, over float64, below bool, cfg Config) sumFigures
 		out.f.Reason = "the sum's model: " + err.Error()
 		return out
 	}
-	e, err := dm.Analytic()
+	// With a factor on a value the transform below refuses the sum; the
+	// model's own figures then condition on the factor, each conditioned
+	// model's sum having none.
+	e, err := dm.analytic()
 	if err != nil {
 		out.f.Reason = "the sum's model: " + err.Error()
 		return out

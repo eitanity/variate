@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -377,5 +378,54 @@ func TestDemoDiscount(t *testing.T) {
 		if disc.ByPeriod.Entries(0, k).Mean != plain.ByPeriod.Entries(0, k).Mean {
 			t.Errorf("month %d: the requests differ", k+1)
 		}
+	}
+}
+
+// TestDemoPrices: the factory line's prices leave the exact means of
+// the parts and the revenue as they are, at mean 1, and a wider spread
+// widens both and the correlation between them across the years.
+func TestDemoPrices(t *testing.T) {
+	run := func(sd float64) (*variate.Compiled, *variate.Expectation, *variate.Result) {
+		cfg := variate.Config{Periods: 20000, Seed: 1, AllowUnconverged: true, Series: true}
+		c, _, err := demoGraph(t, "line", map[string]float64{"prices": sd}).Compile(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, err := c.Analytic()
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := c.Simulate(context.Background(), cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c, e, r
+	}
+	corr := func(c *variate.Compiled, r *variate.Result) (float64, float64) {
+		cat := map[string]int{}
+		for i, name := range c.Categories() {
+			cat[name] = i
+		}
+		n := float64(r.Series.Periods())
+		var sx, sy, sxx, syy, sxy float64
+		for p := range r.Series.Periods() {
+			x, y := r.Series.Category(cat["parts"], p), r.Series.Category(cat["revenue"], p)
+			sx, sy, sxx, syy, sxy = sx+x, sy+y, sxx+x*x, syy+y*y, sxy+x*y
+		}
+		vx := sxx/n - sx*sx/n/n
+		return (sxy/n - sx*sy/n/n) / math.Sqrt(vx*(syy/n-sy*sy/n/n)), math.Sqrt(vx)
+	}
+	cn, en, rn := run(0.01)
+	cw, ew, rw := run(0.4)
+	for _, name := range []string{"parts", "revenue"} {
+		i := slices.Index(cn.Categories(), name)
+		if math.Abs(en.MeanByCategory[i]-ew.MeanByCategory[i]) > 1e-9*en.MeanByCategory[i] {
+			t.Errorf("%s: exact mean %v narrow, %v wide", name, en.MeanByCategory[i], ew.MeanByCategory[i])
+		}
+	}
+	rhoN, sdN := corr(cn, rn)
+	rhoW, sdW := corr(cw, rw)
+	if !(rhoN < 0.05 && rhoW > 0.3 && sdW > 1.2*sdN) {
+		t.Errorf("parts and revenue: correlation %v narrow, %v wide; parts sd %v and %v", rhoN, rhoW, sdN, sdW)
 	}
 }

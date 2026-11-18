@@ -327,6 +327,9 @@ func (t *transformer) applicable() string {
 	if m.HasTriggers() && m.whole == nil {
 		return "a trigger fires on a period's sum, which the rest of the total depends on, unless it is the only trigger and sums every value the sources book"
 	}
+	if len(m.valueFactors()) > 0 {
+		return "a factor scales a function's value"
+	}
 	if m.cycle.over {
 		return "the schedules' combined cycle is longer than " + itoa(maxJointPeriods) + " periods or has more than " + itoa(maxJointPoints) + " distinct places"
 	}

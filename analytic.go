@@ -101,6 +101,12 @@ func (m *Compiled) fnMoments(f int32, filt valueFilter) (mean, second float64, p
 	d := m.pools[c.pool]
 	mean = d.Mean()
 	second = d.Var() + mean*mean
+	if c.factor != noIndex {
+		// The factor's moments stand in for it; Analytic conditions on it.
+		g := m.pools[c.factor]
+		mean *= g.Mean()
+		second *= g.Var() + g.Mean()*g.Mean()
+	}
 	if filt.kind == filterTotal {
 		// A subtracted value's mean changes sign; its square does not.
 		mean *= m.totals[filt.index].sign(int(c.category))
@@ -205,6 +211,15 @@ func rateSecond(rho2, tau2 float64) float64 {
 // Config.NoBreakdown or Config.NoBreakdownVariance the per-source,
 // per-category and per-node variances are NaN, left uncomputed.
 func (m *Compiled) Analytic() (*Expectation, error) {
+	if len(m.valueFactors()) > 0 {
+		return m.conditionedAnalytic()
+	}
+	return m.analytic()
+}
+
+// analytic is Analytic for a model without value factors, or with
+// their means standing in for them.
+func (m *Compiled) analytic() (*Expectation, error) {
 	e, lam, m1, m2 := m.means()
 	e.Var = m.variance(valueFilter{kind: filterAll}, lam, m1, m2, e.Mean)
 	d1, d2 := m.valueToGo(valueFilter{kind: filterDraws})

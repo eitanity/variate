@@ -353,15 +353,9 @@ func (s *sweeper) exact(g Graph, fig sweepFigure) (Range, error) {
 	if err != nil {
 		return Range{}, err
 	}
-	e, _, _, _ := m.means()
-	// A trigger's unknown P(fire) has a bound standing in for it in the
-	// means, which sizes the histograms; the figures it reaches are not
-	// exact.
-	m.maskFirings(e)
-	if m.Started() {
-		m.startedMeans(e)
-	} else {
-		m.maskQueues(e)
+	e, err := m.sweepMeans()
+	if err != nil {
+		return Range{}, err
 	}
 	v := math.NaN()
 	switch fig.kind {
@@ -389,6 +383,25 @@ func (s *sweeper) exact(g Graph, fig sweepFigure) (Range, error) {
 		return Range{}, errNoMethod
 	}
 	return Range{Lo: v, Hi: v}, nil
+}
+
+// sweepMeans is the model's exact means: with value factors, by
+// conditioning on them, as Analytic gives them.
+func (m *Compiled) sweepMeans() (*Expectation, error) {
+	if len(m.valueFactors()) > 0 {
+		return m.Analytic()
+	}
+	e, _, _, _ := m.means()
+	// A trigger's unknown P(fire) has a bound standing in for it in the
+	// means, which sizes the histograms; the figures it reaches are not
+	// exact.
+	m.maskFirings(e)
+	if m.Started() {
+		m.startedMeans(e)
+	} else {
+		m.maskQueues(e)
+	}
+	return e, nil
 }
 
 // transform is the figure's bracket from the transform, when it applies.

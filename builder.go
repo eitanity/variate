@@ -9,6 +9,7 @@ import (
 // builder validates a Graph and flattens it into a Compiled.
 type builder struct {
 	factorIndex   map[string]int32
+	factorPool    []int32 // each factor's pool
 	scheduleIndex map[string]int32
 	g             Graph
 	cfg           Config
@@ -204,6 +205,24 @@ func checkOutage(n Node) error {
 	return nil
 }
 
+// checkFunctions checks a node's functions: their laws, a rate only
+// where a holding time holds it, and the factor each names.
+func (b *builder) checkFunctions(n Node) error {
+	leaf := len(n.Outcomes) == 0 && n.Next == "" && n.Threshold == nil && n.Queue == nil
+	for _, f := range n.Functions {
+		if err := checkSlot("function", n.ID+"."+f.Name, f.Model, 0, math.Inf(1), false); err != nil {
+			return err
+		}
+		if f.Basis == PerTime && leaf {
+			return modelError("function", n.ID+"."+f.Name, "per-time function on a leaf: nothing holds it")
+		}
+		if _, ok := b.factorIndex[f.Factor]; f.Factor != "" && !ok {
+			return modelError("function", n.ID+"."+f.Name, "factor "+f.Factor+" not found")
+		}
+	}
+	return nil
+}
+
 func (b *builder) checkNode(n Node) error {
 	if err := checkOutage(n); err != nil {
 		return err
@@ -219,14 +238,8 @@ func (b *builder) checkNode(n Node) error {
 	if err := b.checkQueue(n); err != nil {
 		return err
 	}
-	leaf := len(n.Outcomes) == 0 && n.Next == "" && n.Threshold == nil && n.Queue == nil
-	for _, f := range n.Functions {
-		if err := checkSlot("function", n.ID+"."+f.Name, f.Model, 0, math.Inf(1), false); err != nil {
-			return err
-		}
-		if f.Basis == PerTime && leaf {
-			return modelError("function", n.ID+"."+f.Name, "per-time function on a leaf: nothing holds it")
-		}
+	if err := b.checkFunctions(n); err != nil {
+		return err
 	}
 	if n.Threshold != nil {
 		return nil

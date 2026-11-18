@@ -56,6 +56,7 @@ type cout struct {
 type cfn struct {
 	pool     int32
 	category int32
+	factor   int32 // the pool of a shared factor multiplying the value, or noIndex
 }
 
 // csrc is a compiled source.
@@ -112,6 +113,8 @@ type Compiled struct {
 	gridTotals                                   []int32     // those the transform brackets: the ones that only add
 	discounted                                   []bool      // [category]: booked times its period's discount factor
 	discount                                     []float64   // [period]: a started run's discount factors; nil = none
+	factorPools                                  []int32     // [factor]: its pool
+	graph                                        Graph       // the graph compiled, which value factors condition on
 	schedules                                    []schedule  // the model's schedules, with their pools
 	cycle                                        jointCycle  // the schedules' values over their combined cycle
 	scheduleRatio                                [][]float64 // [schedule][schedule]: E[a·b]/(E[a]·E[b]) over the combined cycle
@@ -227,6 +230,7 @@ func (g Graph) flattenReached(cfg Config) (*Compiled, *builder, error) {
 		return nil, nil, err
 	}
 	m.cfg = cfg
+	m.graph = g
 	m.phase = g.Phased
 	m.horizon = int64(g.Start.Horizon)
 	if err := reachCap(g.ID, len(m.srcs), len(m.nodes)); err != nil {

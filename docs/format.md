@@ -119,6 +119,7 @@ event ends; a trigger's node is no different. The graph must be acyclic.
 | `basis` | `on_entry` (default): the value is booked once when the event enters. `per_time`: the value is a rate per time unit, booked over the holding time of the outcome the event takes; the node must have outcomes or a `next` with a holding. |
 | `unit` | for `per_time`, the time unit of the rate. |
 | `scope` | `event` (default): drawn afresh for every event. `period`: drawn once per period and shared by every event of that period. |
+| `factor` | a factor's id (below): the value, or a `per_time` function's rate, is multiplied by the factor's draw for the period, shared with every value and rate naming it. |
 | a distribution | the value, written inline beside the keys above: `pert: [...]`, `lognormal: {...}`, a number, and so on. |
 
 ### Outcomes
@@ -323,6 +324,38 @@ A factor with mean 1 leaves every mean unchanged and adds only the
 dependence; a factor's mean scales the rates it touches. Write a
 lognormal factor by its mean and sd for that reason: `{ median: 1,
 p90: 1.8 }` has mean 1.11, so it raises every rate it touches by 11%.
+
+A function can name a factor too, and its value is then multiplied by
+the factor's draw: one shock to the size of values, as inflation or a
+price index is, rather than to how often they happen. Every value and
+rate naming the factor moves with it in the same period, so the values
+of different nodes move together, and a factor on both a source's rate
+and its values makes a bad period both busier and dearer.
+
+```yaml
+factors:
+  - { id: prices, lognormal: { mean: 1, sd: 0.2 } }
+graphs:
+  - id: line
+    nodes:
+      - id: repair
+        functions:
+          - { name: spares, category: parts, lognormal: { median: 3000, p90: 12000 }, factor: prices }
+```
+
+The value multiplied is the value: a threshold tests it, a trigger sums
+it and a layer pays on it. A constant factor is folded into the laws,
+so a factor of 1 changes nothing. The exact mean and variance condition
+on the factors: given their draws the model is the same model with
+those values and rates scaled, and over a Gauss rule for each factor
+the figures are mixed, the variance as the mean of the variances given
+the draws plus the variance of the means. The moments given the draws
+are polynomials in them, which a three-node rule integrates exactly; a
+threshold or a trigger on a scaled value is not, and the rule doubles
+until every figure settles, a figure that does not being simulated
+with its error. A factor on values needs a finite variance for these
+figures. The exact distribution is not computed for a model with a
+factor on a value.
 
 ## Rates that vary by period
 

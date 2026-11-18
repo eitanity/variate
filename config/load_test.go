@@ -489,7 +489,8 @@ graphs:
 	}
 }
 
-// TestFactorKeys: factors parse at the top level and a source names one.
+// TestFactorKeys: factors parse at the top level, and a source and a
+// function name one.
 func TestFactorKeys(t *testing.T) {
 	text := `
 period: { days: 365 }
@@ -501,11 +502,14 @@ graphs:
       - { id: a, frequency: 2, factor: climate, to: n }
       - { id: b, frequency: 3, to: n }
     nodes:
-      - { id: n, functions: [ { name: one, category: c, constant: 1 } ] }
+      - { id: n, functions: [ { name: one, category: c, constant: 1, factor: climate }, { name: two, category: c, constant: 2 } ] }
 `
 	m := parse(t, text)
 	if len(m.Graph.Factors) != 1 || m.Graph.Factors[0].ID != "climate" || m.Graph.Sources[0].Factor != "climate" || m.Graph.Sources[1].Factor != "" {
 		t.Errorf("factors %+v sources %+v", m.Graph.Factors, m.Graph.Sources)
+	}
+	if fs := m.Graph.Nodes[0].Functions; fs[0].Factor != "climate" || fs[1].Factor != "" {
+		t.Errorf("functions %+v", fs)
 	}
 	parseErr(t, strings.Replace(text, "pert: [0.5, 1, 2]", "pert: [0.5, 1, 2], unit: days", 1), "unit is not allowed on a factor")
 }

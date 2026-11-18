@@ -1,8 +1,12 @@
 # Totals the model names: stoppages of a factory line book parts, and
 # over the days down the crew's cost, the lost production and the
 # crew's hours; orders bring in a margin. The hours and the revenue
-# stay outside the total, and net is the revenue less the cost.
+# stay outside the total, and net is the revenue less the cost. A
+# year's prices, a factor of mean 1, scale the spares and the orders'
+# margin alike: a dear year is dear for every part and every sale in it.
 period: { days: 365 }
+factors:
+  - { id: prices, lognormal: { mean: 1, sd: {{prices}} } }
 totals:
   - { id: maintenance, categories: [labour, parts] }
   - { id: cost, categories: [labour, parts, production] }
@@ -17,7 +21,7 @@ graphs:
     nodes:
       - id: repair
         functions:
-          - { name: spares, category: parts,      basis: on_entry, lognormal: { median: {{parts}}, p90: 12000 } }
+          - { name: spares, category: parts,      basis: on_entry, lognormal: { median: {{parts}}, p90: 12000 }, factor: prices }
           - { name: crew,   category: labour,     basis: per_time, unit: days, constant: {{crew_day}} }
           - { name: hours,  category: hours,      basis: per_time, unit: days, constant: {{crew_hours}} }
           - { name: output, category: production, basis: per_time, unit: days, pert: [5000, {{output}}, 30000] }
@@ -26,4 +30,4 @@ graphs:
       - id: running
       - id: sale
         functions:
-          - { name: margin, category: revenue, gamma: { mean: {{margin}}, sd: 1500 } }
+          - { name: margin, category: revenue, gamma: { mean: {{margin}}, sd: 1500 }, factor: prices }

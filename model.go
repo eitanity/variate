@@ -39,6 +39,7 @@ type Function struct {
 	Basis          Basis
 	Scope          Scope
 	Range          *InputRange // how uncertain Model is, for a sweep; nil = not swept
+	Factor         string      // a shared factor multiplying the value, a rate for PerTime; "" = none
 }
 
 // Outcome is one branch of a node's selection.

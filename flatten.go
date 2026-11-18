@@ -10,10 +10,7 @@ import (
 func (b *builder) flatten() (*Compiled, error) {
 	m := &Compiled{nodeIDs: make([]string, len(b.g.Nodes)), sourceIDs: make([]string, len(b.g.Sources))}
 	cats := map[string]int32{}
-	factorPool := make([]int32, len(b.g.Factors))
-	for i, f := range b.g.Factors {
-		factorPool[i] = m.addPool(f.Model, PerPeriod)
-	}
+	b.flattenFactors(m)
 	for _, sc := range b.g.Schedules {
 		// Over whole cycles every value is seen equally often: the pool's
 		// law is the uniform categorical over the values, its moments
@@ -32,7 +29,7 @@ func (b *builder) flatten() (*Compiled, error) {
 	}
 	m.cycle = newJointCycle(m.schedules)
 	m.scheduleRatio = scheduleRatios(m.schedules)
-	if err := b.flattenSources(m, factorPool); err != nil {
+	if err := b.flattenSources(m, b.factorPool); err != nil {
 		return nil, err
 	}
 	for i, n := range b.g.Nodes {
@@ -132,8 +129,40 @@ func (b *builder) flattenFunctions(m *Compiled, node int32, n Node, basis Basis,
 		if f.Basis != basis || n.Threshold != nil && f.Name == n.Threshold.Function {
 			continue
 		}
-		m.addFunction(node, n.ID+":"+f.Name, f.Model, f.Scope, basis, categoryOf(cats, f.Category))
+		d, factor := b.valueFactor(f)
+		m.addFunction(node, n.ID+":"+f.Name, d, f.Scope, basis, categoryOf(cats, f.Category), factor)
 	}
+}
+
+// flattenFactors gives each factor its pool, drawn once per period.
+func (b *builder) flattenFactors(m *Compiled) {
+	b.factorPool = make([]int32, len(b.g.Factors))
+	for i, f := range b.g.Factors {
+		b.factorPool[i] = m.addPool(f.Model, PerPeriod)
+	}
+	m.factorPools = b.factorPool
+}
+
+// valueFactor is a function's law and the pool of the factor on its
+// value: a constant factor is folded into the law, so a factor of 1
+// changes nothing, and a drawn one is kept to multiply each draw.
+func (b *builder) valueFactor(f Function) (dist.Distribution, int32) {
+	if f.Factor == "" {
+		return f.Model, noIndex
+	}
+	i := b.factorIndex[f.Factor]
+	lo, hi := b.g.Factors[i].Model.Support()
+	switch {
+	case lo != hi:
+		return f.Model, b.factorPool[i]
+	case lo == 1:
+		return f.Model, noIndex
+	}
+	d, err := dist.NewScaled(f.Model, lo)
+	if err != nil {
+		return dist.Constant{}, noIndex
+	}
+	return d, noIndex
 }
 
 // categoryNames lists the categories by index.
@@ -156,9 +185,9 @@ func categoryOf(cats map[string]int32, name string) int32 {
 	return c
 }
 
-func (m *Compiled) addFunction(node int32, name string, d dist.Distribution, scope Scope, basis Basis, cat int32) int32 {
+func (m *Compiled) addFunction(node int32, name string, d dist.Distribution, scope Scope, basis Basis, cat, factor int32) int32 {
 	f := index(len(m.fns))
-	m.fns = append(m.fns, cfn{pool: m.addPool(d, scope), category: cat})
+	m.fns = append(m.fns, cfn{pool: m.addPool(d, scope), category: cat, factor: factor})
 	m.fnNames = append(m.fnNames, name)
 	m.fnNode = append(m.fnNode, node)
 	m.fnPerTime = append(m.fnPerTime, basis == PerTime)
@@ -182,17 +211,18 @@ func (b *builder) flattenThreshold(m *Compiled, node int32, n Node, cn *cnode, c
 	}
 	cat := categoryOf(cats, fn.Category)
 	name := n.ID + ":" + fn.Name
-	cn.thresh = m.addFunction(node, name, fn.Model, fn.Scope, OnEntry, cat)
+	model, factor := b.valueFactor(fn)
+	cn.thresh = m.addFunction(node, name, model, fn.Scope, OnEntry, cat, factor)
 	cn.over = th.Over
 	cum := 0.0
 	for i, side := range []string{th.Above, th.Below} {
-		half, mass, err := dist.NewSplit(fn.Model, th.Over, i == 0)
+		half, mass, err := dist.NewSplit(model, th.Over, i == 0)
 		if err != nil {
 			return modelError("function", n.ID+"."+fn.Name, err.Error())
 		}
 		co := cout{to: b.nodeIndex[side], probPool: noIndex, hold: noIndex, fn: noIndex, fixed: mass}
 		if mass > 0 {
-			co.fn = m.addFunction(node, name, half, PerEvent, OnEntry, cat)
+			co.fn = m.addFunction(node, name, half, PerEvent, OnEntry, cat, factor)
 		}
 		cum += mass
 		co.cum = cum

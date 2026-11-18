@@ -283,19 +283,30 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode, d 
 	booked := 0.0
 	// bound: functions of one node
 	for f := n.fnStart; f < n.fnEnd; f++ {
-		x := w.draw(wk, m.fns[f].pool)
+		x := w.value(wk, f)
 		w.book(row, k, v, m.fns[f].category, x, d)
 		w.feed(wk, f, x)
 		booked += x
 	}
 	if n.thresh != noIndex {
-		x := w.draw(wk, m.fns[n.thresh].pool)
+		x := w.value(wk, n.thresh)
 		w.book(row, k, v, m.fns[n.thresh].category, x, d)
 		w.feed(wk, n.thresh, x)
 		booked += x
 		wk.tested = x
 	}
 	return booked
+}
+
+// value draws function f's value, times the period's draw of the
+// factor on it.
+func (w *Workspace) value(wk *worker, f int32) float64 {
+	fn := w.m.fns[f]
+	x := w.draw(wk, fn.pool)
+	if fn.factor != noIndex {
+		x *= wk.period[w.m.poolPeriod[fn.factor]]
+	}
+	return x
 }
 
 // rowFor returns the row for a booking in period q: the period's row
@@ -337,7 +348,7 @@ func (w *Workspace) bookRate(wk *worker, sl *slot, k, v int32, n cnode, a, b flo
 	end := float64(sl.b - p)
 	// bound: functions of one node
 	for f := n.rateStart; f < n.rateEnd; f++ {
-		rate := w.draw(wk, m.fns[f].pool)
+		rate := w.value(wk, f)
 		cat := m.fns[f].category
 		// bound: the periods the holding time spans within the block
 		for q := math.Floor(a); q < math.Min(b, end); q++ {

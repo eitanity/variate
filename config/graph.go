@@ -568,6 +568,8 @@ func (l *loader) parseFunction(it node) (variate.Function, error) {
 			f.Name, err = e.value.str()
 		case "category":
 			f.Category, err = e.value.str()
+		case "factor":
+			f.Factor, err = e.value.str()
 		case "basis":
 			var b string
 			if b, err = e.value.oneOf("on_entry", "per_time"); b == "per_time" {
@@ -581,7 +583,7 @@ func (l *loader) parseFunction(it node) (variate.Function, error) {
 	if f.Name == "" || f.Category == "" {
 		return f, it.errorf("a function needs name and category")
 	}
-	f.Model, f.Scope, f.Range, err = l.parseDist(it, s, "name", "category", "basis")
+	f.Model, f.Scope, f.Range, err = l.parseDist(it, s, "name", "category", "basis", "factor")
 	return f, err
 }
 
