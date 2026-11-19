@@ -167,6 +167,21 @@ expression; the mean, variance and simulation are.
 | `p` | the probability: a number, or a distribution on [0, 1] (a `beta` for an uncertain share) drawn once per period. Omitted on at most one outcome, which takes the remainder. |
 | `holding` | how long the event stays at this node before moving on: a distribution with a time `unit`, or the word `outage` for the time the reliability block that fired the event stays down (the node must be reached by exactly one source, a block with a repair). Values booked by `per_time` functions accrue over it, and a value may land in a later period than the event. |
 
+#### The exact variance with holding times
+
+A holding time lets a round book into later periods, so two of its
+values land in one period only when they are less than a period apart.
+For Poisson sources of fixed rates, with nothing drawn once a period
+(a value factor is conditioned on, below), the exact variance of the
+period's total is λ·E[Q], Q = ∫∫ (1 − |x − y|)⁺ μ(dx) μ(dy), μ a round's
+bookings over the time from its arrival, uniform in its period. It is
+computed by a backward pass over the nodes on a grid of lags under one
+period against each holding's CDF, any law's, the grid doubling until
+the figure settles to 1e-9; the category, source, node and named total
+variances alike. A model with mixed frequencies, values or probabilities
+drawn once a period, schedules, triggers, repairs or queues still has
+no exact variance with holding times.
+
 ### Thresholds
 
 A threshold sends the event one way when a value the node draws is
@@ -423,9 +438,12 @@ about 1 µs a draw for a gamma or PERT and 60 ns for a lognormal, against
 Every mean is unchanged: a node's rate and its holding may not both be
 members, so no booking is the product of two values that move together.
 The exact variance adds each pair's covariance, by Gauss–Hermite
-quadrature, times the chance a round books both; it is computed for
-`on_entry` values, a model with a holding time having no exact variance
-of its own. P(T = 0) is not given when a member value can be 0.
+quadrature, times the chance a round books both. With holding times
+(above) each round is conditioned on its groups' normals, the members
+then independent with their conditional laws, and the variance is the
+Gauss–Hermite mixture over the normals, for values, rates and holdings
+alike; in lockstep (rank 1) with holding times it is not computed. P(T
+= 0) is not given when a member value can be 0.
 
 A member may not be drawn once a period, be the value a threshold tests,
 an expression or an expression's operand, be at a node a trigger reads,

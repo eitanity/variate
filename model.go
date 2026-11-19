@@ -231,6 +231,11 @@ type Config struct {
 	// what Compile costs: the breakdowns are still kept, and their
 	// criteria are checked on what the run observes alone.
 	NoBreakdownVariance bool
+
+	// rules is the holding rules a model's points share, set by the
+	// conditioning on value factors for the models it compiles; nil
+	// otherwise.
+	rules *ruleCache
 }
 
 // Level is a value X of a quantity, named as Workspace.QuantityRow

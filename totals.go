@@ -159,7 +159,7 @@ func (m *Compiled) totalMoments(e *Expectation, lam []float64) {
 		}
 		f := valueFilter{kind: filterTotal, index: index(i)}
 		t1, t2 := m.valueToGo(f)
-		e.VarByTotal[i] = m.variance(f, lam, t1, t2, e.MeanByTotal[i])
+		e.VarByTotal[i] = m.varianceIn(e, f, lam, t1, t2, e.MeanByTotal[i])
 	}
 }
 

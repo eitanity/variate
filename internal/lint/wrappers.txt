@@ -4,3 +4,4 @@ code.eitanity.com/variate/dist.Truncated
 code.eitanity.com/variate/dist.Capped
 code.eitanity.com/variate/dist.Scaled
 code.eitanity.com/variate.runError
+code.eitanity.com/variate.condLaw

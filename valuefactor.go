@@ -77,9 +77,12 @@ func (m *Compiled) factorRule(i, n int) (x, w []float64, ok bool) {
 // settles, those that do not NaN.
 func (m *Compiled) conditionedAnalytic() (*Expectation, error) {
 	factors := m.valueFactors()
+	// A factor scales values and rates, never a holding, so every point
+	// shares the holdings' rules.
+	rules := newRuleCache()
 	var last, prev *Expectation
 	for n := valueNodesStart; n <= valueNodesMax; n *= 2 {
-		e, ok, err := m.mixedAnalytic(factors, n)
+		e, ok, err := m.mixedAnalytic(factors, n, rules)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +114,7 @@ func (m *Compiled) conditionedAnalytic() (*Expectation, error) {
 // mixedAnalytic combines the conditioned models' figures over the n-node
 // rules of the factors; false when a rule is missing or the points
 // exceed their cap.
-func (m *Compiled) mixedAnalytic(factors []int, n int) (*Expectation, bool, error) {
+func (m *Compiled) mixedAnalytic(factors []int, n int, rules *ruleCache) (*Expectation, bool, error) {
 	xs, ws, points := m.factorRules(factors, n)
 	if points == 0 {
 		return nil, false, nil
@@ -131,7 +134,9 @@ func (m *Compiled) mixedAnalytic(factors []int, n int) (*Expectation, bool, erro
 			g.Factors[i].Model = c
 			weight *= ws[j][idx[j]]
 		}
-		e, err := conditioned(g, m.cfg)
+		cfg := m.cfg
+		cfg.rules = rules
+		e, err := conditioned(g, cfg)
 		if err != nil {
 			return nil, false, err
 		}

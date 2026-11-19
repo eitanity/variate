@@ -79,3 +79,23 @@ func TestHermiteRule(t *testing.T) {
 		}
 	}
 }
+
+// TestLegendreRule: the n-point rule integrates u^k on [0, 1] to
+// 1/(k+1) for k below 2n.
+func TestLegendreRule(t *testing.T) {
+	for _, n := range []int{1, 4, 8, 32} {
+		x, w := make([]float64, n), make([]float64, n)
+		if !LegendreRule(x, w) {
+			t.Fatalf("n %d: no rule", n)
+		}
+		for k := 0; k < 2*n && k <= 20; k++ {
+			got := 0.0
+			for i := range x {
+				got += w[i] * math.Pow(x[i], float64(k))
+			}
+			if want := 1 / float64(k+1); math.Abs(got-want) > 1e-14 {
+				t.Errorf("n %d: ∫u^%d %v, want %v", n, k, got, want)
+			}
+		}
+	}
+}

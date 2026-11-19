@@ -256,7 +256,11 @@ func (b *builder) flattenDependence(m *Compiled) {
 				m.outGroup[mb.out], m.outSlot[mb.out] = gi, index(k)
 			}
 		}
-		g.cov = depCovariances(m.memberLaws(g.members), g.sq, g.sq1)
+		if !m.hasDelays {
+			// With holding times the variance mixes over the groups'
+			// normals instead.
+			g.cov = depCovariances(m.memberLaws(g.members), g.sq, g.sq1)
+		}
 		m.groups = append(m.groups, g)
 	}
 }
@@ -504,4 +508,180 @@ func (m *Compiled) depZeroKnown() bool {
 		}
 	}
 	return true
+}
+
+// condLaw is a member's law given its group's normal w: Q(Φ(a + b·E)),
+// a = √ρ·w, b = √(1−ρ), E standard normal, so P(X ≤ x) = Φ((Φ⁻¹(F(x))
+// − a)/b). Its mean and variance are by a Gauss–Hermite rule over E;
+// the methods the exact passes do not read are the law's own.
+type condLaw struct {
+	dist.Distribution
+	a, b, mean, vr float64
+}
+
+// condNodes is the Gauss–Hermite rule over E for a conditional law's
+// moments.
+const condNodes = 128
+
+// newCondLaw is law d given its group's normal at a, b, its moments on
+// the Gauss–Hermite rule x, w; in lockstep (b = 0) the point Q(Φ(a)).
+func newCondLaw(d dist.Distribution, a, b float64, x, w []float64) dist.Distribution {
+	if b == 0 {
+		c, err := dist.NewConstant(copulaValue(d, a))
+		if err != nil {
+			return d
+		}
+		return c
+	}
+	var s1, s2 float64
+	for i := range x {
+		v := copulaValue(d, a+b*x[i])
+		s1 += w[i] * v
+		s2 += w[i] * v * v
+	}
+	return condLaw{Distribution: d, a: a, b: b, mean: s1, vr: math.Max(0, s2-s1*s1)}
+}
+
+func (c condLaw) Mean() float64 { return c.mean }
+func (c condLaw) Var() float64  { return c.vr }
+
+// CDF is Φ((Φ⁻¹(F(x)) − a)/b), the upper tail read from the survival.
+func (c condLaw) CDF(x float64) float64 {
+	f := c.Distribution.CDF(x)
+	switch {
+	case f <= 0:
+		return 0
+	case f >= 1:
+		return 1
+	}
+	if f > 0.5 {
+		z := -stdNormalQuantile(c.Distribution.Survival(x))
+		return 1 - stdNormalCDF((c.a-z)/c.b)
+	}
+	return stdNormalCDF((stdNormalQuantile(f) - c.a) / c.b)
+}
+
+// Survival is Φ((a − z)/b), z = −Φ⁻¹(S(x)), read from the law's upper
+// tail.
+func (c condLaw) Survival(x float64) float64 { return 1 - c.CDF(x) }
+
+// Quantile is Q(Φ(a + b·Φ⁻¹(p))).
+func (c condLaw) Quantile(p float64) float64 {
+	return copulaValue(c.Distribution, c.a+c.b*stdNormalQuantile(p))
+}
+
+// QuantileUpper is the quantile at 1 − q, read from the upper tail.
+func (c condLaw) QuantileUpper(q float64) float64 {
+	return copulaValue(c.Distribution, c.a-c.b*stdNormalQuantile(q))
+}
+
+// LogDensity is the law's log density times φ(z_c)/(b·φ(z)), z =
+// Φ⁻¹(F(x)) and z_c = (z − a)/b.
+func (c condLaw) LogDensity(x float64) float64 {
+	f := c.Distribution.CDF(x)
+	if f <= 0 || f >= 1 {
+		return math.Inf(-1)
+	}
+	z := stdNormalQuantile(f)
+	if f > 0.5 {
+		z = -stdNormalQuantile(c.Distribution.Survival(x))
+	}
+	zc := (z - c.a) / c.b
+	return c.Distribution.LogDensity(x) - zc*zc/2 + z*z/2 - math.Log(c.b)
+}
+
+func stdNormalCDF(z float64) float64 { return 0.5 * math.Erfc(-z/math.Sqrt2) }
+
+// stdNormalQuantile is Φ⁻¹(p).
+func stdNormalQuantile(p float64) float64 { return -math.Sqrt2 * math.Erfcinv(2*p) }
+
+// condRef is a pool's law given its group's normal: the base law, a and
+// b, and the base law's normal scores, shared by every point.
+type condRef struct {
+	base   dist.Distribution
+	a, b   float64
+	scores *scoreCache
+}
+
+// scoreCache holds a base law's normal scores on each grid, by pool.
+type scoreCache struct {
+	z map[[2]int][2][]float64
+}
+
+// at is base law d's scores at pool on an n-cell grid, computed once.
+func (s *scoreCache) at(d dist.Distribution, pool int32, n int) ([]float64, []float64) {
+	k := [2]int{int(pool), n}
+	if z, ok := s.z[k]; ok {
+		return z[0], z[1]
+	}
+	zb, zq := scoreGrid(d, n)
+	s.z[k] = [2][]float64{zb, zq}
+	return zb, zq
+}
+
+// depConditioned is the model given each group's normal at w: every
+// member's law its conditional one, its moments on the rule hx, hw, the
+// groups gone; scores is shared by the points.
+func (m *Compiled) depConditioned(w, hx, hw []float64, scores *scoreCache) *Compiled {
+	c := *m
+	c.pools = append([]dist.Distribution(nil), m.pools...)
+	c.condOf = map[int32]condRef{}
+	for gi, g := range m.groups {
+		for _, mb := range g.members {
+			pool := m.outs[maxIndex(mb.out)].hold
+			if mb.fn != noIndex {
+				pool = m.fns[mb.fn].pool
+			}
+			c.pools[pool] = newCondLaw(m.pools[pool], g.sq*w[gi], g.sq1, hx, hw)
+			c.condOf[pool] = condRef{base: m.pools[pool], a: g.sq * w[gi], b: g.sq1, scores: scores}
+		}
+	}
+	c.groups, c.fnGroup, c.fnSlot, c.outGroup, c.outSlot = nil, nil, nil, nil, nil
+	return &c
+}
+
+// maxIndex is i, or 0 for noIndex.
+func maxIndex(i int32) int32 {
+	if i == noIndex {
+		return 0
+	}
+	return i
+}
+
+// depMixMax caps the nodes of the rule over the groups' normals, which
+// is chosen on the first lag grid.
+const depMixMax = 128
+
+// depPoints is the tensor of the groups' n-node rules: the conditioned
+// model at each point and its weight, the points sharing the members'
+// scores; false past valuePointsMax.
+func (m *Compiled) depPoints(n int, scores *scoreCache) ([]*Compiled, []float64, bool) {
+	x, w := make([]float64, n), make([]float64, n)
+	dist.HermiteRule(x, w)
+	points := 1
+	for range m.groups {
+		if points *= n; points > valuePointsMax {
+			return nil, nil, false
+		}
+	}
+	hx, hw := make([]float64, condNodes), make([]float64, condNodes)
+	dist.HermiteRule(hx, hw)
+	idx := make([]int, len(m.groups))
+	at := make([]float64, len(m.groups))
+	cs, ws := make([]*Compiled, 0, points), make([]float64, 0, points)
+	// bound: valuePointsMax points
+	for range points {
+		weight := 1.0
+		for gi := range idx {
+			at[gi], weight = x[idx[gi]], weight*w[idx[gi]]
+		}
+		cs, ws = append(cs, m.depConditioned(at, hx, hw, scores)), append(ws, weight)
+		for gi := range idx {
+			if idx[gi]++; idx[gi] < n {
+				break
+			}
+			idx[gi] = 0
+		}
+	}
+	return cs, ws, true
 }

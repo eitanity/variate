@@ -36,6 +36,8 @@ type Expectation struct {
 	// then over the whole horizon.
 	ByPeriod [][]float64
 	pzero    float64
+	delayed  map[delayKey]float64 // the variances with holding times, computed together; nil without
+	longRun  map[delayKey]float64 // beside them, the long-run variances per period the plan sizes by
 }
 
 // valueFilter selects which function values the recursion books: every
@@ -225,7 +227,7 @@ func (m *Compiled) valueToGo(filt valueFilter) (m1, m2 []float64) {
 		m1[v] = nm.a + sumPY
 		m2[v] = nm.a2 + 2*nm.a*sumPY + sumPY2
 	}
-	if len(m.groups) > 0 {
+	if len(m.groups) > 0 && !m.hasDelays {
 		for v, c := range m.depCorrection(filt) {
 			m2[v] += c
 		}
@@ -255,6 +257,10 @@ func rateSecond(rho2, tau2 float64) float64 {
 // Config.NoBreakdown or Config.NoBreakdownVariance the per-source,
 // per-category and per-node variances are NaN, left uncomputed.
 func (m *Compiled) Analytic() (*Expectation, error) {
+	if m.expect != nil {
+		// Compile computed them.
+		return cloneExpectation(m.expect), nil
+	}
 	if len(m.valueFactors()) > 0 {
 		return m.conditionedAnalytic()
 	}
@@ -265,7 +271,10 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 // their means standing in for them.
 func (m *Compiled) analytic() (*Expectation, error) {
 	e, lam, m1, m2 := m.means()
-	e.Var = m.variance(valueFilter{kind: filterAll}, lam, m1, m2, e.Mean)
+	if m.hasDelays && !m.Started() && m.delayExact() {
+		e.delayed, e.longRun = m.delayFigures(lam)
+	}
+	e.Var = m.varianceIn(e, valueFilter{kind: filterAll}, lam, m1, m2, e.Mean)
 	d1, d2 := m.valueToGo(valueFilter{kind: filterDraws})
 	e.DrawsVar = m.variance(valueFilter{kind: filterDraws}, lam, d1, d2, e.DrawsMean)
 	if m.cfg.NoBreakdown || m.cfg.NoBreakdownVariance {
@@ -388,18 +397,25 @@ func (m *Compiled) breakdownVariances(e *Expectation, lam, m1, m2 []float64) {
 			passes++
 		}
 	}
-	if m.hasDelays || m.hasRepair || m.HasTriggers() || m.pairCost()*float64(passes) > pairBudget {
+	delayed := e.delayed != nil
+	if !delayed && (m.hasDelays || m.hasRepair || m.HasTriggers() || m.pairCost()*float64(passes) > pairBudget) {
 		m.unknownBreakdownVariances(e)
 		return
 	}
-	q := m.pairPass(valueFilter{kind: filterAll}, m1)
-	for k, s := range m.srcs {
-		e.VarBySource[k] = lam[k]*m2[s.to] + m.countN2[k]*q.at(s.to, s.to) - e.MeanBySource[k]*e.MeanBySource[k]
+	if delayed {
+		for k := range m.srcs {
+			e.VarBySource[k] = e.delayed[delayKey{filt: valueFilter{kind: filterAll}, src: k}]
+		}
+	} else {
+		q := m.pairPass(valueFilter{kind: filterAll}, m1)
+		for k, s := range m.srcs {
+			e.VarBySource[k] = lam[k]*m2[s.to] + m.countN2[k]*q.at(s.to, s.to) - e.MeanBySource[k]*e.MeanBySource[k]
+		}
 	}
 	for c := range m.categories {
 		f := valueFilter{kind: filterCategory, index: index(c)}
 		c1, c2 := m.valueToGo(f)
-		e.VarByCategory[c] = m.variance(f, lam, c1, c2, e.MeanByCategory[c])
+		e.VarByCategory[c] = m.varianceIn(e, f, lam, c1, c2, e.MeanByCategory[c])
 	}
 	for v := range m.nodes {
 		if !m.nodes[v].hasFunctions() {
@@ -407,7 +423,7 @@ func (m *Compiled) breakdownVariances(e *Expectation, lam, m1, m2 []float64) {
 		}
 		f := valueFilter{kind: filterNode, index: index(v)}
 		n1, n2 := m.valueToGo(f)
-		e.ContribVar[v] = m.variance(f, lam, n1, n2, e.Contrib[v])
+		e.ContribVar[v] = m.varianceIn(e, f, lam, n1, n2, e.Contrib[v])
 	}
 }
 
@@ -447,6 +463,15 @@ func (m *Compiled) meanUnder(filt valueFilter, entries []float64) float64 {
 		total += entries[v] * (nm.a + own + nm.rho*held)
 	}
 	return total
+}
+
+// varianceIn is the variance under the filter: the batch's with holding
+// times where it applies, else variance.
+func (m *Compiled) varianceIn(e *Expectation, filt valueFilter, lam, m1, m2 []float64, mean float64) float64 {
+	if e.delayed != nil && filt.kind != filterDraws {
+		return e.delayed[delayKey{filt: filt, src: -1}]
+	}
+	return m.variance(filt, lam, m1, m2, mean)
 }
 
 // variance is Var[T] for a model without delays: E[Var[T|Θ]] + Var[E[T|Θ]].

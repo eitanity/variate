@@ -84,6 +84,7 @@ type Compiled struct {
 	// Per function and per outcome, its group and place in it, or noIndex;
 	// nil without groups.
 	fnGroup, fnSlot, outGroup, outSlot []int32
+	condOf                             map[int32]condRef // in a model given its groups' normals, each member pool's conditioning
 	srcs                               []csrc
 	outcomeNode                        []int32 // owning node of each outcome
 	fnNode                             []int32 // owning node of each function

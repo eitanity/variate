@@ -75,10 +75,13 @@ type planRow struct {
 	index int // outcome, node, or row quantity the criterion watches
 }
 
-// buildPlan sizes every criterion from the analytic values. Rows whose
-// variance is unknown (delays, pair budget) get PeriodsNeeded 0 and are
-// governed by the observed check alone.
+// buildPlan sizes every criterion from the analytic values: with
+// holding times, which make neighbouring periods move together, by the
+// long-run variance per period. Rows whose variance is unknown (other
+// delays, pair budget) get PeriodsNeeded 0 and are governed by the
+// observed check alone.
 func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
+	e = planVariances(e)
 	var rows []planRow
 	for j, h := range e.OutcomeRate {
 		if h <= 0 {
@@ -137,6 +140,29 @@ func (m *Compiled) buildPlan(e *Expectation, c criteria) []planRow {
 		PeriodsNeeded: periodsFor(float64(c.tailHits) / (1 - c.tailP)),
 	}})
 	return leaveOut(rows)
+}
+
+// planVariances is e with the long-run variances per period in place of
+// the per-period ones where holding times give both.
+func planVariances(e *Expectation) *Expectation {
+	if e.longRun == nil {
+		return e
+	}
+	p := cloneExpectation(e)
+	all := valueFilter{kind: filterAll}
+	p.Var = e.longRun[delayKey{filt: all, src: -1}]
+	for k := range p.VarBySource {
+		p.VarBySource[k] = e.longRun[delayKey{filt: all, src: k}]
+	}
+	for c := range p.VarByCategory {
+		p.VarByCategory[c] = e.longRun[delayKey{filt: valueFilter{kind: filterCategory, index: index(c)}, src: -1}]
+	}
+	for v := range p.ContribVar {
+		if lr, ok := e.longRun[delayKey{filt: valueFilter{kind: filterNode, index: index(v)}, src: -1}]; ok {
+			p.ContribVar[v] = lr
+		}
+	}
+	return p
 }
 
 // leaveOut takes the criteria that do not apply out of the plan's sizing.

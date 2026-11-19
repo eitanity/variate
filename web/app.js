@@ -257,7 +257,7 @@ function show(r, ms) {
     ? [p.criterion, p.driver, "–", "not applicable: " + p.not_applicable, "–"]
     : [p.criterion, p.driver, p.periods === 0 ? "unknown" : fmt(p.periods, 6), p.observed === null ? "not yet" : fmt(p.observed, 3), p.met ? "yes" : "no"]));
   $("planNote").textContent = r.plan.some((p) => !p.not_applicable && (p.periods === 0 || p.observed === null))
-    ? "A model with delays has no exact variance, so the plan cannot size its error criteria, and the run estimates its errors from blocks of periods: it needs 16 full blocks before it can report them. Run more periods."
+    ? "This model has no exact variance (with holding times it is computed for Poisson sources of fixed rates with nothing drawn once a period), so the plan cannot size its error criteria, and the run estimates its errors from blocks of periods: it needs 16 full blocks before it can report them. Run more periods."
     : "";
   const tr = r.analytic.transform;
   if (tr && tr.applicable) {
