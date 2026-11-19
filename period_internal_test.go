@@ -12,7 +12,8 @@ import (
 // 4096 and at period 2^50 + 4096, from the same seed, books identical
 // statistics, with holding times far below a period (where 2^50 resolves
 // a quarter) spread over rows by a per-time rate, a renewal source with
-// a repair law, and a chain whose outages run past the period's end.
+// a repair law, and a chain whose outages run past the period's end;
+// the far block's draws are keyed as the near one's.
 func TestTimesWithinPeriodAtAnyPeriodNumber(t *testing.T) {
 	c := func(x float64) dist.Constant { d, _ := dist.NewConstant(x); return d }
 	exp := func(mean float64) dist.Exponential { d, _ := dist.NewExponential(mean); return d }
@@ -53,6 +54,7 @@ func TestTimesWithinPeriodAtAnyPeriodNumber(t *testing.T) {
 		return append([]qstat(nil), sl.stats...), append([]uint64(nil), sl.events...)
 	}
 	stats, events := simulate(w.block)
+	w.keyShift = 1 << 50
 	far, farEvents := simulate(1<<50 + w.block)
 	for k := range events {
 		if events[k] != farEvents[k] {

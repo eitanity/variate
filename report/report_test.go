@@ -130,8 +130,12 @@ func TestBoundsBelowSpan(t *testing.T) {
 	h := rep.Tr.H
 	below := 0
 	for _, p := range got.Exceedance {
-		if p.Lower > p.P+5*p.StdErr+1e-9 || p.Upper < p.P-5*p.StdErr-1e-9 {
-			t.Errorf("x %g: bracket [%g, %g] misses %g ± %g", p.X, p.Lower, p.Upper, p.P, p.StdErr)
+		// The error is the binomial one at the bracket's nearer end: with a
+		// handful of hits the sample's own is far too small.
+		q := math.Min(math.Max(p.P, p.Lower), p.Upper)
+		se := math.Sqrt(q * (1 - q) / float64(r.Periods))
+		if p.Lower > p.P+5*se+1e-9 || p.Upper < p.P-5*se-1e-9 {
+			t.Errorf("x %g: bracket [%g, %g] misses %g ± %g", p.X, p.Lower, p.Upper, p.P, se)
 		}
 		if p.X > 0 && p.X < h {
 			below++

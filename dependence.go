@@ -262,6 +262,7 @@ func (b *builder) flattenDependence(m *Compiled) {
 			g.cov = depCovariances(m.memberLaws(g.members), g.sq, g.sq1)
 		}
 		m.groups = append(m.groups, g)
+		m.groupKey = append(m.groupKey, mix(nameKey("group "+strings.Join(d.Members, " ")), tagGroup))
 	}
 }
 

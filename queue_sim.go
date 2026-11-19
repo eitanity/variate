@@ -106,7 +106,7 @@ func (q *wqueue) free() int {
 // given state's round keeps its mark.
 func (w *Workspace) parkRound(wk *worker, sl *slot, c int32, k int32, t float64, p int64) {
 	wk.qseq++
-	it := qitem{t: float64(p) + t, p: p, k: k, seq: wk.qseq}
+	it := qitem{t: float64(p) + t, p: p, k: k, seq: wk.qseq, rkey: wk.rkey}
 	if wk.given {
 		it.given = -1
 	}
@@ -164,6 +164,7 @@ func (w *Workspace) runQueues(wk *worker, sl *slot, until float64) {
 func (w *Workspace) arrive(wk *worker, sl *slot, c int32) {
 	q := &wk.queues[c]
 	it := q.pop()
+	wk.rkey = it.rkey
 	it.work = w.draw(wk, w.m.queues[c].work)
 	w.queueCol(sl, c, qJoined, int64(math.Floor(it.t)), 1)
 	if s := q.free(); s >= 0 {
@@ -209,6 +210,7 @@ func (w *Workspace) finishService(wk *worker, sl *slot, c int32, s int) {
 	v := m.queues[c].node
 	n := m.nodes[v]
 	p := it.p
+	wk.rkey = it.rkey
 	if n.rateStart != n.rateEnd {
 		w.bookRate(wk, sl, it.k, v, n, math.Max(it.t-float64(p), 0), sv.finish-float64(p), p)
 	}
@@ -259,6 +261,7 @@ func (w *Workspace) unfinished(wk *worker, sl *slot, c int32, it qitem, end floa
 	m := w.m
 	cq := m.queues[c]
 	w.queueCol(sl, c, qUnfinished, p, 1)
+	wk.rkey = it.rkey
 	n := m.nodes[cq.node]
 	if n.rateStart != n.rateEnd {
 		w.bookRate(wk, sl, it.k, cq.node, n, math.Max(it.t-float64(it.p), 0), end-float64(it.p), it.p)

@@ -6,7 +6,9 @@ import (
 
 // flatten turns the validated graph into index arrays. Pool indices are
 // assigned in a fixed order: source frequencies, then per node its
-// functions, outcome probabilities and holding times.
+// functions, outcome probabilities and holding times; outcomes keep the
+// order they are declared in, so a changed probability moves only the
+// draws between the old and new thresholds.
 func (b *builder) flatten() (*Compiled, error) {
 	m := &Compiled{nodeIDs: make([]string, len(b.g.Nodes)), sourceIDs: make([]string, len(b.g.Sources))}
 	cats := map[string]int32{}
@@ -25,7 +27,7 @@ func (b *builder) flatten() (*Compiled, error) {
 		if err != nil {
 			return nil, modelError("schedule", sc.ID, err.Error())
 		}
-		m.schedules = append(m.schedules, schedule{pool: m.addPool(d, PerPeriod), values: sc.Values})
+		m.schedules = append(m.schedules, schedule{pool: m.addPool(d, PerPeriod, "schedule "+sc.ID), values: sc.Values})
 	}
 	m.cycle = newJointCycle(m.schedules)
 	m.scheduleRatio = scheduleRatios(m.schedules)
@@ -33,8 +35,8 @@ func (b *builder) flatten() (*Compiled, error) {
 		return nil, err
 	}
 	for i, n := range b.g.Nodes {
-		m.nodeIDs[i] = n.ID
-		cn := cnode{mode: n.Mode, alias: noIndex, thresh: noIndex}
+		m.nameNode(i, n.ID)
+		cn := cnode{mode: n.Mode, thresh: noIndex}
 		cn.fnStart = index(len(m.fns))
 		b.flattenFunctions(m, index(i), n, OnEntry, cats)
 		if err := b.flattenExprs(m, index(i), n, cn.fnStart, cats); err != nil {
@@ -80,6 +82,7 @@ func (b *builder) flatten() (*Compiled, error) {
 func (b *builder) flattenSources(m *Compiled, factorPool []int32) error {
 	for i, s := range b.g.Sources {
 		m.sourceIDs[i] = s.ID
+		m.srcKey = append(m.srcKey, nameKey("source "+s.ID))
 		src := csrc{to: b.nodeIndex[s.To], every: index(max(s.Every, 1)), repair: noIndex, factor: noIndex, schedule: noIndex, trigger: noIndex}
 		if s.Factor != "" {
 			src.factor = factorPool[b.factorIndex[s.Factor]]
@@ -96,15 +99,15 @@ func (b *builder) flattenSources(m *Compiled, factorPool []int32) error {
 			if err != nil {
 				return modelError("source", s.ID, "chain rate: "+err.Error())
 			}
-			src.pool = m.addPool(d, PerPeriod)
+			src.pool = m.addPool(d, PerPeriod, "source "+s.ID)
 			m.chains = append(m.chains, s.Chains...)
 			m.hasRepair = true
 		} else {
-			src.pool = m.addPool(s.Frequency, PerPeriod)
+			src.pool = m.addPool(s.Frequency, PerPeriod, "source "+s.ID)
 		}
 		src.chainEnd = index(len(m.chains))
 		if s.Repair != nil {
-			src.repair = m.addPool(s.Repair, PerEvent)
+			src.repair = m.addPool(s.Repair, PerEvent, "repair "+s.ID)
 			m.hasRepair = true
 		}
 		m.renewal = m.renewal || src.every > 1 || src.repair != noIndex || src.chainEnd > src.chainStart
@@ -113,10 +116,31 @@ func (b *builder) flattenSources(m *Compiled, factorPool []int32) error {
 	return nil
 }
 
-// addPool registers a pool with its scope.
-func (m *Compiled) addPool(d dist.Distribution, scope Scope) int32 {
+// nameNode names node i and keys it, and its choice, by its name.
+func (m *Compiled) nameNode(i int, id string) {
+	m.nodeIDs[i] = id
+	k := nameKey("node " + id)
+	m.nodeKey = append(m.nodeKey, k)
+	m.chooseKey = append(m.chooseKey, mix(k, tagChoose))
+}
+
+// addPool registers a pool with its scope and its key by name; a name
+// met again is keyed by its order among those with the name.
+func (m *Compiled) addPool(d dist.Distribution, scope Scope, name string) int32 {
 	k := index(len(m.pools))
 	m.pools = append(m.pools, d)
+	if m.keySeen == nil {
+		m.keySeen = map[uint64]int{}
+	}
+	key := nameKey(name)
+	n := m.keySeen[key]
+	m.keySeen[key] = n + 1
+	if n > 0 {
+		key = mix(key, uint64(n)) //nolint:gosec // a count
+	}
+	m.poolKey = append(m.poolKey, key)
+	lo, hi := d.Support()
+	m.poolConst = append(m.poolConst, lo == hi)
 	m.poolMean = append(m.poolMean, d.Mean())
 	slot := noIndex
 	if scope == PerPeriod {
@@ -141,7 +165,7 @@ func (b *builder) flattenFunctions(m *Compiled, node int32, n Node, basis Basis,
 func (b *builder) flattenFactors(m *Compiled) {
 	b.factorPool = make([]int32, len(b.g.Factors))
 	for i, f := range b.g.Factors {
-		b.factorPool[i] = m.addPool(f.Model, PerPeriod)
+		b.factorPool[i] = m.addPool(f.Model, PerPeriod, "factor "+f.ID)
 	}
 	m.factorPools = b.factorPool
 }
@@ -190,7 +214,7 @@ func categoryOf(cats map[string]int32, name string) int32 {
 
 func (m *Compiled) addFunction(node int32, name string, d dist.Distribution, scope Scope, basis Basis, cat, factor int32) int32 {
 	f := index(len(m.fns))
-	m.fns = append(m.fns, cfn{pool: m.addPool(d, scope), category: cat, factor: factor, expr: noIndex})
+	m.fns = append(m.fns, cfn{pool: m.addPool(d, scope, "function "+name), category: cat, factor: factor, expr: noIndex})
 	m.fnNames = append(m.fnNames, name)
 	m.fnNode = append(m.fnNode, node)
 	m.fnPerTime = append(m.fnPerTime, basis == PerTime)
@@ -244,7 +268,7 @@ func (b *builder) flattenThreshold(m *Compiled, node int32, n Node, cn *cnode, c
 // with cumulative thresholds; the remainder of a two-way node goes second.
 func (b *builder) flattenOutcomes(m *Compiled, node int32, n Node, cn *cnode) {
 	if n.Next != "" {
-		m.appendOutcome(m.outcomeName(n.ID, n.Next, 0), node, cout{to: b.nodeIndex[n.Next], cum: 1, fixed: 1, probPool: noIndex, fn: noIndex, hold: m.holdPool(n.NextHolding, n.NextScope), outage: n.NextOutage})
+		m.appendOutcome(m.outcomeName(n.ID, n.Next, 0), node, cout{to: b.nodeIndex[n.Next], cum: 1, fixed: 1, probPool: noIndex, fn: noIndex, hold: m.holdPool(n.NextHolding, n.NextScope, n.ID+"→"+n.Next), outage: n.NextOutage})
 		return
 	}
 	order := make([]int, len(n.Outcomes))
@@ -270,20 +294,19 @@ func (b *builder) flattenOutcomes(m *Compiled, node int32, n Node, cn *cnode) {
 		if r := remainderIndex(probs); r >= 0 {
 			probs[r] = 1 - fixedSum(probs)
 		}
-		sortOutcomesDesc(order, probs)
 	}
 	cum := 0.0
 	dupes := map[string]int{}
 	for _, i := range order {
 		o := n.Outcomes[i]
-		co := cout{to: b.nodeIndex[o.To], probPool: noIndex, fn: noIndex, hold: m.holdPool(o.Holding, o.HoldingScope), outage: o.OutageHolding}
+		co := cout{to: b.nodeIndex[o.To], probPool: noIndex, fn: noIndex, hold: m.holdPool(o.Holding, o.HoldingScope, n.ID+"→"+o.To), outage: o.OutageHolding}
 		switch {
 		case n.Mode == Sequential && o.P == nil:
 			co.fixed = 1
 		case n.Mode == Sequential && isFixed(o.P):
 			co.fixed = o.P.Mean()
 		case n.Mode == Sequential || cn.twoWay && o.P != nil:
-			co.probPool = m.addPool(o.P, PerPeriod)
+			co.probPool = m.addPool(o.P, PerPeriod, "probability "+n.ID+"→"+o.To)
 		case cn.twoWay:
 			co.fixed = 1
 		default:
@@ -297,23 +320,11 @@ func (b *builder) flattenOutcomes(m *Compiled, node int32, n Node, cn *cnode) {
 	m.closeFixedSelection(n, cn)
 }
 
-// closeFixedSelection sets the last threshold to exactly 1 and builds an
-// alias table for a wide fixed selection.
+// closeFixedSelection sets the last threshold to exactly 1.
 func (m *Compiled) closeFixedSelection(n Node, cn *cnode) {
 	last := len(m.outs) - 1
 	if n.Mode != Sequential && !cn.twoWay && last >= 0 {
 		m.outs[last].cum = 1
-	}
-	count := len(m.outs) - int(cn.outStart)
-	if n.Mode != Sequential && !cn.twoWay && count > aliasThreshold {
-		cn.alias = index(len(m.aliasProb))
-		probs := make([]float64, count)
-		for i := range probs {
-			probs[i] = m.outs[int(cn.outStart)+i].fixed
-		}
-		prob, alias := buildAlias(probs)
-		m.aliasProb = append(m.aliasProb, prob...)
-		m.aliasIdx = append(m.aliasIdx, alias...)
 	}
 }
 
@@ -323,12 +334,12 @@ func (m *Compiled) appendOutcome(name string, node int32, co cout) {
 	m.outcomeNames = append(m.outcomeNames, name)
 }
 
-func (m *Compiled) holdPool(d dist.Continuous, scope Scope) int32 {
+func (m *Compiled) holdPool(d dist.Continuous, scope Scope, name string) int32 {
 	if d == nil {
 		return noIndex
 	}
 	m.hasDelays = true
-	return m.addPool(d, scope)
+	return m.addPool(d, scope, "holding "+name)
 }
 
 // outcomeName is "<node>→<target>", suffixed #n for repeated targets.

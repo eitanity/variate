@@ -2,9 +2,9 @@ package variate
 
 import (
 	"context"
+	"math/rand/v2"
 	"sync"
 
-	"code.eitanity.com/variate/dist"
 	"code.eitanity.com/variate/stats"
 )
 
@@ -22,20 +22,24 @@ const (
 
 // worker is one simulation goroutine's private state.
 type worker struct {
-	ss     *dist.SamplerSet
+	k      keyed        // the keyed draws' generator
+	lane   uint64       // the key of the task's timeline or repeat
+	pkey   uint64       // the period's key
+	spk    []uint64     // per source, its key in the period
+	nround []uint32     // per source, its rounds so far in the period
+	rkey   uint64       // the round's key
+	evPCG  []rand.PCG   // per source, its events stream in the period
+	ev     []*rand.Rand // over evPCG
 	period []float64
 	// Renewal source state, carried within a block: the Erlang phase and
 	// the time a repair ends, from the start of the current period.
 	phase     []int32
 	downUntil []float64
-	failed    []int32   // per chain, the units down
-	chainT    []float64 // per source, the time its chains are simulated to, from the period's start
-	outage    float64   // the current round's outage, when its block fired it
-	tested    float64   // the value the current node's threshold tests
-	vals      []float64 // per function, its value at the current node, for the expressions that read it
-	round     uint64    // the rounds walked, numbering the current one
-	drv       []float64 // per dependence group, its normal for the round drv is stamped with
-	drvRound  []uint64
+	failed    []int32             // per chain, the units down
+	chainT    []float64           // per source, the time its chains are simulated to, from the period's start
+	outage    float64             // the current round's outage, when its block fired it
+	tested    float64             // the value the current node's threshold tests
+	vals      []float64           // per function, its value at the current node, for the expressions that read it
 	sums      []float64           // per trigger, the period's sum of its inputs so far
 	queues    []wqueue            // per queue, its state within the task
 	qseq      uint64              // rounds parked at the queues in the task, to order ties

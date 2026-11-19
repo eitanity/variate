@@ -167,16 +167,18 @@ func (b *builder) flattenGiven(m *Compiled) {
 		k, _ := b.givenSource(g)
 		v := b.nodeIndex[g.Node]
 		cg := cgiven{k: k, node: v, queue: m.nodes[v].queue, out: noIndex, age: noIndex, inService: noIndex, elapsed: noIndex}
-		cg.count = m.addPool(g.Count, PerEvent)
+		name := "given " + g.Node + "→" + g.To
+		cg.count = m.addPool(g.Count, PerEvent, name+" count")
+		m.givenKey = append(m.givenKey, m.poolKey[cg.count])
 		if g.To == "" {
 			cg.law = m.pools[m.queues[cg.queue].work]
-			cg.age = m.addPool(g.Age, PerEvent)
-			cg.inService = m.optPool(g.InService)
+			cg.age = m.addPool(g.Age, PerEvent, name+" age")
+			cg.inService = m.optPool(g.InService, name+" in service")
 		} else {
 			cg.queue = noIndex
 			cg.out = m.givenOutcome(v, b.nodeIndex[g.To])
 			cg.law = m.pools[m.outs[cg.out].hold]
-			cg.elapsed = m.optPool(g.Elapsed)
+			cg.elapsed = m.optPool(g.Elapsed, name+" elapsed")
 		}
 		cg.equilibrium = cg.inService == noIndex && cg.elapsed == noIndex
 		if lo, hi := cg.law.Support(); cg.equilibrium && lo != hi {
@@ -186,11 +188,11 @@ func (b *builder) flattenGiven(m *Compiled) {
 	}
 }
 
-func (m *Compiled) optPool(d dist.Distribution) int32 {
+func (m *Compiled) optPool(d dist.Distribution, name string) int32 {
 	if d == nil {
 		return noIndex
 	}
-	return m.addPool(d, PerEvent)
+	return m.addPool(d, PerEvent, name)
 }
 
 // givenOutcome is node v's outcome to node to with a holding time.

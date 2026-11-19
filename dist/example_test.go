@@ -24,17 +24,15 @@ func ExampleNewPERT() {
 	// P(X <= 2500) = 0.3216
 }
 
-// Draws come through a Sampler, which refills a buffer from the
-// distribution's Fill and hands out one value per Next. A SamplerSet
-// gives every distribution its own stream for a seed and task.
-func ExampleSamplerSet() {
+// Draws come from Fill, given a generator; the engine seeds one per
+// draw from the draw's key.
+func ExampleDistribution_fill() {
 	d, _ := dist.NewPERT(1, 2, 4, dist.DefaultPERTShape)
-	set := dist.NewSamplerSet([]dist.Distribution{d}, 1024)
-	set.Reset(7, 0)
-	s := set.Sampler(0)
+	xs := make([]float64, 100000)
+	d.Fill(rand.New(rand.NewPCG(7, 0)), xs)
 	sum := 0.0
-	for i := 0; i < 100000; i++ {
-		sum += s.Next()
+	for _, x := range xs {
+		sum += x
 	}
 	fmt.Printf("sample mean %.2f, exact %.2f\n", sum/100000, d.Mean())
 	// Output:

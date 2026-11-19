@@ -69,7 +69,7 @@ func (m *Compiled) outageHolds() error {
 		if !(f > 0) || math.IsInf(slowest, 1) {
 			return modelError("outcome", m.outcomeNames[j], "an outage holding needs a block that goes down and is repaired")
 		}
-		m.outs[j].hold = m.holdPool(outageBound{mean: u / f, tail: outageTailFactor / slowest}, PerEvent)
+		m.outs[j].hold = m.holdPool(outageBound{mean: u / f, tail: outageTailFactor / slowest}, PerEvent, "outage "+m.outcomeNames[j])
 	}
 	return nil
 }
@@ -97,7 +97,7 @@ func (m *Compiled) outageSource(j int) (int, error) {
 // the system is up again, returning that time, or limit when the outage
 // outlasts it; the events it applies are the chains' real path, which
 // the period's loop then resumes from.
-func (w *Workspace) lookAhead(wk *worker, src csrc, t, limit float64) float64 {
+func (w *Workspace) lookAhead(wk *worker, r *rand.Rand, src csrc, t, limit float64) float64 {
 	m := w.m
 	drawn := 0
 	// bound: the outage's unit events up to limit, a Poisson count, capped
@@ -114,11 +114,11 @@ func (w *Workspace) lookAhead(wk *worker, src csrc, t, limit float64) float64 {
 		if !(total > 0) {
 			return limit
 		}
-		t += wk.ss.Control().ExpFloat64() / total
+		t += r.ExpFloat64() / total
 		if t >= limit {
 			return limit
 		}
-		w.chainEvent(wk, src, wk.ss.Control().Float64()*total)
+		w.chainEvent(wk, src, r.Float64()*total)
 	}
 	return t
 }

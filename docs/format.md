@@ -882,7 +882,7 @@ flag wins.
 |---|---|
 | `periods` | run exactly this many periods. Omitted: the plan decides, running until every criterion below is met. |
 | `repeats` | in a started run, run exactly this many repeats of the horizon; omitted, the plan decides. A started run refuses `periods`. |
-| `seed` | the random seed; 0, the default, draws a fresh seed each run, which the report gives. The same seed, model and `block_periods` repeat a run exactly. |
+| `seed` | the random seed; 0, the default, draws a fresh seed each run, which the report gives. The same seed, model and `block_periods` repeat a run exactly. Every draw is keyed by what it is: the period, the source, the round's number among the source's rounds that period, and the node, function, holding or choice by name. Two models at one seed so draw alike wherever an edit does not reach: a changed probability moves only the rounds between its old and new thresholds, a changed law redraws only its own values, and an added node, function or source leaves every other draw as it was. Their periods pair, and a difference between them is measured far more sharply than from two independent runs. |
 | `workers` | simulation threads; default all cores, or as many as fit `max_memory`. |
 | `min_hits` | events every reachable outcome must see (default 1000). |
 | `contrib_rse`, `target_rse` | relative standard error asked of each node's contribution and of each mean (default 1%). |
@@ -891,7 +891,7 @@ flag wins.
 | `allow_unconverged` | run to the caps when the plan exceeds them, instead of refusing. |
 | `transform` | also compute the exact distribution by FFT at compile, where the model allows it; `transform_grid`, `transform_tol`, `transform_work` and `transform_bytes` set its largest grid, tolerance, work budget and the memory a pass may allocate (in the browser, unless set, a tolerance of 0.01 and 640 MB). The tolerance is met at a point when either P(T ≥ x) or the quantiles there are bracketed within it, relatively. |
 | `block_periods` | periods per task; the default is 4096, or a thirty-second of `periods` in a fixed run. |
-| `batch`, `pool_size`, `burn_in`, `max_memory`, `round_scratch`, `record_buffer` | sizing of the run's buffers; the defaults suit nearly every model. |
+| `batch`, `burn_in`, `max_memory`, `round_scratch`, `record_buffer` | sizing of the run's buffers; the defaults suit nearly every model. |
 | `hist_res` | the relative width of the histogram bins the quantiles come from (default 0.001). |
 | `series` | keep every period's totals for output. |
 | `no_breakdown` | skip the per-category, per-source and per-node contribution figures and their precision criteria, so the run is sized by the total alone: much faster when a breakdown sets the length. |

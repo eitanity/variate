@@ -1,6 +1,9 @@
 package variate
 
-import "math"
+import (
+	"math"
+	"math/rand/v2"
+)
 
 // Chain is one block of a reliability diagram the engine simulates
 // exactly: N identical units of which K must be working, each failing
@@ -82,8 +85,8 @@ func (w *Workspace) chainsUp(wk *worker, src csrc) bool {
 }
 
 // startChains puts a source's chains in their stationary state: each
-// unit down with its unavailability, from the control stream.
-func (w *Workspace) startChains(wk *worker, src csrc) {
+// unit down with its unavailability, from r, the source's start stream.
+func (w *Workspace) startChains(wk *worker, r *rand.Rand, src csrc) {
 	// bound: the source's chains
 	for c := src.chainStart; c < src.chainEnd; c++ {
 		ch := w.m.chains[c]
@@ -91,7 +94,7 @@ func (w *Workspace) startChains(wk *worker, src csrc) {
 		wk.failed[c] = 0
 		// bound: the chain's units
 		for i := 0; i < ch.N; i++ {
-			if wk.ss.Control().Float64() < p {
+			if r.Float64() < p {
 				wk.failed[c]++
 			}
 		}
@@ -130,11 +133,11 @@ func (w *Workspace) runChainSource(wk *worker, sl *slot, k int32, p int64) {
 		if !(total > 0) {
 			return
 		}
-		t += wk.ss.Control().ExpFloat64() / total
+		t += wk.ev[k].ExpFloat64() / total
 		if t >= end {
 			return
 		}
-		fired := w.chainEvent(wk, src, wk.ss.Control().Float64()*total)
+		fired := w.chainEvent(wk, src, wk.ev[k].Float64()*total)
 		nowUp := w.chainsUp(wk, src)
 		if (up && !nowUp) || (fired && up) {
 			t = w.fireChain(wk, sl, k, src, t, p, nowUp)
@@ -152,7 +155,7 @@ func (w *Workspace) fireChain(wk *worker, sl *slot, k int32, src csrc, t float64
 	wk.outage = 0
 	resume := t
 	if !nowUp {
-		resume = w.lookAhead(wk, src, t, maxBurnIn)
+		resume = w.lookAhead(wk, wk.ev[k], src, t, maxBurnIn)
 		wk.outage = resume - t
 		if resume > 1 {
 			wk.chainT[k] = resume
@@ -161,6 +164,7 @@ func (w *Workspace) fireChain(wk *worker, sl *slot, k int32, src csrc, t float64
 	if p >= 0 {
 		sl.events[k]++
 	}
+	wk.newRound(k)
 	if w.stream {
 		w.beginRound(wk, t)
 	}

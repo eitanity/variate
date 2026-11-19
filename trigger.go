@@ -61,7 +61,8 @@ func (b *builder) flattenTriggers(m *Compiled) {
 		n := b.g.Nodes[i]
 		tr := index(len(m.trigs))
 		k := index(len(m.srcs))
-		pool := m.addPool(point(0), PerEvent)
+		pool := m.addPool(point(0), PerEvent, "trigger "+n.ID)
+		m.srcKey = append(m.srcKey, nameKey("trigger "+n.ID))
 		m.srcs = append(m.srcs, csrc{to: i, pool: pool, every: 1, repair: noIndex, factor: noIndex, schedule: noIndex, trigger: tr, chainStart: index(len(m.chains)), chainEnd: index(len(m.chains))})
 		m.sourceIDs = append(m.sourceIDs, n.ID)
 		m.trigs = append(m.trigs, ctrig{node: i, src: k, over: n.Trigger.Over, upstream: b.trigUp[i]})
@@ -644,6 +645,7 @@ func (w *Workspace) runTrigger(wk *worker, sl *slot, k int32, p int64) {
 	if p >= 0 {
 		sl.events[k]++
 	}
+	wk.newRound(k)
 	if w.stream {
 		w.beginRound(wk, periodEnd)
 	}

@@ -103,3 +103,18 @@ func TestPoissonCount(t *testing.T) {
 		t.Error("non-positive rate must give 0")
 	}
 }
+
+// TestPoissonCountAt: the count at u is the quantile, for rates either
+// side of the threshold, and rises with the rate at one u.
+func TestPoissonCountAt(t *testing.T) {
+	for _, lam := range []float64{0.3, 5, 21.9, 22, 40, 1000, 1e6} {
+		for _, u := range []float64{1e-12, 0.001, 0.2, 0.5, 0.77, 0.999, 1 - 1e-12} {
+			if got, want := float64(PoissonCountAt(lam, u)), poissonQuantile(lam, u); got != want {
+				t.Errorf("λ %v, u %v: count %v, quantile %v", lam, u, got, want)
+			}
+			if PoissonCountAt(lam*1.1, u) < PoissonCountAt(lam, u) {
+				t.Errorf("λ %v, u %v: falls with the rate", lam, u)
+			}
+		}
+	}
+}

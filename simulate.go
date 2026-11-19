@@ -2,6 +2,7 @@ package variate
 
 import (
 	"math"
+	"math/rand/v2"
 
 	"code.eitanity.com/variate/dist"
 	"code.eitanity.com/variate/stats"
@@ -14,9 +15,13 @@ import (
 func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64) {
 	m := w.m
 	sl.reset()
-	wk.ss.Reset(seed, sl.id)
+	wk.k.seed = seed
+	wk.lane = splitmix(uint64(sl.line)) //nolint:gosec // a timeline's number
+	if w.started {
+		wk.lane = splitmix(uint64(sl.task) + 1<<63) //nolint:gosec // a repeat's number
+	}
 	if m.renewal {
-		w.startSources(wk)
+		w.startSources(wk, sl.a)
 	}
 	for c := range wk.queues {
 		wk.queues[c].reset()
@@ -102,14 +107,26 @@ func (w *Workspace) closeHorizon(sl *slot, hs []*stats.LogHist) {
 	sl.closed = 1
 }
 
-// drawPeriod takes this period's value from every period-scoped pool,
-// and sets each schedule's value by the period's place in its cycle.
+// drawPeriod draws this period's value of every period-scoped pool,
+// sets each schedule's value by the period's place in its cycle, and
+// keys each source's rounds and events of the period.
 func (w *Workspace) drawPeriod(wk *worker, p int64) {
 	m := w.m
+	wk.pkey = mix(wk.lane, uint64(p-w.keyShift)) //nolint:gosec // a period's number, negative in the burn-in
 	for k, slot := range m.poolPeriod {
-		if slot != noIndex {
-			wk.period[slot] = wk.ss.Sampler(k).Next()
+		if slot == noIndex {
+			continue
 		}
+		if m.poolConst[k] {
+			wk.period[slot] = m.poolMean[k]
+		} else {
+			wk.period[slot] = wk.k.value(m.pools[k], within(wk.pkey, m.poolKey[k]))
+		}
+	}
+	for k := range m.srcs {
+		wk.spk[k] = within(wk.pkey, m.srcKey[k])
+		wk.nround[k] = 0
+		wk.evPCG[k].Seed(wk.k.seed, mix(wk.spk[k], tagEvents))
 	}
 	for _, sc := range m.schedules {
 		wk.period[m.poolPeriod[sc.pool]] = sc.at(p)
@@ -118,12 +135,31 @@ func (w *Workspace) drawPeriod(wk *worker, p int64) {
 }
 
 // draw returns a pool's value for this round: the period's draw for a
-// period-scoped pool, the next pooled value otherwise.
+// period-scoped pool, else a draw keyed by the round and the pool.
 func (w *Workspace) draw(wk *worker, pool int32) float64 {
-	if slot := w.m.poolPeriod[pool]; slot != noIndex {
+	m := w.m
+	if slot := m.poolPeriod[pool]; slot != noIndex {
 		return wk.period[slot]
 	}
-	return wk.ss.Sampler(int(pool)).Next()
+	if m.poolConst[pool] {
+		return m.poolMean[pool]
+	}
+	return wk.k.value(m.pools[pool], within(wk.rkey, m.poolKey[pool]))
+}
+
+// drawFrom draws a pool's value from r, a source's events stream.
+func (w *Workspace) drawFrom(wk *worker, pool int32, r *rand.Rand) float64 {
+	m := w.m
+	if m.poolConst[pool] {
+		return m.poolMean[pool]
+	}
+	return wk.k.from(m.pools[pool], r)
+}
+
+// newRound keys the next round of source k in the period.
+func (wk *worker) newRound(k int32) {
+	wk.rkey = within(wk.spk[k], uint64(wk.nround[k]))
+	wk.nround[k]++
 }
 
 // runSource emits the period's rounds of source k and walks each one.
@@ -153,13 +189,14 @@ func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p int64) {
 	if src.schedule != noIndex {
 		lam *= wk.period[m.poolPeriod[src.schedule]]
 	}
-	n := dist.PoissonCount(wk.ss.Control(), lam)
+	n := dist.PoissonCountAt(lam, unitOpen(wk.k.at(within(wk.spk[k], tagCount))))
 	if p >= 0 {
 		sl.events[k] += n
 	}
 	// bound: the Poisson count
 	for i := uint64(0); i < n && sl.err == nil; i++ {
-		t := wk.ss.Control().Float64()
+		wk.newRound(k)
+		t := wk.k.at(within(wk.rkey, tagTime)).Float64()
 		if w.stream {
 			w.beginRound(wk, t)
 		}
@@ -174,7 +211,6 @@ func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p int64) {
 func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p int64) {
 	m := w.m
 	nodes := len(m.nodes)
-	wk.round++
 	// bound: a path visits each node at most once
 	for step := 0; step <= nodes; step++ {
 		sl.steps++
@@ -228,9 +264,9 @@ func (w *Workspace) stopsAt(wk *worker, sl *slot, k int32, n cnode, t float64, p
 }
 
 // chooseSequential tries the outcomes in order, each with its own
-// probability and a fresh uniform after the first, u; the last takes
-// what is left.
-func (w *Workspace) chooseSequential(wk *worker, n cnode, u float64) int32 {
+// probability and a fresh uniform from r after the first, u; the last
+// takes what is left.
+func (w *Workspace) chooseSequential(wk *worker, n cnode, u float64, r *rand.Rand) int32 {
 	m := w.m
 	last := n.outEnd - 1
 	// bound: outcomes of one node
@@ -242,7 +278,7 @@ func (w *Workspace) chooseSequential(wk *worker, n cnode, u float64) int32 {
 		if u < q {
 			return j
 		}
-		u = wk.ss.Control().Float64()
+		u = r.Float64()
 	}
 	return last
 }
@@ -325,18 +361,16 @@ func (w *Workspace) value(wk *worker, f int32) float64 {
 }
 
 // together draws a member of group g from law pool: the group's normal
-// for the round, drawn at its first member, mixed with the member's own.
+// for the round, keyed by the round and the group, mixed with the
+// member's own.
 func (w *Workspace) together(wk *worker, g, pool int32) float64 {
-	c := &w.m.groups[g]
-	r := wk.ss.Control()
-	if wk.drvRound[g] != wk.round {
-		wk.drv[g], wk.drvRound[g] = r.NormFloat64(), wk.round
-	}
-	z := c.sq * wk.drv[g]
+	m := w.m
+	c := &m.groups[g]
+	z := c.sq * wk.k.at(within(wk.rkey, m.groupKey[g])).NormFloat64()
 	if c.sq1 > 0 {
-		z += c.sq1 * r.NormFloat64()
+		z += c.sq1 * wk.k.at(within(wk.rkey, mix(m.poolKey[pool], tagOwn))).NormFloat64()
 	}
-	return copulaValue(w.m.pools[pool], z)
+	return copulaValue(m.pools[pool], z)
 }
 
 // rowFor returns the row for a booking in period q: the period's row
@@ -417,23 +451,29 @@ func (w *Workspace) choose(wk *worker, v int32, n cnode) int32 {
 		}
 		return n.outStart + 1
 	}
-	u := wk.ss.Control().Float64()
+	r := wk.k.at(within(wk.rkey, m.chooseKey[v]))
+	u := r.Float64()
 	switch {
 	case n.mode == Sequential:
-		return w.chooseSequential(wk, n, u)
+		return w.chooseSequential(wk, n, u, r)
 	case n.twoWay:
 		if u < wk.period[m.poolPeriod[m.outs[n.outStart].probPool]] {
 			return n.outStart
 		}
 		return n.outStart + 1
-	case n.alias != noIndex:
-		count := int(n.outEnd - n.outStart)
-		scaled := u * float64(count)
-		i := int(scaled)
-		if scaled-float64(i) < m.aliasProb[int(n.alias)+i] {
-			return n.outStart + index(i)
+	case n.outEnd-n.outStart > searchOutcomes:
+		// The first outcome whose cumulative passes u, by bisection.
+		lo, hi := n.outStart, n.outEnd-1
+		// bound: log2 of the node's outcomes
+		for lo < hi {
+			mid := lo + (hi-lo)/2
+			if u < m.outs[mid].cum {
+				hi = mid
+			} else {
+				lo = mid + 1
+			}
 		}
-		return n.outStart + m.aliasIdx[int(n.alias)+i]
+		return lo
 	default:
 		// bound: outcomes of one node
 		for j := n.outStart; j < n.outEnd-1; j++ {
@@ -548,6 +588,15 @@ func (w *Workspace) keepSeries(row []float64, p int64) {
 		width := w.l.width
 		copy(s.rows[int(p)*width:(int(p)+1)*width], row)
 	}
+}
+
+// searchOutcomes is the most outcomes a node's choice tries in order;
+// more are found by bisection.
+const searchOutcomes = 8
+
+// unitOpen is a uniform on (0, 1).
+func unitOpen(r *rand.Rand) float64 {
+	return (float64(r.Uint64()>>11) + 0.5) / (1 << 53)
 }
 
 // invariantTol is the rounding allowance on the breakdown sums.

@@ -203,7 +203,6 @@ type Config struct {
 	Seed         uint64
 	Workers      int
 	BlockPeriods int
-	PoolSize     int
 	Series       bool
 	NoBreakdown  bool
 	NodeHist     bool

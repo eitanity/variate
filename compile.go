@@ -2,7 +2,6 @@ package variate
 
 import (
 	"math"
-	"sort"
 
 	"code.eitanity.com/variate/dist"
 	"code.eitanity.com/variate/stats"
@@ -13,10 +12,7 @@ const (
 
 	// probSumTol is the tolerance on fixed probabilities summing to 1.
 	probSumTol = 1e-12
-	// aliasThreshold is the number of fixed outcomes above which a node
-	// selects with an alias table.
-	aliasThreshold = 8
-	// maxDistributions keeps the stream key injective.
+	// maxDistributions bounds the pools.
 	maxDistributions = 1 << 32
 	maxReachEntries  = 1 << 26 // sources × nodes a model may have: the reach tables
 )
@@ -29,7 +25,6 @@ type cnode struct {
 	rateStart, rateEnd int32 // PerTime functions
 	mode               Mode
 	twoWay             bool    // absolute mode with one uncertain probability and a remainder
-	alias              int32   // alias table start, or noIndex
 	thresh             int32   // the function a threshold tests, outside the ranges above, or noIndex
 	queue              int32   // the node's queue, or noIndex
 	over               float64 // the threshold: above when the value is greater
@@ -96,11 +91,15 @@ type Compiled struct {
 	userLevels                         int      // how many of levels are Config.At's
 	whens                              []cwhen  // Config.When, each with its quantity's row
 	fnPerTime                          []bool
-	aliasProb                          []float64
-	aliasIdx                           []int32
 	pools                              []dist.Distribution
 	poolMean                           []float64
-	poolPeriod                         []int32 // per-period slot, or noIndex for event scope
+	poolPeriod                         []int32  // per-period slot, or noIndex for event scope
+	poolKey                            []uint64 // per pool, its key by name, which its draws are keyed by
+	poolConst                          []bool   // per pool, a constant: no draw
+	keySeen                            map[uint64]int
+	nodeKey, srcKey, groupKey          []uint64 // by name
+	chooseKey                          []uint64 // per node, its choice's key
+	givenKey                           []uint64 // per given entry, by its node and order there
 	periodSlots                        int
 	topo                               []int32
 	reach                              [][]float64
@@ -430,12 +429,6 @@ func (m *Compiled) workWarning() Warning {
 		msg += ", arrivals drawn per period " + figure(arrivals)
 	}
 	return Warning{Code: "expected-work", Subject: "model", Message: msg}
-}
-
-// sortOutcomesDesc orders fixed outcomes by descending probability,
-// stable.
-func sortOutcomesDesc(idx []int, probs []float64) {
-	sort.SliceStable(idx, func(a, b int) bool { return probs[idx[a]] > probs[idx[b]] })
 }
 
 // setWatch resolves the Watch names; validation has checked they exist.

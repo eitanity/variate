@@ -81,8 +81,10 @@ category's or source's mean (`--screen 0.1` moves every input by a
 tenth instead, to see which deserve a range). Its rows are exact where
 the analytic means give the figure, brackets where the exact
 distribution applies, and otherwise simulated at one seed, the moved
-models drawing from the base model's random streams so that each
-difference's standard error is measured on paired blocks. A run without a period count
+models drawing alike wherever the move does not reach, so that each
+difference's standard error is measured on paired blocks: every draw is
+keyed by what it is, its period, source, round and the node, function
+or holding by name, not by its place in the model. A run without a period count
 continues until every criterion is met: enough hits on every outcome,
 a small enough error on every mean, enough periods in the tail. The
 same model, seed and block size repeat a run exactly.

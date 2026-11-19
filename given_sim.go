@@ -27,13 +27,20 @@ func (w *Workspace) placeGiven(wk *worker, sl *slot) {
 	}
 	for i := range m.given {
 		if m.given[i].out != noIndex {
-			w.releaseHeld(wk, sl, &m.given[i])
+			w.releaseHeld(wk, sl, index(i))
 		}
 	}
 }
 
-// givenCount draws an entry's rounds for the repeat, a whole number.
-func (w *Workspace) givenCount(wk *worker, sl *slot, g *cgiven) int {
+// givenRound keys entry i's round j of the repeat; j = 0 keys its count.
+func (w *Workspace) givenRound(wk *worker, i int32, j int) {
+	wk.rkey = mix(mix(wk.pkey, w.m.givenKey[i]), uint64(j)) //nolint:gosec // a count
+}
+
+// givenCount draws entry i's rounds for the repeat, a whole number.
+func (w *Workspace) givenCount(wk *worker, sl *slot, i int32) int {
+	g := &w.m.given[i]
+	w.givenRound(wk, i, 0)
 	x := math.Round(w.draw(wk, g.count))
 	if x > maxGiven {
 		if sl.err == nil {
@@ -50,14 +57,15 @@ func (w *Workspace) lineUp(wk *worker, sl *slot, i int32) {
 	m := w.m
 	g := &m.given[i]
 	q := &wk.queues[g.queue]
-	n := w.givenCount(wk, sl, g)
+	n := w.givenCount(wk, sl, i)
 	// bound: the entry's rounds, at most maxGiven
-	for range n {
+	for j := range n {
 		if sl.err != nil {
 			return
 		}
+		w.givenRound(wk, i, j+1)
 		wk.qseq++
-		it := qitem{t: -w.draw(wk, g.age), k: g.k, given: i + 1, seq: wk.qseq}
+		it := qitem{t: -w.draw(wk, g.age), k: g.k, given: i + 1, seq: wk.qseq, rkey: wk.rkey}
 		it.work = w.draw(wk, m.queues[g.queue].work)
 		w.queueCol(sl, g.queue, qJoined, 0, 1)
 		if !q.join(it) {
@@ -93,6 +101,7 @@ func (w *Workspace) seatGiven(wk *worker, c int32) {
 			return
 		}
 		it := q.leave()
+		wk.rkey = it.rkey
 		left, served := w.inService(wk, &w.m.given[it.given-1], speed)
 		it.work = left
 		start := -math.Min(served, -it.t)
@@ -107,31 +116,33 @@ func (w *Workspace) seatGiven(wk *worker, c int32) {
 // work done, which given the residual r is the work less r, given it is
 // more than r.
 func (w *Workspace) inService(wk *worker, g *cgiven, speed float64) (left, served float64) {
-	r := wk.ss.Control()
 	if g.inService != noIndex {
 		e := w.draw(wk, g.inService)
-		return residualAfter(g.law, e*speed, r), e
+		return residualAfter(g.law, e*speed, wk.k.at(mix(wk.rkey, tagGiven))), e
 	}
 	left = w.equilibrium(wk, g)
-	return left, residualAfter(g.law, left, r) / speed
+	return left, residualAfter(g.law, left, wk.k.at(mix(wk.rkey, tagServed))) / speed
 }
 
 // releaseHeld walks an entry's rounds on from the end of their holding
 // times, the holding node's rates booked over what is left of it; they
 // count in no source's reach, having arrived before the run.
-func (w *Workspace) releaseHeld(wk *worker, sl *slot, g *cgiven) {
+func (w *Workspace) releaseHeld(wk *worker, sl *slot, i int32) {
 	m := w.m
+	g := &m.given[i]
 	n := m.nodes[g.node]
 	to := m.outs[g.out].to
-	cnt := w.givenCount(wk, sl, g)
+	cnt := w.givenCount(wk, sl, i)
 	// bound: the entry's rounds, at most maxGiven
-	for range cnt {
+	for j := range cnt {
 		if sl.err != nil {
 			return
 		}
+		w.givenRound(wk, i, j+1)
 		var left float64
 		if g.elapsed != noIndex {
-			left = residualAfter(g.law, w.draw(wk, g.elapsed), wk.ss.Control())
+			e := w.draw(wk, g.elapsed)
+			left = residualAfter(g.law, e, wk.k.at(mix(wk.rkey, tagGiven)))
 		} else {
 			left = w.equilibrium(wk, g)
 		}
@@ -144,13 +155,14 @@ func (w *Workspace) releaseHeld(wk *worker, sl *slot, g *cgiven) {
 	}
 }
 
-// equilibrium draws the equilibrium residual of an entry's law: a
-// uniform share of a constant, else from its table.
+// equilibrium draws the equilibrium residual of an entry's law, keyed
+// by the round: a uniform share of a constant, else from its table.
 func (w *Workspace) equilibrium(wk *worker, g *cgiven) float64 {
+	r := wk.k.at(mix(wk.rkey, tagGiven))
 	if lo, hi := g.law.Support(); lo == hi {
-		return wk.ss.Control().Float64() * hi
+		return r.Float64() * hi
 	}
-	return g.resid.draw(wk.ss.Control())
+	return g.resid.draw(r)
 }
 
 // residualAfter draws X − a given X > a by inverting the upper tail:

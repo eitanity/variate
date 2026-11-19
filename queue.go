@@ -58,6 +58,7 @@ type qitem struct {
 	given int32 // its entry of the given state at this queue, from 1; −1 for a given state's round from a holding; 0 for an arrival
 	work  float64
 	seq   uint64
+	rkey  uint64 // the round's key, which its draws after the queue keep
 }
 
 // qserver is a server: the round it serves, when it began and when it
@@ -238,7 +239,7 @@ func (b *builder) flattenQueue(m *Compiled, i int32, n Node, cn *cnode) {
 		return
 	}
 	q := n.Queue
-	cq := cqueue{node: i, servers: int32(q.Servers), speed: q.Speed, work: m.addPool(q.Work, PerEvent), reset: q.Reset, unfinished: noIndex} //nolint:gosec // servers are checked below 2^16
+	cq := cqueue{node: i, servers: int32(q.Servers), speed: q.Speed, work: m.addPool(q.Work, PerEvent, "work "+n.ID), reset: q.Reset, unfinished: noIndex} //nolint:gosec // servers are checked below 2^16
 	if q.Unfinished != "" {
 		cq.unfinished = b.nodeIndex[q.Unfinished]
 	}

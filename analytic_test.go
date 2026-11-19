@@ -21,7 +21,7 @@ func TestAnalyticDiamond(t *testing.T) {
 	if !near(e.EntriesPer[1], 0.3*lam, 1e-12) || !near(e.EntriesPer[3], lam, 1e-12) {
 		t.Errorf("entries %v", e.EntriesPer)
 	}
-	if !near(e.OutcomeRate[0], 0.7*lam, 1e-12) || !near(e.OutcomeRate[1], 0.3*lam, 1e-12) {
+	if !near(e.OutcomeRate[0], 0.3*lam, 1e-12) || !near(e.OutcomeRate[1], 0.7*lam, 1e-12) {
 		t.Errorf("outcome rates %v", e.OutcomeRate)
 	}
 	if e.Terminal[0][3] != 1 || e.Terminal[0][0] != 0 {

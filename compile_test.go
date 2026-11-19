@@ -57,11 +57,11 @@ func TestCompileDiamond(t *testing.T) {
 	if got := strings.Join(m.NodeIDs(), ","); got != "a,b,c,d" {
 		t.Errorf("nodes %s", got)
 	}
-	// Fixed outcomes are ordered by descending probability with cumulative thresholds.
-	if got := strings.Join(m.OutcomeNames(), ","); got != "a→c,a→b,b→d,c→d" {
+	// Fixed outcomes keep their declared order, with cumulative thresholds.
+	if got := strings.Join(m.OutcomeNames(), ","); got != "a→b,a→c,b→d,c→d" {
 		t.Errorf("outcomes %s", got)
 	}
-	if m.outs[0].cum != 0.7 || m.outs[1].cum != 1 || m.outs[2].cum != 1 {
+	if m.outs[0].cum != 0.3 || m.outs[1].cum != 1 || m.outs[2].cum != 1 {
 		t.Errorf("cumulative thresholds %v", []float64{m.outs[0].cum, m.outs[1].cum, m.outs[2].cum})
 	}
 	if got := strings.Join(m.Categories(), ","); got != "labour,parts" {
@@ -178,7 +178,7 @@ func TestCompileSelections(t *testing.T) {
 	if math.Abs(ps[0]-0.5) > 1e-15 || math.Abs(ps[1]-0.25) > 1e-15 || math.Abs(ps[2]-0.25) > 1e-15 {
 		t.Errorf("sequential probabilities %v", ps)
 	}
-	// Wide fixed selection gets an alias table; repeated targets get suffixes.
+	// Repeated targets get suffixes, in the order declared.
 	g = diamond()
 	var outs []Outcome
 	for i := 0; i < 10; i++ {
@@ -186,16 +186,8 @@ func TestCompileSelections(t *testing.T) {
 	}
 	g.Nodes[0].Outcomes = outs
 	m, _ = mustCompile(t, g, Config{})
-	if m.nodes[0].alias != 0 || len(m.aliasProb) != 10 || m.OutcomeNames()[1] != "a→d#2" {
-		t.Errorf("alias %d probs %d names %v", m.nodes[0].alias, len(m.aliasProb), m.OutcomeNames()[:3])
-	}
-	sum := 0.0
-	for i, p := range m.aliasProb {
-		sum += p
-		_ = m.aliasIdx[i]
-	}
-	if math.Abs(sum-10) > 1e-12 {
-		t.Errorf("alias table mass %g", sum)
+	if m.OutcomeNames()[1] != "a→d#2" || math.Abs(m.outs[9].cum-1) != 0 || math.Abs(m.outs[4].cum-0.5) > 1e-15 {
+		t.Errorf("names %v, thresholds %v %v", m.OutcomeNames()[:3], m.outs[4].cum, m.outs[9].cum)
 	}
 }
 

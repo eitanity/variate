@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"math/cmplx"
+	"math/rand/v2"
 )
 
 // A source's count per period follows one of three laws: mixed Poisson
@@ -257,36 +258,40 @@ func polyAt(p []float64, z complex128) complex128 {
 }
 
 // startSources puts every renewal source in its equilibrium state at a
-// block's start, from the control stream: the Erlang phase uniform over
-// its positions; the repair law down with the stationary probability,
-// for the equilibrium residual of its repair time.
-func (w *Workspace) startSources(wk *worker) {
+// block's start, period a, from the source's start stream: the Erlang
+// phase uniform over its positions; the repair law down with the
+// stationary probability, for the equilibrium residual of its repair
+// time.
+func (w *Workspace) startSources(wk *worker, a int64) {
 	m := w.m
+	start := mix(wk.lane, uint64(a-w.keyShift)) //nolint:gosec // a period's number, negative in the burn-in
 	for k, s := range m.srcs {
+		wk.evPCG[k].Seed(wk.k.seed, mix(mix(start, m.srcKey[k]), tagStart))
+		r := wk.ev[k]
 		switch {
 		case s.chainEnd > s.chainStart:
-			w.startChains(wk, s)
+			w.startChains(wk, r, s)
 			wk.chainT[k] = 0
 		case s.repair != noIndex:
 			wk.downUntil[k] = math.Inf(-1)
 			lam, h := m.poolMean[s.pool], m.poolMean[s.repair]
-			if lam > 0 && h > 0 && wk.ss.Control().Float64() < h/(1/lam+h) {
-				wk.downUntil[k] = w.residual(wk, k, s.repair)
+			if lam > 0 && h > 0 && r.Float64() < h/(1/lam+h) {
+				wk.downUntil[k] = w.residual(r, k, s.repair)
 			}
 		case s.every > 1:
-			wk.phase[k] = int32(wk.ss.Control().Float64() * float64(s.every))
+			wk.phase[k] = int32(r.Float64() * float64(s.every))
 		}
 	}
 }
 
-// residual draws the equilibrium residual of source k's repair time: a
-// uniform share of a constant, else from the source's table.
-func (w *Workspace) residual(wk *worker, k int, pool int32) float64 {
+// residual draws the equilibrium residual of source k's repair time
+// from r: a uniform share of a constant, else from the source's table.
+func (w *Workspace) residual(r *rand.Rand, k int, pool int32) float64 {
 	d := w.m.pools[pool]
 	if lo, hi := d.Support(); lo == hi {
-		return wk.ss.Control().Float64() * hi
+		return r.Float64() * hi
 	}
-	return w.m.resid[k].draw(wk.ss.Control())
+	return w.m.resid[k].draw(r)
 }
 
 // runRenewalSource emits the period's rounds of a renewal source: the
@@ -302,8 +307,9 @@ func (w *Workspace) runRenewalSource(wk *worker, sl *slot, k int32, p int64) {
 	}
 	end := 1.0
 	drawn := 0
+	r := wk.ev[k]
 	// bound: the period's underlying arrivals, a Poisson count, capped
-	for t := wk.ss.Control().ExpFloat64() / lam; t < end && sl.err == nil; t += wk.ss.Control().ExpFloat64() / lam {
+	for t := r.ExpFloat64() / lam; t < end && sl.err == nil; t += r.ExpFloat64() / lam {
 		if drawn++; drawn > maxEventsPeriod {
 			sl.err = eventsCapError(m.sourceIDs[k], p)
 			return
@@ -312,7 +318,7 @@ func (w *Workspace) runRenewalSource(wk *worker, sl *slot, k int32, p int64) {
 			if t < wk.downUntil[k] {
 				continue
 			}
-			wk.downUntil[k] = t + w.draw(wk, src.repair)
+			wk.downUntil[k] = t + w.drawFrom(wk, src.repair, r)
 		} else {
 			wk.phase[k]++
 			if wk.phase[k] < src.every {
@@ -323,6 +329,7 @@ func (w *Workspace) runRenewalSource(wk *worker, sl *slot, k int32, p int64) {
 		if p >= 0 {
 			sl.events[k]++
 		}
+		wk.newRound(k)
 		if w.stream {
 			w.beginRound(wk, t)
 		}

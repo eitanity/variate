@@ -101,7 +101,7 @@ func TestAdaptiveRarePath(t *testing.T) {
 	if r.Periods%batch != 0 || r.Periods == 0 {
 		t.Errorf("periods %d not a batch multiple", r.Periods)
 	}
-	hits := r.OutcomeCount[0][1]
+	hits := r.OutcomeCount[0][0]
 	if hits < 50 {
 		t.Errorf("rare hits %d", hits)
 	}

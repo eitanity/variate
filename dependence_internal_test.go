@@ -55,12 +55,12 @@ func TestTogetherDraws(t *testing.T) {
 		}
 		m := compiled(t, g)
 		w := &Workspace{m: m}
-		wk := newWorker(m, 64)
-		wk.ss.Reset(7, 0)
+		wk := newWorker(m)
+		wk.k.seed = 7
 		const n = 200000
 		xs, ys := make([]float64, n), make([]float64, n)
 		for i := range n {
-			wk.round++
+			wk.rkey = splitmix(uint64(i))
 			xs[i] = w.together(wk, 0, m.fns[0].pool)
 			ys[i] = w.together(wk, 0, m.fns[1].pool)
 		}

@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"math"
+	"math/rand/v2"
 	"os"
 	"runtime"
 	"sync"
 	"time"
 
-	"code.eitanity.com/variate/dist"
 	"code.eitanity.com/variate/stats"
 )
 
@@ -17,7 +17,6 @@ const (
 	defaultBlockPeriods = 4096
 	// maxSlotValues bounds a slot's rows under the default block.
 	maxSlotValues    = 1 << 19
-	defaultPoolSize  = 1024
 	defaultHistRes   = 1e-3
 	defaultBatch     = 64
 	defaultMaxMemory = 4 << 30
@@ -43,6 +42,7 @@ type Workspace struct {
 	l           layout
 	burnIn      int64 // burn-in tasks, before task 0, over every timeline
 	lines       int64 // independent timelines the tasks are dealt into
+	keyShift    int64 // periods subtracted from a period's number in its draws' keys: 0 but in a test of far periods
 	block       int64
 	batch       int64
 	horizon     int64
@@ -124,10 +124,6 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if w.batch <= 0 {
 		w.batch = defaultBatch
 	}
-	pool := cfg.PoolSize
-	if pool <= 0 {
-		pool = defaultPoolSize
-	}
 	if err := w.allocResult(); err != nil {
 		return nil, err
 	}
@@ -135,7 +131,7 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 		w.allocGroups()
 	}
 	w.allocWhen()
-	nw, nslots, err := w.fitWorkers(pool)
+	nw, nslots, err := w.fitWorkers()
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +141,7 @@ func (m *Compiled) NewWorkspace(cfg Config) (*Workspace, error) {
 	if err := w.setupStream(nw); err != nil {
 		return nil, err
 	}
-	w.startPool(nw, pool)
+	w.startPool(nw)
 	return w, nil
 }
 
@@ -234,35 +230,39 @@ func (w *Workspace) setupStream(nw int) error {
 	return nil
 }
 
-// newWorker is a worker's samplers, period draws, trigger sums, queues
-// and, for a model with expressions, the values they read, and with
-// dependence groups, their normals.
-func newWorker(m *Compiled, pool int) *worker {
-	wk := &worker{ss: dist.NewSamplerSet(m.pools, pool), period: make([]float64, m.periodSlots), sums: make([]float64, len(m.trigs))}
+// newWorker is a worker's keyed generator and streams, period draws,
+// trigger sums, queues and, for a model with expressions, the values
+// they read. What a worker writes as it walks is padded, so no other
+// worker's shares its cache lines.
+func newWorker(m *Compiled) *worker {
+	wk := &worker{period: paddedF64(m.periodSlots), sums: paddedF64(len(m.trigs))}
+	wk.k.init()
+	wk.spk, wk.nround = paddedU64(len(m.srcs)), paddedU32(len(m.srcs))
+	wk.evPCG, wk.ev = paddedPCG(len(m.srcs)), make([]*rand.Rand, len(m.srcs))
+	for k := range m.srcs {
+		wk.ev[k] = rand.New(&wk.evPCG[k])
+	}
 	for _, q := range m.queues {
 		wk.queues = append(wk.queues, newWQueue(q))
 	}
 	if len(m.exprs) > 0 {
-		wk.vals = make([]float64, len(m.fns))
-	}
-	if len(m.groups) > 0 {
-		wk.drv, wk.drvRound = make([]float64, len(m.groups)), make([]uint64, len(m.groups))
+		wk.vals = paddedF64(len(m.fns))
 	}
 	return wk
 }
 
 // startPool allocates the workers' private state and starts the worker
 // and finaliser goroutines, the only goroutines the engine creates.
-func (w *Workspace) startPool(nw, pool int) {
+func (w *Workspace) startPool(nw int) {
 	m := w.m
 	// bound: workers or slots, fixed at construction
 	for i := 0; i < nw; i++ {
-		wk := newWorker(m, pool)
+		wk := newWorker(m)
 		if m.renewal {
-			wk.phase = make([]int32, len(m.srcs))
-			wk.downUntil = make([]float64, len(m.srcs))
-			wk.failed = make([]int32, len(m.chains))
-			wk.chainT = make([]float64, len(m.srcs))
+			wk.phase = paddedI32(len(m.srcs))
+			wk.downUntil = paddedF64(len(m.srcs))
+			wk.failed = paddedI32(len(m.chains))
+			wk.chainT = paddedF64(len(m.srcs))
 		}
 		if w.stream {
 			scratch := w.cfg.RoundScratch
@@ -362,21 +362,21 @@ func (w *Workspace) allocTriggers(res float64) {
 // each holds its own histograms and the results do not depend on how
 // many there are. It refuses when the count set, or a single worker,
 // does not fit.
-func (w *Workspace) fitWorkers(pool int) (nw, nslots int, err error) {
+func (w *Workspace) fitWorkers() (nw, nslots int, err error) {
 	nw = w.cfg.Workers
 	if nw > 0 {
 		nslots = w.slotsFor(nw)
-		return nw, nslots, w.checkFootprint(nw, nslots, pool)
+		return nw, nslots, w.checkFootprint(nw, nslots)
 	}
 	// bound: GOMAXPROCS
 	for nw = runtime.GOMAXPROCS(0); nw > 1; nw-- {
 		nslots = w.slotsFor(nw)
-		if w.checkFootprint(nw, nslots, pool) == nil {
+		if w.checkFootprint(nw, nslots) == nil {
 			return nw, nslots, nil
 		}
 	}
 	nslots = w.slotsFor(1)
-	return 1, nslots, w.checkFootprint(1, nslots, pool)
+	return 1, nslots, w.checkFootprint(1, nslots)
 }
 
 // slotsFor is the number of result slots nw workers cycle through.
@@ -394,7 +394,7 @@ func (w *Workspace) memoryLimit() int64 {
 
 // checkFootprint evaluates the memory the workspace would hold and
 // refuses above MaxMemory.
-func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
+func (w *Workspace) checkFootprint(nw, nslots int) error {
 	limit := w.memoryLimit()
 	a := int64(w.l.width)
 	bins := int64(0)
@@ -427,7 +427,6 @@ func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
 		globalB += 24 * batchGroups * a // the group sums and counts
 	}
 	workerHistB := int64(2*nw) * 8 * bins
-	poolsB := int64(nw) * int64(len(w.m.pools)) * int64(pool) * 8
 	seriesB := int64(0)
 	if w.cfg.Series {
 		seriesB = 8 * a * (w.cfg.Periods + w.cfg.Repeats*w.m.horizon)
@@ -435,12 +434,12 @@ func (w *Workspace) checkFootprint(nw, nslots, pool int) error {
 	if w.started {
 		globalB += 24 * a * w.m.horizon // the per-period means
 	}
-	total := slotsB + carryB + globalB + workerHistB + poolsB + seriesB
+	total := slotsB + carryB + globalB + workerHistB + seriesB
 	w.footprint = total
 	if total > limit {
 		return errors.New("workspace footprint " + itoa(int(total>>20)) + " MB exceeds MaxMemory " + itoa(int(limit>>20)) +
 			" MB: slots " + itoa(int(slotsB>>20)) + ", histograms " + itoa(int((globalB+workerHistB)>>20)) +
-			", pools " + itoa(int(poolsB>>20)) + ", series " + itoa(int(seriesB>>20)) + " MB")
+			", series " + itoa(int(seriesB>>20)) + " MB")
 	}
 	return nil
 }

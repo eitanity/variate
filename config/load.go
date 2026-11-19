@@ -319,7 +319,7 @@ func parsePeriod(x node) (float64, error) {
 func settingKeys() []string {
 	return []string{unitPeriods, "repeats", "allow_unconverged", keyTransform, "transform_grid", "transform_tol", "transform_work", "transform_bytes", "min_hits", "contrib_rse", "target_rse",
 		"tail", "tail_hits", "max_periods", "max_steps", "batch", "hist_res", "seed", "workers",
-		keyBlockPeriods, "pool_size", "series", "no_breakdown", "node_hist", keyBurnIn, "max_memory",
+		keyBlockPeriods, "series", "no_breakdown", "node_hist", keyBurnIn, "max_memory",
 		"pace", "round_scratch", "record_buffer"}
 }
 
@@ -398,8 +398,6 @@ func setSetting(c *variate.Config, key string, v node) error {
 		c.Workers, err = smallInt(v)
 	case keyBlockPeriods:
 		c.BlockPeriods, err = smallInt(v)
-	case "pool_size":
-		c.PoolSize, err = smallInt(v)
 	case "series":
 		c.Series, err = v.boolean()
 	case "no_breakdown":

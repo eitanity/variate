@@ -225,3 +225,44 @@ func PoissonCount(r *rand.Rand, lambda float64) uint64 {
 	}
 	return uint64(k)
 }
+
+// PoissonCountAt is the Poisson count of rate λ at uniform u, the
+// smallest k with P(K ≤ k) ≥ u, so counts at one u rise with the rate.
+// Below the PTRS threshold it searches up from 0; above, it starts at
+// the Cornish–Fisher guess and steps by the probabilities.
+func PoissonCountAt(lambda, u float64) uint64 {
+	switch {
+	case !(lambda > 0):
+		return 0
+	case lambda < ptrsThreshold:
+		p := math.Exp(-lambda)
+		s, k := p, 0.0
+		// bound: inversionSteps
+		for step := 0; u > s && step < inversionSteps; step++ {
+			k++
+			p *= lambda / k
+			s += p
+		}
+		return uint64(k)
+	}
+	z := normQuantile(u)
+	k := math.Max(0, math.Floor(lambda+math.Sqrt(lambda)*z+(z*z-1)/6+0.5))
+	f := poissonCDF(lambda, k)
+	p := math.Exp(-lambda + k*math.Log(lambda) - lgamma(k+1))
+	// bound: quantileSteps; the guess is within a few of the count
+	for step := 0; step < quantileSteps; step++ {
+		switch {
+		case f < u:
+			k++
+			p *= lambda / k
+			f += p
+		case k > 0 && f-p >= u:
+			f -= p
+			p *= k / lambda
+			k--
+		default:
+			return uint64(k)
+		}
+	}
+	return uint64(poissonQuantile(lambda, u))
+}
