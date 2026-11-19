@@ -5,7 +5,9 @@
 # year's prices, a factor of mean 1, scale the spares and the orders'
 # margin alike: a dear year is dear for every part and every sale in it.
 # Each stoppage also takes a fitting job whose hours are drawn and whose
-# labour is an expression of them, the hours times 1500/24 an hour.
+# labour is an expression of them, the hours times 1500/24 an hour. A
+# stoppage's spares and its downtime move together (dependence): a bad
+# breakdown needs more parts and keeps the line down longer.
 period: { days: 365 }
 factors:
   - { id: prices, lognormal: { mean: 1, sd: {{prices}} } }
@@ -15,6 +17,8 @@ totals:
   - { id: worked, categories: [hours, fitting] }
   - { id: net, categories: [revenue], less: [labour, parts, production] }
 outside_total: [hours, fitting, revenue]
+dependence:
+  - { functions: [repair.spares, repair->running], rank: {{together}} }
 graphs:
   - id: line
     sources:

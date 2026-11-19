@@ -167,6 +167,16 @@ type Graph struct {
 	Phased          Phase    // set by Phase: the place in the cycle every schedule is fixed at
 	Start           Start    // where a run begins: steady state, or a started run's horizon
 	Discount        Discount // a started run's discount on chosen categories; zero = none
+	Dependence      []Dependence
+}
+
+// Dependence makes the values one round draws move together: every pair
+// of its members has the rank correlation Rank, each keeping its own
+// law. A member is "node.function", an on-entry value or a per-time
+// rate, or "node->to", the holding time from node to to.
+type Dependence struct {
+	Members []string
+	Rank    float64 // Spearman's rank correlation of every pair, in [0, 1]; 1 moves them in lockstep, 0 is none
 }
 
 // Config holds every run setting; each field's zero value selects the

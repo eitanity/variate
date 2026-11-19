@@ -56,7 +56,7 @@ func (b *builder) flatten() (*Compiled, error) {
 		b.flattenQueue(m, index(i), n, &cn)
 		m.nodes = append(m.nodes, cn)
 	}
-	b.flattenGiven(m)
+	b.flattenRounds(m)
 	if int64(len(m.pools)) >= maxDistributions {
 		return nil, modelError("graph", b.g.ID, "too many distributions")
 	}

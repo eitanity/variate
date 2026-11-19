@@ -79,67 +79,71 @@ type Compiled struct {
 	nodes                                        []cnode
 	outs                                         []cout
 	fns                                          []cfn
-	exprs                                        []cexpr // the expressions, each its function's value
-	srcs                                         []csrc
-	outcomeNode                                  []int32 // owning node of each outcome
-	fnNode                                       []int32 // owning node of each function
-	fnNames                                      []string
-	infVar                                       []bool // per row quantity: its variance is infinite
-	queueInfVar                                  []bool // per queue: its wait's and stay's variance is infinite
-	queueLong                                    []QueueLongRun
-	levels                                       []clevel // Config.At, each value with its quantity's row, then a level above 0 for each named total that subtracts
-	userLevels                                   int      // how many of levels are Config.At's
-	whens                                        []cwhen  // Config.When, each with its quantity's row
-	fnPerTime                                    []bool
-	aliasProb                                    []float64
-	aliasIdx                                     []int32
-	pools                                        []dist.Distribution
-	poolMean                                     []float64
-	poolPeriod                                   []int32 // per-period slot, or noIndex for event scope
-	periodSlots                                  int
-	topo                                         []int32
-	reach                                        [][]float64
-	burnIn                                       int64        // burn-in periods
-	horizon                                      int64        // a started run's periods per repeat; 0 in steady state
-	queues                                       []cqueue     // the queue nodes'
-	given                                        []cgiven     // a started run's given state
-	pendCap                                      int          // pending bookings a slot or the finaliser holds
-	resid                                        []residTable // per source with a repair time, its residual table
-	hasDelays                                    bool
-	renewal                                      bool        // a source with the Erlang or repair law
-	hasRepair                                    bool        // a source with the repair law or a reliability diagram: no closed variance
-	chains                                       []Chain     // every source's chains, in source order
-	layers                                       []Layer     // the model's layers, defaults filled
-	inTotal                                      []bool      // [category]: booked into the total, the sources and the nodes
-	totals                                       []ctotal    // the totals the model names
-	gridTotals                                   []int32     // those the transform brackets: the ones that only add
-	discounted                                   []bool      // [category]: booked times its period's discount factor
-	discount                                     []float64   // [period]: a started run's discount factors; nil = none
-	factorPools                                  []int32     // [factor]: its pool
-	graph                                        Graph       // the graph compiled, which value factors condition on
-	schedules                                    []schedule  // the model's schedules, with their pools
-	cycle                                        jointCycle  // the schedules' values over their combined cycle
-	scheduleRatio                                [][]float64 // [schedule][schedule]: E[a·b]/(E[a]·E[b]) over the combined cycle
-	countMean, countN2, countTail                []float64   // per source: E[N], E[N(N−1)], truncated mass of the Erlang law
-	countPMF                                     [][]float64 // per source: the Erlang law's mass function, or nil
-	cfg                                          Config
-	phase                                        Phase
-	crit                                         criteria
-	plan                                         []planRow
-	expect                                       *Expectation
-	watchNode                                    []bool // nodes a round must reach to be delivered; nil = all
-	watchLeaf                                    []bool // leaves a round must end at; nil = all
-	deadLeaf, deadNode                           []bool // nodes from which no watched leaf or node is reachable
-	minValue                                     float64
-	maxPath                                      int // nodes on the longest source-to-leaf path
-	transformed                                  *Transformed
-	tailX                                        float64   // upper bound on the TailP quantile of T; 0 when unknown
-	trigs                                        []ctrig   // the triggers, each also a source after the model's own
-	feedStart                                    []int32   // per function, its start in feeds; one more entry than functions
-	feeds                                        []int32   // the triggers each function's bookings add to
-	whole                                        *wholeSum // the trigger summing the whole total, or nil
-	countStart                                   []int32   // per node, its start in counts; one more entry than nodes
-	counts                                       []int32   // the triggers each node's entries add to
+	exprs                                        []cexpr  // the expressions, each its function's value
+	groups                                       []cgroup // the dependence groups of positive rank
+	// Per function and per outcome, its group and place in it, or noIndex;
+	// nil without groups.
+	fnGroup, fnSlot, outGroup, outSlot []int32
+	srcs                               []csrc
+	outcomeNode                        []int32 // owning node of each outcome
+	fnNode                             []int32 // owning node of each function
+	fnNames                            []string
+	infVar                             []bool // per row quantity: its variance is infinite
+	queueInfVar                        []bool // per queue: its wait's and stay's variance is infinite
+	queueLong                          []QueueLongRun
+	levels                             []clevel // Config.At, each value with its quantity's row, then a level above 0 for each named total that subtracts
+	userLevels                         int      // how many of levels are Config.At's
+	whens                              []cwhen  // Config.When, each with its quantity's row
+	fnPerTime                          []bool
+	aliasProb                          []float64
+	aliasIdx                           []int32
+	pools                              []dist.Distribution
+	poolMean                           []float64
+	poolPeriod                         []int32 // per-period slot, or noIndex for event scope
+	periodSlots                        int
+	topo                               []int32
+	reach                              [][]float64
+	burnIn                             int64        // burn-in periods
+	horizon                            int64        // a started run's periods per repeat; 0 in steady state
+	queues                             []cqueue     // the queue nodes'
+	given                              []cgiven     // a started run's given state
+	pendCap                            int          // pending bookings a slot or the finaliser holds
+	resid                              []residTable // per source with a repair time, its residual table
+	hasDelays                          bool
+	renewal                            bool        // a source with the Erlang or repair law
+	hasRepair                          bool        // a source with the repair law or a reliability diagram: no closed variance
+	chains                             []Chain     // every source's chains, in source order
+	layers                             []Layer     // the model's layers, defaults filled
+	inTotal                            []bool      // [category]: booked into the total, the sources and the nodes
+	totals                             []ctotal    // the totals the model names
+	gridTotals                         []int32     // those the transform brackets: the ones that only add
+	discounted                         []bool      // [category]: booked times its period's discount factor
+	discount                           []float64   // [period]: a started run's discount factors; nil = none
+	factorPools                        []int32     // [factor]: its pool
+	graph                              Graph       // the graph compiled, which value factors condition on
+	schedules                          []schedule  // the model's schedules, with their pools
+	cycle                              jointCycle  // the schedules' values over their combined cycle
+	scheduleRatio                      [][]float64 // [schedule][schedule]: E[a·b]/(E[a]·E[b]) over the combined cycle
+	countMean, countN2, countTail      []float64   // per source: E[N], E[N(N−1)], truncated mass of the Erlang law
+	countPMF                           [][]float64 // per source: the Erlang law's mass function, or nil
+	cfg                                Config
+	phase                              Phase
+	crit                               criteria
+	plan                               []planRow
+	expect                             *Expectation
+	watchNode                          []bool // nodes a round must reach to be delivered; nil = all
+	watchLeaf                          []bool // leaves a round must end at; nil = all
+	deadLeaf, deadNode                 []bool // nodes from which no watched leaf or node is reachable
+	minValue                           float64
+	maxPath                            int // nodes on the longest source-to-leaf path
+	transformed                        *Transformed
+	tailX                              float64   // upper bound on the TailP quantile of T; 0 when unknown
+	trigs                              []ctrig   // the triggers, each also a source after the model's own
+	feedStart                          []int32   // per function, its start in feeds; one more entry than functions
+	feeds                              []int32   // the triggers each function's bookings add to
+	whole                              *wholeSum // the trigger summing the whole total, or nil
+	countStart                         []int32   // per node, its start in counts; one more entry than nodes
+	counts                             []int32   // the triggers each node's entries add to
 }
 
 // Compile validates the graph and flattens it; the warnings are the

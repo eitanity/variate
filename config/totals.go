@@ -26,7 +26,10 @@ func (l *loader) parseTotals(top map[string]node) error {
 		}
 		l.model.Graph.OutsideTotal = out
 	}
-	return l.parseDiscount(top)
+	if err := l.parseDiscount(top); err != nil {
+		return err
+	}
+	return l.parseDependence(top)
 }
 
 // parseTotal reads one named total.

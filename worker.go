@@ -28,11 +28,14 @@ type worker struct {
 	// the time a repair ends, from the start of the current period.
 	phase     []int32
 	downUntil []float64
-	failed    []int32             // per chain, the units down
-	chainT    []float64           // per source, the time its chains are simulated to, from the period's start
-	outage    float64             // the current round's outage, when its block fired it
-	tested    float64             // the value the current node's threshold tests
-	vals      []float64           // per function, its value at the current node, for the expressions that read it
+	failed    []int32   // per chain, the units down
+	chainT    []float64 // per source, the time its chains are simulated to, from the period's start
+	outage    float64   // the current round's outage, when its block fired it
+	tested    float64   // the value the current node's threshold tests
+	vals      []float64 // per function, its value at the current node, for the expressions that read it
+	round     uint64    // the rounds walked, numbering the current one
+	drv       []float64 // per dependence group, its normal for the round drv is stamped with
+	drvRound  []uint64
 	sums      []float64           // per trigger, the period's sum of its inputs so far
 	queues    []wqueue            // per queue, its state within the task
 	qseq      uint64              // rounds parked at the queues in the task, to order ties

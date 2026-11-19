@@ -174,6 +174,7 @@ func (w *Workspace) runSource(wk *worker, sl *slot, k int32, p int64) {
 func (w *Workspace) walk(wk *worker, sl *slot, k, v int32, t float64, p int64) {
 	m := w.m
 	nodes := len(m.nodes)
+	wk.round++
 	// bound: a path visits each node at most once
 	for step := 0; step <= nodes; step++ {
 		sl.steps++
@@ -263,6 +264,8 @@ func (w *Workspace) advance(wk *worker, sl *slot, k, v int32, n cnode, t float64
 	switch {
 	case o.outage:
 		tau = wk.outage
+	case m.outGroup != nil && m.outGroup[j] != noIndex:
+		tau = w.together(wk, m.outGroup[j], o.hold)
 	case o.hold != noIndex:
 		tau = w.draw(wk, o.hold)
 	}
@@ -307,15 +310,33 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode, d 
 func (w *Workspace) value(wk *worker, f int32) float64 {
 	fn := w.m.fns[f]
 	var x float64
-	if fn.expr != noIndex {
+	switch {
+	case fn.expr != noIndex:
 		x = w.m.exprs[fn.expr].eval(wk.vals)
-	} else {
+	case w.m.fnGroup != nil && w.m.fnGroup[f] != noIndex:
+		x = w.together(wk, w.m.fnGroup[f], fn.pool)
+	default:
 		x = w.draw(wk, fn.pool)
 	}
 	if fn.factor != noIndex {
 		x *= wk.period[w.m.poolPeriod[fn.factor]]
 	}
 	return x
+}
+
+// together draws a member of group g from law pool: the group's normal
+// for the round, drawn at its first member, mixed with the member's own.
+func (w *Workspace) together(wk *worker, g, pool int32) float64 {
+	c := &w.m.groups[g]
+	r := wk.ss.Control()
+	if wk.drvRound[g] != wk.round {
+		wk.drv[g], wk.drvRound[g] = r.NormFloat64(), wk.round
+	}
+	z := c.sq * wk.drv[g]
+	if c.sq1 > 0 {
+		z += c.sq1 * r.NormFloat64()
+	}
+	return copulaValue(w.m.pools[pool], z)
 }
 
 // rowFor returns the row for a booking in period q: the period's row

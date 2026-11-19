@@ -339,6 +339,9 @@ func (t *transformer) applicable() string {
 	if len(m.exprs) > 0 {
 		return "a function's value is an expression of other values"
 	}
+	if len(m.groups) > 0 {
+		return "values one round draws move together"
+	}
 	if m.cycle.over {
 		return "the schedules' combined cycle is longer than " + itoa(maxJointPeriods) + " periods or has more than " + itoa(maxJointPoints) + " distinct places"
 	}

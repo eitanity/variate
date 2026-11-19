@@ -469,3 +469,40 @@ func TestDemoFitting(t *testing.T) {
 		t.Errorf("labour %v ± %v, exact %v", got.Mean, got.StdErr, eh.MeanByCategory[labour])
 	}
 }
+
+// TestDemoTogether: the factory line's spares and downtime moving
+// together leave the exact means as they are and widen the simulated
+// year's cost.
+func TestDemoTogether(t *testing.T) {
+	run := func(rank float64) (*variate.Expectation, variate.Summary) {
+		cfg := variate.Config{Periods: 20000, Seed: 1, AllowUnconverged: true}
+		c, _, err := demoGraph(t, "line", map[string]float64{"together": rank}).Compile(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, err := c.Analytic()
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := c.NewWorkspace(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer w.Close()
+		if _, err := w.Run(context.Background(), 1); err != nil {
+			t.Fatal(err)
+		}
+		var s variate.Summary
+		w.Summarize(&s)
+		return e, s
+	}
+	e0, s0 := run(0)
+	e1, s1 := run(1)
+	if math.Abs(e1.Mean-e0.Mean) > 1e-9*e0.Mean {
+		t.Errorf("exact mean %v in lockstep, %v apart", e1.Mean, e0.Mean)
+	}
+	if !(s1.Total.StdDev > 1.03*s0.Total.StdDev) {
+		t.Errorf("sd %v in lockstep, %v apart", s1.Total.StdDev, s0.Total.StdDev)
+	}
+	t.Logf("sd %v in lockstep, %v apart", s1.Total.StdDev, s0.Total.StdDev)
+}

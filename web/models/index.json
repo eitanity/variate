@@ -956,7 +956,7 @@
   "id": "line",
   "title": "Totals the model names: a factory line's bill, its lost output, its hours and what it nets",
   "file": "line.yaml",
-  "about": "Orders a year each bring in a margin, and stoppages a year each book spare parts and, over the days the line is down, the crew's cost, the production lost and the crew's hours. The model names four totals: maintenance, the bill for labour and parts; cost, the bill and the lost output, which is the period total; worked, the crew's hours and the fitting hours; and net, the revenue less the cost. The hours and the revenue are kept outside the total, so the total stays the cost. Net can be negative, and the run counts the chance of a year at or below zero. Choose a named total in the charts to see its histogram and curve: lengthen the downtime and the lost output and the hours grow together while the parts do not, and net falls. A year's prices scale every spare part and every order's margin in it together: a wider spread leaves the means as they are and widens the year's cost and revenue, which move together. Each stoppage also takes a fitting job: its hours are drawn, with the most likely number set by the knob, and its labour is those hours times 1500/24 an hour, so the hours and the labour move together.",
+  "about": "Orders a year each bring in a margin, and stoppages a year each book spare parts and, over the days the line is down, the crew's cost, the production lost and the crew's hours. The model names four totals: maintenance, the bill for labour and parts; cost, the bill and the lost output, which is the period total; worked, the crew's hours and the fitting hours; and net, the revenue less the cost. The hours and the revenue are kept outside the total, so the total stays the cost. Net can be negative, and the run counts the chance of a year at or below zero. Choose a named total in the charts to see its histogram and curve: lengthen the downtime and the lost output and the hours grow together while the parts do not, and net falls. A year's prices scale every spare part and every order's margin in it together: a wider spread leaves the means as they are and widens the year's cost and revenue, which move together. Each stoppage also takes a fitting job: its hours are drawn, with the most likely number set by the knob, and its labour is those hours times 1500/24 an hour, so the hours and the labour move together. A bad breakdown needs more parts and keeps the line down longer: a stoppage's spares and its downtime move together by the rank set by the knob, each keeping its own spread. More togetherness leaves every mean as it is and widens the year's cost.",
   "knobs": [
    {
     "key": "orders",
@@ -1029,6 +1029,14 @@
     "max": 29000,
     "step": 1000,
     "value": 12000
+   },
+   {
+    "key": "together",
+    "label": "How closely a stoppage's spares and downtime move together (rank correlation)",
+    "min": 0,
+    "max": 1,
+    "step": 0.05,
+    "value": 0.5
    },
    {
     "key": "prices",

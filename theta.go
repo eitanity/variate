@@ -300,8 +300,9 @@ func (m *Compiled) zeroProbability() float64 {
 		// nothing, with a probability the sources' mixture does not give.
 		return math.NaN()
 	}
-	if !m.exprsZeroKnown() {
-		// An expression's chance of 0 is not its draws'.
+	if !m.exprsZeroKnown() || !m.depZeroKnown() {
+		// An expression's chance of 0 is not its draws', nor are values
+		// that move together each 0 on their own.
 		return math.NaN()
 	}
 	qs := m.periodQuantities()

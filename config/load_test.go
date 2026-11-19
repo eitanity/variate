@@ -532,6 +532,28 @@ graphs:
 	parseErr(t, strings.Replace(text, `expr: "hours * 62.5"`, `expr: "hours * 62.5", constant: 1`, 1), "constant")
 }
 
+// TestDependenceKeys: dependence groups parse at the top level, each
+// with its members and rank.
+func TestDependenceKeys(t *testing.T) {
+	text := `
+period: { days: 365 }
+dependence:
+  - { functions: [n.one, n->m], rank: 0.6 }
+graphs:
+  - id: g
+    sources: [ { id: a, frequency: 2, to: n } ]
+    nodes:
+      - { id: n, functions: [ { name: one, category: c, gamma: { mean: 8, sd: 2 } } ], next: m, next_holding: { constant: 1, unit: days } }
+      - { id: m }
+`
+	m := parse(t, text)
+	if d := m.Graph.Dependence; len(d) != 1 || d[0].Rank != 0.6 || len(d[0].Members) != 2 || d[0].Members[1] != "n->m" {
+		t.Errorf("dependence %+v", d)
+	}
+	parseErr(t, strings.Replace(text, ", rank: 0.6", "", 1), "dependence needs functions and rank")
+	parseErr(t, strings.Replace(text, "rank: 0.6", "rank: 0.6, other: 1", 1), "other")
+}
+
 // TestScheduleKeys: schedules parse at the top level and a source names one.
 func TestScheduleKeys(t *testing.T) {
 	text := `

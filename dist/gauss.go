@@ -91,3 +91,44 @@ func stieltjes(px, pw []float64, mass float64, n int) (diag, off []float64, ok b
 	}
 	return diag, off, true
 }
+
+// HermiteRule fills x and w with the len(x)-point Gauss rule of the
+// standard normal: the eigenvalues and first eigenvector components of
+// the Jacobi matrix of its orthonormal polynomials, sub-diagonal √k,
+// the nodes ascending and the weights summing to 1. It returns false
+// when the iteration does not converge.
+func HermiteRule(x, w []float64) bool {
+	n := len(x)
+	if n == 0 {
+		return false
+	}
+	e := make([]float64, n)
+	z := make([]float64, n)
+	z[0] = 1
+	// bound: n nodes
+	for k := 1; k < n; k++ {
+		e[k] = math.Sqrt(float64(k))
+	}
+	clear(x)
+	if !tql(x, e, z) {
+		return false
+	}
+	sum := 0.0
+	// bound: n nodes
+	for i := range n {
+		w[i] = z[i] * z[i]
+		sum += w[i]
+	}
+	for i := range w {
+		w[i] /= sum
+	}
+	// bound: n nodes, sorted by insertion
+	for i := 1; i < n; i++ {
+		// bound: i swaps
+		for j := i; j > 0 && x[j] < x[j-1]; j-- {
+			x[j], x[j-1] = x[j-1], x[j]
+			w[j], w[j-1] = w[j-1], w[j]
+		}
+	}
+	return true
+}

@@ -45,6 +45,9 @@ func (b *builder) validate() error {
 	if err := b.checkTriggers(); err != nil {
 		return err
 	}
+	if err := b.checkDependence(); err != nil {
+		return err
+	}
 	if len(b.g.Sources) == 0 {
 		return modelError("graph", b.g.ID, "no sources")
 	}

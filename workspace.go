@@ -235,7 +235,8 @@ func (w *Workspace) setupStream(nw int) error {
 }
 
 // newWorker is a worker's samplers, period draws, trigger sums, queues
-// and, for a model with expressions, the values they read.
+// and, for a model with expressions, the values they read, and with
+// dependence groups, their normals.
 func newWorker(m *Compiled, pool int) *worker {
 	wk := &worker{ss: dist.NewSamplerSet(m.pools, pool), period: make([]float64, m.periodSlots), sums: make([]float64, len(m.trigs))}
 	for _, q := range m.queues {
@@ -243,6 +244,9 @@ func newWorker(m *Compiled, pool int) *worker {
 	}
 	if len(m.exprs) > 0 {
 		wk.vals = make([]float64, len(m.fns))
+	}
+	if len(m.groups) > 0 {
+		wk.drv, wk.drvRound = make([]float64, len(m.groups)), make([]uint64, len(m.groups))
 	}
 	return wk
 }

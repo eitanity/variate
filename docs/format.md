@@ -38,6 +38,7 @@ the line.
 | `totals` | sums of chosen categories reported beside the total, each `{ id, categories: [...], less: [...] }`, `less` optional (below). |
 | `outside_total` | categories booked and reported but added to no total but a named one, such as hours beside money (below). |
 | `discount` | in a started run, the categories whose values are discounted by the period they land in, `{ rate: r, categories: [...] }` or `{ factors: [...], categories: [...] }` (below). |
+| `dependence` | groups of values one round draws that move together, each `{ functions: [...], rank: r }` (below). |
 | settings | any run setting by its snake_case name, e.g. `periods`, `seed`, `transform` (table at the end). |
 
 The file may hold one YAML document, without anchors, aliases or custom
@@ -392,6 +393,44 @@ until every figure settles, a figure that does not being simulated
 with its error. A factor on values needs a finite variance for these
 figures. The exact distribution is not computed for a model with a
 factor on a value.
+
+## Values that move together
+
+The values one round draws are independent unless a dependence group
+ties them: a bad breakdown needs more parts and keeps the line down
+longer.
+
+```yaml
+dependence:
+  - { functions: [repair.spares, repair->inspect, inspect.report], rank: 0.6 }
+```
+
+A member is `node.function`, an `on_entry` value or a `per_time` rate,
+or `node->to`, the holding time from `node` to `to` (its `next_holding`
+or the holding of its outcome to `to`). The members may be at one node
+or along a path. `rank` is the rank correlation of every pair, from 0,
+independent, to 1, in lockstep; each member keeps its own distribution.
+Each round draws one standard normal W for the group, the first time it
+draws a member, and each member is its law's quantile at
+Φ(√ρ·W + √(1−ρ)·E), E its own normal and ρ = 2·sin(π·rank/6) the
+normal correlation that gives the rank correlation. Rounds stay
+independent of each other.
+
+A member is drawn by its quantile rather than in batches, which costs
+about 1 µs a draw for a gamma or PERT and 60 ns for a lognormal, against
+10 to 30 ns; only members pay it. A group of rank 0 is none.
+
+Every mean is unchanged: a node's rate and its holding may not both be
+members, so no booking is the product of two values that move together.
+The exact variance adds each pair's covariance, by Gauss–Hermite
+quadrature, times the chance a round books both; it is computed for
+`on_entry` values, a model with a holding time having no exact variance
+of its own. P(T = 0) is not given when a member value can be 0.
+
+A member may not be drawn once a period, be the value a threshold tests,
+an expression or an expression's operand, be at a node a trigger reads,
+at a queue node or after one, or be an outage holding. The exact
+distribution (the transform) is not computed for a model with a group.
 
 ## Rates that vary by period
 

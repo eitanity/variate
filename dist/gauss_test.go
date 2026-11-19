@@ -53,3 +53,29 @@ func TestGaussRule(t *testing.T) {
 		t.Error("a rule of 3 nodes from 2 points")
 	}
 }
+
+// TestHermiteRule: the n-point rule integrates the standard normal's
+// moments to degree 2n-1: E[Z^2k] = (2k-1)!!, odd moments 0.
+func TestHermiteRule(t *testing.T) {
+	for _, n := range []int{1, 4, 16, 64, 256} {
+		x, w := make([]float64, n), make([]float64, n)
+		if !HermiteRule(x, w) {
+			t.Fatalf("n %d: no rule", n)
+		}
+		for k := 0; k < 2*n && k <= 12; k++ {
+			got, want := 0.0, 0.0
+			for i := range x {
+				got += w[i] * math.Pow(x[i], float64(k))
+			}
+			if k%2 == 0 {
+				want = 1
+				for j := k - 1; j > 0; j -= 2 {
+					want *= float64(j)
+				}
+			}
+			if math.Abs(got-want) > 1e-11*math.Max(1, want) {
+				t.Errorf("n %d: E[Z^%d] %v, want %v", n, k, got, want)
+			}
+		}
+	}
+}

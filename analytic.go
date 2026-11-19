@@ -225,6 +225,11 @@ func (m *Compiled) valueToGo(filt valueFilter) (m1, m2 []float64) {
 		m1[v] = nm.a + sumPY
 		m2[v] = nm.a2 + 2*nm.a*sumPY + sumPY2
 	}
+	if len(m.groups) > 0 {
+		for v, c := range m.depCorrection(filt) {
+			m2[v] += c
+		}
+	}
 	return m1, m2
 }
 
