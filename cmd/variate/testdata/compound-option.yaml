@@ -1,0 +1,12 @@
+# The compound model with a likelier rate of incidents: an option.
+# against compound.yaml.
+periods: 50000
+seed: 1
+graphs:
+  - id: compound
+    sources:
+      - { id: incident, frequency: { pert: [2, 6, 12] }, to: loss }
+    nodes:
+      - id: loss
+        functions:
+          - { name: cost, category: money, lognormal: { median: 1000, p90: 5000 } }

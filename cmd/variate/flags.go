@@ -47,6 +47,8 @@ type options struct {
 	screen float64
 	inputs string
 	top    int
+	// compare
+	options []string
 }
 
 // quantityFlags are the flags that ask about a quantity: the chance of
@@ -64,7 +66,7 @@ func (o *options) quantityFlags(fs *flag.FlagSet) {
 	})
 }
 
-// parseFlags reads the flags of plan, run, stream and sweep.
+// parseFlags reads the flags of plan, run, stream, sweep and compare.
 func parseFlags(name string, args []string, stderr io.Writer) (*options, error) {
 	fs := flag.NewFlagSet("variate "+name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -93,8 +95,11 @@ func parseFlags(name string, args []string, stderr io.Writer) (*options, error) 
 	fs.StringVar(&o.leaf, "leaf", "", "deliver rounds ending at any of these leaves")
 	fs.Float64Var(&o.minValue, "min-value", 0, "deliver rounds booking at least this value")
 	o.quantityFlags(fs)
-	if name == "sweep" {
+	switch name {
+	case "sweep":
 		o.sweepFlags(fs)
+	case "compare":
+		o.compareFlags(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("flags: %w", err)
@@ -143,10 +148,24 @@ func (o *options) checkFormats() error {
 
 // sweepFlags adds the flags of sweep.
 func (o *options) sweepFlags(fs *flag.FlagSet) {
-	fs.StringVar(&o.figure, "figure", "mean", "mean, p<percent>, rp:<periods>, pzero, layer:<id>, category:<name> or source:<id>")
+	o.figureFlag(fs)
 	fs.Float64Var(&o.screen, "screen", 0, "screen every input by this relative amount, × (1 ± screen), instead of moving the inputs with a range to its ends")
 	fs.StringVar(&o.inputs, "inputs", "", "sweep only these inputs, by name, kind or leading words (comma-separated)")
 	fs.IntVar(&o.top, "top", 0, "keep the inputs with the largest exact-mean swings")
+}
+
+// compareFlags adds the flags of compare.
+func (o *options) compareFlags(fs *flag.FlagSet) {
+	o.figureFlag(fs)
+	fs.Func("option", "an option's model file, run with this model's settings (repeatable)", func(s string) error {
+		o.options = append(o.options, s)
+		return nil
+	})
+}
+
+// figureFlag adds the figure a sweep or a comparison reports.
+func (o *options) figureFlag(fs *flag.FlagSet) {
+	fs.StringVar(&o.figure, "figure", "mean", "mean, p<percent>, rp:<periods>, pzero, layer:<id>, category:<name> or source:<id>")
 }
 
 // apply loads the model and lays the flags over its settings.

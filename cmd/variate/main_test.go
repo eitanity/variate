@@ -539,3 +539,52 @@ graphs:
 		}
 	}
 }
+
+// TestCompare: the compare command writes each option against the model,
+// the table, JSON whose rows are the library's, and CSV with a row per
+// option; an option is required and a bad figure fails.
+func TestCompare(t *testing.T) {
+	const base, option = "../../examples/compound.yaml", "testdata/compound-option.yaml"
+	out, errOut, code := invoke(t, "compare", "-f", base, "--option", option, "--option", base)
+	if code != 0 || !strings.Contains(out, "comparison of mean, each option against the model as it is") || !strings.Contains(out, option+" exact") || !strings.Contains(errOut, "compare: 2 options") {
+		t.Fatalf("table: %d %s %s", code, out, errOut)
+	}
+	m, err := config.Load(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	om, err := config.Load(option)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Config.TransformTol = 0.01 // a coarse bracket, to keep the test quick
+	want, err := m.Graph.Compare(t.Context(), []variate.Graph{om.Graph}, variate.CompareConfig{Figure: "p99", Run: m.Config})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _, code = invoke(t, "compare", "-f", base, "--option", option, "--figure", "p99", "--transform-tol", "0.01", "--format", "json")
+	var got struct {
+		Figure string
+		Rows   []struct {
+			Option, Method string
+			Diff           struct{ Lo, Hi float64 }
+		}
+	}
+	if code != 0 || json.Unmarshal([]byte(out), &got) != nil || got.Figure != "p99" || len(got.Rows) != 1 {
+		t.Fatalf("json: %d %s", code, out)
+	}
+	if r, w := got.Rows[0], want.Rows[0]; r.Option != option || r.Method != w.Method || r.Diff.Lo != w.Diff.Lo || r.Diff.Hi != w.Diff.Hi {
+		t.Errorf("json row %+v, want %+v", r, w)
+	}
+	out, _, code = invoke(t, "compare", "-f", "../../examples/pump_station.yaml", "--option", "../../examples/pump_station.yaml", "--figure", "p99", "-n", "4096", "--format", "csv")
+	rows, err := csv.NewReader(strings.NewReader(out)).ReadAll()
+	if code != 0 || err != nil || len(rows) != 2 || rows[0][0] != "option" || rows[1][1] != variate.MethodSimulation || rows[1][6] != "0" || rows[1][8] != "0" {
+		t.Errorf("csv: %d %v %q", code, err, out)
+	}
+	if _, errOut, code := invoke(t, "compare", "-f", base); code != 1 || !strings.Contains(errOut, "--option model file is required") {
+		t.Errorf("no option: %d %q", code, errOut)
+	}
+	if _, errOut, code := invoke(t, "compare", "-f", base, "--option", option, "--figure", "median"); code != 1 || !strings.Contains(errOut, "compare: figure median") {
+		t.Errorf("bad figure: %d %q", code, errOut)
+	}
+}

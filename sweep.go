@@ -17,6 +17,9 @@ const (
 	MethodSimulation = "simulation" // paired fixed runs at one seed
 )
 
+// figureMean names the default figure, the mean.
+const figureMean = "mean"
+
 // sweepGroups is the number of groups of whole blocks over which the
 // paired difference of a simulated row is measured.
 const sweepGroups = 32
@@ -98,10 +101,10 @@ const (
 	figSource
 )
 
-func parseFigure(s string) (sweepFigure, error) {
-	bad := errors.New("sweep: figure " + s + " is not mean, p<percent>, rp:<periods>, pzero, layer:<id>, category:<name> or source:<id>")
+func parseFigure(name, s string) (sweepFigure, error) {
+	bad := errors.New(name + ": figure " + s + " is not mean, p<percent>, rp:<periods>, pzero, layer:<id>, category:<name> or source:<id>")
 	switch {
-	case s == "" || s == "mean":
+	case s == "" || s == figureMean:
 		return sweepFigure{kind: figMean}, nil
 	case s == "pzero":
 		return sweepFigure{kind: figPZero}, nil
@@ -133,6 +136,7 @@ func parseFigure(s string) (sweepFigure, error) {
 // computed once when a row first needs it.
 type sweeper struct {
 	ctx  context.Context
+	name string // "sweep" or "compare", for errors
 	g    Graph
 	cfg  SweepConfig
 	fig  sweepFigure
@@ -156,17 +160,14 @@ type sweeper struct {
 // from the base model's streams, with the standard error of each
 // difference measured on the runs' paired blocks.
 func (g Graph) Sweep(ctx context.Context, cfg SweepConfig) (*Sweep, error) {
-	fig, err := parseFigure(cfg.Figure)
+	fig, err := parseFigure("sweep", cfg.Figure)
 	if err != nil {
 		return nil, err
 	}
 	if !(cfg.Screen >= 0 && cfg.Screen < 1) {
 		return nil, errors.New("sweep: a screen must be in (0, 1)")
 	}
-	s := &sweeper{ctx: ctx, g: g, cfg: cfg, fig: fig}
-	s.cfg.Run.Transform = false
-	s.cfg.Run.Series = false
-	s.cfg.Run.Observer = nil
+	s := newSweeper(ctx, "sweep", g, cfg, fig)
 	inputs := SelectInputs(g.Inputs(), cfg.Inputs)
 	if len(inputs) == 0 {
 		return nil, errors.New("sweep: no input matches")
@@ -184,7 +185,7 @@ func (g Graph) Sweep(ctx context.Context, cfg SweepConfig) (*Sweep, error) {
 	}
 	out := &Sweep{Figure: cfg.Figure, Screen: cfg.Screen, Seed: cfg.Run.Seed, Phase: g.Phased}
 	if out.Figure == "" {
-		out.Figure = "mean"
+		out.Figure = figureMean
 	}
 	for _, in := range inputs {
 		if err := ctx.Err(); err != nil {
@@ -201,6 +202,16 @@ func (g Graph) Sweep(ctx context.Context, cfg SweepConfig) (*Sweep, error) {
 	}
 	sort.SliceStable(out.Rows, func(a, b int) bool { return out.Rows[a].Swing > out.Rows[b].Swing })
 	return out, nil
+}
+
+// newSweeper holds the settings of a sweep or a comparison, its runs
+// without the transform, series or observer a run's config may ask for.
+func newSweeper(ctx context.Context, name string, g Graph, cfg SweepConfig, fig sweepFigure) *sweeper {
+	s := &sweeper{ctx: ctx, name: name, g: g, cfg: cfg, fig: fig}
+	s.cfg.Run.Transform = false
+	s.cfg.Run.Series = false
+	s.cfg.Run.Observer = nil
+	return s
 }
 
 // SelectInputs keeps the inputs a filter names, by name, by kind, or by
@@ -277,7 +288,7 @@ func (s *sweeper) row(in Input) (SweepRow, error) {
 	if row.Low, row.High, err = s.ends(in); err != nil {
 		return row, err
 	}
-	var nudged [2]Graph
+	nudged := make([]Graph, 2)
 	for i, f := range []float64{row.Low, row.High} {
 		g, clamped, err := s.g.Scaled(in.Name, f)
 		if err != nil {
@@ -286,24 +297,56 @@ func (s *sweeper) row(in Input) (SweepRow, error) {
 		nudged[i] = g
 		row.Clamped = row.Clamped || clamped
 	}
-	if base, err := s.baseExact(); err == nil {
-		down, derr := s.exact(nudged[0], s.fig)
-		up, uerr := s.exact(nudged[1], s.fig)
-		if derr == nil && uerr == nil {
-			row.Method, row.Base, row.AtLow, row.AtHigh = MethodExact, base, down, up
-			return finishRow(row), nil
-		}
+	f, err := s.figures(nudged)
+	if err != nil {
+		return row, err
 	}
-	if base, err := s.baseTransform(); err == nil {
-		down, derr := s.transform(nudged[0], s.fig)
-		up, uerr := s.transform(nudged[1], s.fig)
-		if derr == nil && uerr == nil {
-			row.Method, row.Base, row.AtLow, row.AtHigh = MethodTransform, base, down, up
-			row.LowSE, row.HighSE = math.NaN(), math.NaN()
-			return finishRow(row), nil
-		}
+	row.Method, row.Base = f.method, f.base
+	row.AtLow, row.AtHigh = f.at[0], f.at[1]
+	row.LowSE, row.HighSE = f.se[0], f.se[1]
+	return finishRow(row), nil
+}
+
+// figured is the base model's figure and other models' by one method,
+// with the standard error of each one's difference from the base: 0
+// when exact, NaN for a bracket or too few blocks.
+type figured struct {
+	method string
+	base   Range
+	at     []Range
+	se     []float64
+}
+
+// figures computes the figure of the base and of each of gs by the
+// cheapest method that holds for all of them.
+func (s *sweeper) figures(gs []Graph) (figured, error) {
+	f := figured{at: make([]Range, len(gs)), se: make([]float64, len(gs))}
+	if base, err := s.baseExact(); err == nil && s.each(gs, f.at, func(g Graph) (Range, error) { return s.exact(g, s.fig) }) {
+		f.method, f.base = MethodExact, base
+		return f, nil
 	}
-	return s.simulatedRow(row, nudged)
+	if base, err := s.baseTransform(); err == nil && s.each(gs, f.at, func(g Graph) (Range, error) { return s.transform(g, s.fig) }) {
+		f.method, f.base = MethodTransform, base
+		for i := range f.se {
+			f.se[i] = math.NaN()
+		}
+		return f, nil
+	}
+	return f, s.simulated(&f, gs)
+}
+
+// each fills at with the figure of every graph by one method, and
+// reports whether it gave every one.
+func (s *sweeper) each(gs []Graph, at []Range, by func(Graph) (Range, error)) bool {
+	// bound: the graphs
+	for i, g := range gs {
+		r, err := by(g)
+		if err != nil {
+			return false
+		}
+		at[i] = r
+	}
+	return true
 }
 
 func finishRow(row SweepRow) SweepRow {
@@ -449,46 +492,50 @@ func (m *Compiled) layerIndex(id string) int {
 	return -1
 }
 
-// simulatedRow runs the moved models for the base run's length at its
-// seed and pairs their blocks with the base run's.
-func (s *sweeper) simulatedRow(row SweepRow, nudged [2]Graph) (SweepRow, error) {
+// simulated runs the models for the base run's length at its seed and
+// pairs their blocks with the base run's.
+func (s *sweeper) simulated(f *figured, gs []Graph) error {
 	if s.g.Start.Horizon > 0 {
-		return row, errors.New("sweep: a started run's figures are swept where they are exact, the horizon's mean and its categories' and sources' means; " + s.cfg.Figure + " would need simulating, which a started run's sweep does not do yet")
+		return errors.New(s.name + ": a started run's figures are computed where they are exact, the horizon's mean and its categories' and sources' means; " + s.figName() + " would need simulating, which a started run does not do yet")
 	}
 	base, err := s.baseSeries()
 	if err != nil {
-		return row, err
+		return err
 	}
 	m, err := s.compile(s.g)
 	if err != nil {
-		return row, err
+		return err
 	}
 	x, err := s.column(m, base)
 	if err != nil {
-		return row, err
+		return err
 	}
 	bv := s.fig.of(x)
-	row.Method, row.Base = MethodSimulation, Range{Lo: bv, Hi: bv}
-	// The nudged runs take the base run's blocks, so that each task
-	// draws from the same streams and the blocks pair.
-	for i, g := range nudged {
+	f.method, f.base = MethodSimulation, Range{Lo: bv, Hi: bv}
+	// The other runs take the base run's blocks, so that their periods
+	// fall on the same timelines and draw alike, and the blocks pair.
+	// bound: the graphs
+	for i, g := range gs {
 		r, mm, _, err := s.runSeries(g, s.base.periods, s.base.block)
 		if err != nil {
-			return row, err
+			return err
 		}
 		y, err := s.column(mm, r)
 		if err != nil {
-			return row, err
+			return err
 		}
 		v := s.fig.of(y)
-		se := s.pairedSE(x, y)
-		if i == 0 {
-			row.AtLow, row.LowSE = Range{Lo: v, Hi: v}, se
-		} else {
-			row.AtHigh, row.HighSE = Range{Lo: v, Hi: v}, se
-		}
+		f.at[i], f.se[i] = Range{Lo: v, Hi: v}, s.pairedSE(x, y)
 	}
-	return finishRow(row), nil
+	return nil
+}
+
+// figName is the figure as the config named it.
+func (s *sweeper) figName() string {
+	if s.cfg.Figure == "" {
+		return figureMean
+	}
+	return s.cfg.Figure
 }
 
 // baseSeries runs the base model once with its series kept: for
@@ -558,19 +605,19 @@ func (s *sweeper) column(m *Compiled, r *Result) ([]float64, error) {
 	case figLayer:
 		j := m.layerIndex(s.fig.name)
 		if j < 0 {
-			return nil, errors.New("sweep: no layer " + s.fig.name)
+			return nil, errors.New(s.name + ": no layer " + s.fig.name)
 		}
 		return r.Series.LayerColumn(j, dst), nil
 	case figCategory:
 		c := slices.Index(m.categories, s.fig.name)
 		if c < 0 {
-			return nil, errors.New("sweep: no category " + s.fig.name)
+			return nil, errors.New(s.name + ": no category " + s.fig.name)
 		}
 		return r.Series.CategoryColumn(c, dst), nil
 	case figSource:
 		k := slices.Index(m.sourceIDs, s.fig.name)
 		if k < 0 {
-			return nil, errors.New("sweep: no source " + s.fig.name)
+			return nil, errors.New(s.name + ": no source " + s.fig.name)
 		}
 		return r.Series.SourceColumn(k, dst), nil
 	}
@@ -606,9 +653,9 @@ func (f sweepFigure) of(x []float64) float64 {
 }
 
 // pairedSE is the standard error of fig(y) − fig(x) measured over
-// groups of whole blocks: the same blocks of the two runs come from the
-// same task streams, so their differences pair. NaN with fewer than 16
-// groups.
+// groups of whole blocks: the same blocks of the two runs fall on the
+// same timelines and draw alike, so their differences pair. NaN with
+// fewer than 16 groups.
 func (s *sweeper) pairedSE(x, y []float64) float64 {
 	block := max(s.base.block, 1)
 	tasks := (int64(len(x)) + block - 1) / block

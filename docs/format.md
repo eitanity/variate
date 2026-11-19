@@ -549,6 +549,17 @@ Without ranges, `variate sweep --screen 0.1` moves every input by a
 tenth either way. That ranks leverage, not uncertainty: it shows which
 inputs are worth giving a range.
 
+`variate compare -f model.yaml --option a.yaml --option b.yaml` sets
+whole options against the model instead: each option is a model file,
+changed in any way, an input moved, a node or source added, and run
+with the model's settings, not its own. Each row is the option's
+figure, the model's, and their difference, by the cheapest method
+that gives both: exact, a bracket, or simulated at the model's seed
+for its run's length, with the difference's standard error measured
+on paired blocks. Draws are keyed by what they are, so an option draws
+as the model does wherever it does not differ, and that error is
+small.
+
 ## Queues
 
 A node with a `queue` serves the rounds that reach it in order of
@@ -660,8 +671,9 @@ the exact distribution assume stationary periods and are not computed,
 so `transform` is refused, as are `burn_in` and `block_periods`, since
 a repeat is one task. `--series` keeps every repeat's periods, one
 after another, and the round stream gives each round its repeat.
-`variate sweep` sweeps the figures a started run has exactly, the
-horizon's mean and its categories' and sources' means.
+`variate sweep` and `variate compare` give the figures a started run
+has exactly, the horizon's mean and its categories' and sources'
+means.
 
 ### From a given state
 

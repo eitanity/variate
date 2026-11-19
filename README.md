@@ -60,6 +60,7 @@ risks, a plant as a block diagram, and a shift with its own period.
     go run ./cmd/variate plan -f examples/compound.yaml         # the convergence plan and work
     go run ./cmd/variate stream -f examples/sequential.yaml --leaf undetected --rounds csv
     go run ./cmd/variate sweep -f examples/pump_station.yaml --figure p99 --top 5
+    go run ./cmd/variate compare -f examples/pump_station.yaml --option other.yaml --figure p99
 
 `run` reports a table, JSON or CSV, and with `--at total=150` (or
 `--at category:labour=40`, repeated as needed) also the chance a
@@ -84,7 +85,12 @@ distribution applies, and otherwise simulated at one seed, the moved
 models drawing alike wherever the move does not reach, so that each
 difference's standard error is measured on paired blocks: every draw is
 keyed by what it is, its period, source, round and the node, function
-or holding by name, not by its place in the model. A run without a period count
+or holding by name, not by its place in the model. `compare` sets
+options against the model, each a model file of its own run with the
+model's settings: each option's figure, its difference from the
+model's and, for a simulated row, that difference's standard error on
+the same paired blocks, a small fraction of what two independent runs
+would give where an option changes little. A run without a period count
 continues until every criterion is met: enough hits on every outcome,
 a small enough error on every mean, enough periods in the tail. The
 same model, seed and block size repeat a run exactly.
