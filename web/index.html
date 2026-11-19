@@ -48,6 +48,11 @@
   .big { font-size: 26px; font-weight: 600; }
   .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
   .stat small { display: block; color: var(--muted); font-size: 12px; }
+  .fullbtn { float: right; margin: 0 0 0 8px; padding: 2px 8px; font-size: 12px; font-weight: normal; background: white; color: var(--accent); border: 1px solid var(--line); }
+  .chartbox.full { position: fixed; inset: 0; z-index: 100; background: white; padding: 16px 24px; box-sizing: border-box; display: flex; flex-direction: column; overflow: auto; }
+  .chartbox.full > h2 { margin-top: 0 !important; }
+  .chartbox.full canvas, .chartbox.full svg { flex: 1 1 0; min-height: 240px; height: auto !important; }
+  body.fullview { overflow: hidden; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } .charts { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -86,25 +91,25 @@
     <p class="about" id="blockNote"></p>
     <p class="about">Quantity drawn: <select id="quantity"></select> <span id="quantityNote"></span></p>
     <div class="charts">
-      <div><h2><span id="histTitle">Period total</span>: histogram <label class="toggle"><input id="logx" type="checkbox" checked> log scale</label></h2><p class="legend" id="legend"></p><canvas id="hist"></canvas></div>
-      <div><h2>Exceedance: P(<span id="ecTitle">total</span> ≥ x) <label class="toggle"><input id="logp" type="checkbox"> log probability</label></h2><p class="legend" id="legend2"></p><canvas id="ec"></canvas></div>
+      <div class="chartbox"><h2><span id="histTitle">Period total</span>: histogram <label class="toggle"><input id="logx" type="checkbox" checked> log scale</label></h2><p class="legend" id="legend"></p><canvas id="hist"></canvas></div>
+      <div class="chartbox"><h2>Exceedance: P(<span id="ecTitle">total</span> ≥ x) <label class="toggle"><input id="logp" type="checkbox"> log probability</label></h2><p class="legend" id="legend2"></p><canvas id="ec"></canvas></div>
     </div>
     <h2 style="margin-top:16px">Contributions</h2>
     <div class="charts">
-      <div><h2>Mean per period by source</h2><canvas id="contrib"></canvas></div>
-      <div><h2>Who the tail belongs to <label class="pick">at or above the loss reached once in <select id="tailrp"><option value="10">10</option><option value="100" selected>100</option><option value="1000">1,000</option></select> periods</label></h2><p class="about" id="tailNote"></p><canvas id="tailcontrib"></canvas></div>
+      <div class="chartbox"><h2>Mean per period by source</h2><canvas id="contrib"></canvas></div>
+      <div class="chartbox"><h2>Who the tail belongs to <label class="pick">at or above the loss reached once in <select id="tailrp"><option value="10">10</option><option value="100" selected>100</option><option value="1000">1,000</option></select> periods</label></h2><p class="about" id="tailNote"></p><canvas id="tailcontrib"></canvas></div>
     </div>
-    <h2 style="margin-top:16px">What the uncertain inputs could move</h2>
+    <div class="chartbox"><h2 style="margin-top:16px">What the uncertain inputs could move</h2>
     <p class="about" id="tornadoNote"></p>
-    <canvas id="tornado"></canvas>
-    <h2 style="margin-top:16px">Events per period <label class="pick">from source <select id="countsource"></select></label></h2>
+    <canvas id="tornado"></canvas></div>
+    <div class="chartbox"><h2 style="margin-top:16px">Events per period <label class="pick">from source <select id="countsource"></select></label></h2>
     <p class="about" id="countNote"></p>
-    <canvas id="counts"></canvas>
-    <div id="byPeriodBlock" hidden><h2 style="margin-top:16px">Period by period from the start</h2><p class="about" id="byPeriodNote"></p><canvas id="byperiod"></canvas></div>
-    <div id="seriesBlock" hidden><h2 style="margin-top:16px">Over the periods</h2><p class="about" id="seriesNote"></p><canvas id="series"></canvas></div>
-    <h2 style="margin-top:16px">Flow</h2>
+    <canvas id="counts"></canvas></div>
+    <div id="byPeriodBlock" class="chartbox" hidden><h2 style="margin-top:16px">Period by period from the start</h2><p class="about" id="byPeriodNote"></p><canvas id="byperiod"></canvas></div>
+    <div id="seriesBlock" class="chartbox" hidden><h2 style="margin-top:16px">Over the periods</h2><p class="about" id="seriesNote"></p><canvas id="series"></canvas></div>
+    <div class="chartbox"><h2 style="margin-top:16px">Flow</h2>
     <p class="about">The graph as compiled: each edge's width is the events per period taking it and its label the share of the node's entries; a dashed edge holds the event for a while; a dotted edge feeds a trigger's sum, and the trigger's node is entered once in a period whose sum is above the level. A node shows its entries per period and the mean value it books per period.</p>
-    <svg id="flow"></svg>
+    <svg id="flow"></svg></div>
     <h2 style="margin-top:16px">Figures</h2>
     <table id="figures"></table>
     <h2 style="margin-top:16px">Breakdown</h2>

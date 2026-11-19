@@ -88,6 +88,7 @@ async function init() {
   $("tailrp").onchange = () => { if (lastResult) drawTailContributions($("tailcontrib"), lastResult, Number($("tailrp").value)); };
   $("countsource").onchange = () => { drawCountsFor($("countsource").value).catch((err) => { $("error").textContent = String(err); }); };
   $("pin").onclick = pin;
+  setupFullScreen();
   $("unpin").onclick = () => { unpin(); redraw().catch(() => {}); };
   $("yaml").oninput = () => { edited = true; };
   call("version").then(({ result }) => { $("version").textContent = "engine " + result; }).catch(() => {});
@@ -660,11 +661,20 @@ function drawContributions(canvas, r) {
 // compile per move.
 const tornadoRows = 15, tornadoRowH = 20;
 
+// lastSweep is the last model's sweep, so that drawing the tornado again
+// at another size does not sweep the model again.
+let lastSweep = null;
+
 async function drawTornado(canvas, yaml) {
   const note = $("tornadoNote");
   let sw;
   try {
-    ({ result: sw } = await call("sweep", yaml, {}));
+    if (lastSweep && lastSweep.yaml === yaml) {
+      sw = lastSweep.sw;
+    } else {
+      ({ result: sw } = await call("sweep", yaml, {}));
+      lastSweep = { yaml, sw };
+    }
   } catch (err) {
     if (err.message === "cancelled") return;
     note.textContent = "No sweep for this model: " + err.message;
@@ -906,4 +916,67 @@ function drawFlow(svg, graph, r) {
     const booked = r.contrib_per && r.contrib_per[n.id] ? r.contrib_per[n.id].mean : 0;
     svg.appendChild(el("text", { x: p.x + 60, y: p.y + 11, "text-anchor": "middle" }, fmt(entries(n.id), 3) + "/period" + (booked > 0 ? ", books " + fmt(booked, 3) : "")));
   }
+}
+
+// Full screen: each chart's box has a button that fills the window with
+// it, drawn again at the window's size from what the last run gave, and
+// takes it back to the results where they were; Escape takes it back
+// too, and resizing the window draws it again.
+let fullBox = null, fullScroll = 0;
+
+function setupFullScreen() {
+  for (const box of document.querySelectorAll(".chartbox")) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "fullbtn";
+    b.textContent = "⤢ Full screen";
+    b.title = "Show this chart on the whole screen";
+    b.onclick = () => (fullBox === box ? closeFull() : openFull(box));
+    box.querySelector("h2").prepend(b);
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && fullBox) closeFull(); });
+  window.addEventListener("resize", () => { if (fullBox) redrawBox(fullBox); });
+}
+
+function openFull(box) {
+  if (fullBox) closeFull();
+  fullScroll = window.scrollY;
+  fullBox = box;
+  box.classList.add("full");
+  document.body.classList.add("fullview");
+  const b = box.querySelector(".fullbtn");
+  b.textContent = "← Back to results";
+  b.title = "Return to the results";
+  redrawBox(box);
+}
+
+function closeFull() {
+  const box = fullBox;
+  fullBox = null;
+  box.classList.remove("full");
+  document.body.classList.remove("fullview");
+  const b = box.querySelector(".fullbtn");
+  b.textContent = "⤢ Full screen";
+  b.title = "Show this chart on the whole screen";
+  redrawBox(box);
+  window.scrollTo(0, fullScroll);
+}
+
+// redrawBox draws the box's chart again at the box's size, from the last
+// run.
+function redrawBox(box) {
+  if (!lastResult) return;
+  const chart = box.querySelector("canvas, svg");
+  const draw = {
+    hist: () => redraw(),
+    ec: () => redraw(),
+    contrib: () => drawContributions($("contrib"), lastResult),
+    tailcontrib: () => drawTailContributions($("tailcontrib"), lastResult, Number($("tailrp").value)),
+    tornado: () => drawTornado($("tornado"), $("yaml").value),
+    counts: () => drawCountsFor($("countsource").value),
+    byperiod: () => drawByPeriod($("byperiod"), lastResult),
+    series: () => drawSeriesIfKept(true),
+    flow: () => drawFlow($("flow"), lastGraph, lastResult),
+  }[chart && chart.id];
+  if (draw) Promise.resolve(draw()).catch((err) => { $("error").textContent = String(err); });
 }
