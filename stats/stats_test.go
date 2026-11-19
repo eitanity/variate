@@ -127,6 +127,13 @@ func TestLogHistQuantilesAndEdges(t *testing.T) {
 			t.Errorf("mid %g: hist %d raw %d bin %d", mid, got, raw, h.Count(k))
 		}
 	}
+	// Every edge is where the index turns to its bin.
+	for k := 1; k < len(h.bins); k++ {
+		e := h.Edge(k)
+		if h.index(e) != k || h.index(math.Nextafter(e, 0)) != k-1 {
+			t.Fatalf("edge %d: %v in bin %d, the float below in %d", k, e, h.index(e), h.index(math.Nextafter(e, 0)))
+		}
+	}
 	if h.N != int64(len(xs)) || h.Zero != 0 || h.Under != 0 || h.Over != 0 {
 		t.Errorf("counts N=%d zero=%d under=%d over=%d", h.N, h.Zero, h.Under, h.Over)
 	}

@@ -172,12 +172,27 @@ func (h *LogHist) reset() {
 // it is counted in bin k and not the one below.
 func (h *LogHist) Edge(k int) float64 {
 	e := math.Exp(h.logLo + float64(k)*h.logRes)
-	// bound: a few ulps at most
-	for i := 0; i < 8 && h.index(e) < k; i++ {
-		e = math.Nextafter(e, math.Inf(1))
+	if k <= 0 || k >= len(h.bins) {
+		return e
 	}
-	return e
+	// The rounding of the log and of the reciprocal moves the boundary
+	// from e by far less than a relative 1e-9: bisect the floats between
+	// for the smallest whose index is k.
+	lo, hi := math.Float64bits(e*(1-edgeSlack)), math.Float64bits(e*(1+edgeSlack))
+	// bound: 64 halvings of the floats between
+	for i := 0; i < 64 && hi-lo > 1; i++ {
+		mid := lo + (hi-lo)/2
+		if h.index(math.Float64frombits(mid)) >= k {
+			hi = mid
+		} else {
+			lo = mid
+		}
+	}
+	return math.Float64frombits(hi)
 }
+
+// edgeSlack bounds how far rounding moves a bin's edge, relatively.
+const edgeSlack = 1e-9
 
 // MapBytes returns the size of a coarse copy's bin map, which every copy
 // made from it by Empty shares.
