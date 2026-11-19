@@ -98,13 +98,16 @@ func (g Graph) inputRefs() []inputRef {
 	return refs
 }
 
-// inputRefs appends node i's inputs: its functions, its continuation's
+// inputRefs appends node i's inputs: its drawn functions, its continuation's
 // holding, and its outcomes' probabilities and holdings.
 func (n Node) inputRefs(refs []inputRef, i int) []inputRef {
 	add := func(name, kind string, r *InputRange, j int) {
 		refs = append(refs, inputRef{Input: Input{Name: "node " + n.ID + " " + name, Kind: kind, Range: r}, i: i, j: j})
 	}
 	for j, f := range n.Functions {
+		if f.Expr != "" {
+			continue // computed from its operands, which are inputs
+		}
 		add("function "+f.Name, InputFunction, f.Range, j)
 	}
 	if n.Next != "" && n.NextHolding != nil {

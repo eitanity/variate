@@ -37,6 +37,9 @@ func (b *builder) flatten() (*Compiled, error) {
 		cn := cnode{mode: n.Mode, alias: noIndex, thresh: noIndex}
 		cn.fnStart = index(len(m.fns))
 		b.flattenFunctions(m, index(i), n, OnEntry, cats)
+		if err := b.flattenExprs(m, index(i), n, cn.fnStart, cats); err != nil {
+			return nil, err
+		}
 		cn.fnEnd = index(len(m.fns))
 		cn.rateStart = cn.fnEnd
 		b.flattenFunctions(m, index(i), n, PerTime, cats)
@@ -126,7 +129,7 @@ func (m *Compiled) addPool(d dist.Distribution, scope Scope) int32 {
 
 func (b *builder) flattenFunctions(m *Compiled, node int32, n Node, basis Basis, cats map[string]int32) {
 	for _, f := range n.Functions {
-		if f.Basis != basis || n.Threshold != nil && f.Name == n.Threshold.Function {
+		if f.Basis != basis || f.Expr != "" || n.Threshold != nil && f.Name == n.Threshold.Function {
 			continue
 		}
 		d, factor := b.valueFactor(f)
@@ -187,7 +190,7 @@ func categoryOf(cats map[string]int32, name string) int32 {
 
 func (m *Compiled) addFunction(node int32, name string, d dist.Distribution, scope Scope, basis Basis, cat, factor int32) int32 {
 	f := index(len(m.fns))
-	m.fns = append(m.fns, cfn{pool: m.addPool(d, scope), category: cat, factor: factor})
+	m.fns = append(m.fns, cfn{pool: m.addPool(d, scope), category: cat, factor: factor, expr: noIndex})
 	m.fnNames = append(m.fnNames, name)
 	m.fnNode = append(m.fnNode, node)
 	m.fnPerTime = append(m.fnPerTime, basis == PerTime)

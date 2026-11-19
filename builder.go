@@ -210,7 +210,10 @@ func checkOutage(n Node) error {
 func (b *builder) checkFunctions(n Node) error {
 	leaf := len(n.Outcomes) == 0 && n.Next == "" && n.Threshold == nil && n.Queue == nil
 	for _, f := range n.Functions {
-		if err := checkSlot("function", n.ID+"."+f.Name, f.Model, 0, math.Inf(1), false); err != nil {
+		if err := checkExpr(n, f); err != nil {
+			return err
+		}
+		if err := checkSlot("function", n.ID+"."+f.Name, f.Model, 0, math.Inf(1), false); f.Expr == "" && err != nil {
 			return err
 		}
 		if f.Basis == PerTime && leaf {
@@ -287,6 +290,9 @@ func (b *builder) checkThreshold(n Node) error {
 			continue
 		}
 		found = true
+		if f.Expr != "" {
+			return modelError("function", n.ID+"."+f.Name, "a threshold tests a drawn value, not an expression")
+		}
 		if f.Scope == PerPeriod {
 			return modelError("function", n.ID+"."+f.Name, "a threshold tests a value drawn per event, not once per period")
 		}
@@ -499,6 +505,9 @@ func (b *builder) checkInput(n Node, in TriggerInput, seen map[string]bool) erro
 		return modelError("node", n.ID, "trigger input function "+in.Node+"."+in.Function+" not found")
 	}
 	for _, f := range fns {
+		if isExpr(b.g.Nodes[v], f) {
+			return modelError("node", n.ID, "trigger input "+in.Node+"."+f+" is an expression")
+		}
 		if seen[in.Node+"."+f] {
 			return modelError("node", n.ID, "trigger input "+in.Node+"."+f+" is named twice")
 		}
@@ -514,6 +523,38 @@ func triggerNodes(tr *Trigger) []string {
 		out = append(out, in.Node)
 	}
 	return out
+}
+
+// checkExpr: an expression is an on-entry value drawn per event, in
+// place of a law.
+func checkExpr(n Node, f Function) error {
+	why := ""
+	switch {
+	case f.Expr == "":
+	case f.Model != nil:
+		why = "has both a distribution and an expression"
+	case f.Basis == PerTime:
+		why = "a per-time function is a rate, not an expression"
+	case f.Scope == PerPeriod:
+		why = "an expression is computed per event from its operands"
+	case f.Range != nil:
+		why = "an expression has no range to sweep"
+	}
+	if why != "" {
+		return modelError("function", n.ID+"."+f.Name, why)
+	}
+	return nil
+}
+
+// isExpr reports whether the node's function of that name is an
+// expression.
+func isExpr(n Node, name string) bool {
+	for _, f := range n.Functions {
+		if f.Name == name {
+			return f.Expr != ""
+		}
+	}
+	return false
 }
 
 // hasFunction reports whether the node has a function of that name.

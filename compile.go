@@ -57,6 +57,7 @@ type cfn struct {
 	pool     int32
 	category int32
 	factor   int32 // the pool of a shared factor multiplying the value, or noIndex
+	expr     int32 // the expression the value is, in exprs, or noIndex; pool is then noIndex
 }
 
 // csrc is a compiled source.
@@ -78,6 +79,7 @@ type Compiled struct {
 	nodes                                        []cnode
 	outs                                         []cout
 	fns                                          []cfn
+	exprs                                        []cexpr // the expressions, each its function's value
 	srcs                                         []csrc
 	outcomeNode                                  []int32 // owning node of each outcome
 	fnNode                                       []int32 // owning node of each function

@@ -40,6 +40,7 @@ type Function struct {
 	Scope          Scope
 	Range          *InputRange // how uncertain Model is, for a sweep; nil = not swept
 	Factor         string      // a shared factor multiplying the value, a rate for PerTime; "" = none
+	Expr           string      // the value as an expression of the node's other on-entry functions, Model nil; "" = drawn from Model
 }
 
 // Outcome is one branch of a node's selection.

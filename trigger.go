@@ -215,7 +215,7 @@ func (m *Compiled) periodScopedAt(v int32) bool {
 	n := m.nodes[v]
 	// bound: functions of one node
 	for f := n.fnStart; f < n.rateEnd; f++ {
-		if m.poolPeriod[m.fns[f].pool] != noIndex {
+		if pool := m.fns[f].pool; pool != noIndex && m.poolPeriod[pool] != noIndex {
 			return true
 		}
 	}
@@ -714,6 +714,12 @@ func (m *Compiled) alwaysBooks(v int32) bool {
 	n := m.nodes[v]
 	// bound: functions of one node
 	for f := n.fnStart; f < n.fnEnd; f++ {
+		if m.fns[f].expr != noIndex {
+			if m.exprPositive(f) {
+				return true
+			}
+			continue
+		}
 		if m.pools[m.fns[f].pool].CDF(0) == 0 {
 			return true
 		}

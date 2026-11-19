@@ -12,7 +12,7 @@ func (m *Compiled) markInfiniteVariance(ws *[]Warning) {
 	l := newLayout(m)
 	m.infVar = make([]bool, l.width)
 	for f := range m.fns {
-		if !math.IsInf(m.pools[m.fns[f].pool].Var(), 1) {
+		if !m.fnInfVar(index(f)) {
 			continue
 		}
 		v := m.fnNode[f]
@@ -68,7 +68,7 @@ func (m *Compiled) markSource(l *layout, k int32) {
 		for _, r := range [2][2]int32{{n.fnStart, n.fnEnd}, {n.rateStart, n.rateEnd}} {
 			// bound: the node's functions
 			for f := r[0]; f < r[1]; f++ {
-				if d := m.pools[m.fns[f].pool]; d.Mean() != 0 || d.Var() != 0 {
+				if m.fnBooks(f) {
 					m.markBooked(l, k, f)
 				}
 			}

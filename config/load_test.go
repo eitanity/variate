@@ -514,6 +514,24 @@ graphs:
 	parseErr(t, strings.Replace(text, "pert: [0.5, 1, 2]", "pert: [0.5, 1, 2], unit: days", 1), "unit is not allowed on a factor")
 }
 
+// TestExprKeys: a function's value may be an expression in place of a
+// distribution, and takes no distribution's keys beside it.
+func TestExprKeys(t *testing.T) {
+	text := `
+period: { days: 365 }
+graphs:
+  - id: g
+    sources: [ { id: a, frequency: 2, to: n } ]
+    nodes:
+      - { id: n, functions: [ { name: hours, category: h, gamma: { mean: 8, sd: 2 } }, { name: pay, category: c, expr: "hours * 62.5" } ] }
+`
+	m := parse(t, text)
+	if fs := m.Graph.Nodes[0].Functions; fs[1].Expr != "hours * 62.5" || fs[1].Model != nil || fs[0].Expr != "" {
+		t.Errorf("functions %+v", fs)
+	}
+	parseErr(t, strings.Replace(text, `expr: "hours * 62.5"`, `expr: "hours * 62.5", constant: 1`, 1), "constant")
+}
+
 // TestScheduleKeys: schedules parse at the top level and a source names one.
 func TestScheduleKeys(t *testing.T) {
 	text := `

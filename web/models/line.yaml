@@ -4,15 +4,17 @@
 # stay outside the total, and net is the revenue less the cost. A
 # year's prices, a factor of mean 1, scale the spares and the orders'
 # margin alike: a dear year is dear for every part and every sale in it.
+# Each stoppage also takes a fitting job whose hours are drawn and whose
+# labour is an expression of them, the hours times 1500/24 an hour.
 period: { days: 365 }
 factors:
   - { id: prices, lognormal: { mean: 1, sd: {{prices}} } }
 totals:
   - { id: maintenance, categories: [labour, parts] }
   - { id: cost, categories: [labour, parts, production] }
-  - { id: worked, categories: [hours] }
+  - { id: worked, categories: [hours, fitting] }
   - { id: net, categories: [revenue], less: [labour, parts, production] }
-outside_total: [hours, revenue]
+outside_total: [hours, fitting, revenue]
 graphs:
   - id: line
     sources:
@@ -22,6 +24,8 @@ graphs:
       - id: repair
         functions:
           - { name: spares, category: parts,      basis: on_entry, lognormal: { median: {{parts}}, p90: 12000 }, factor: prices }
+          - { name: fitting_hours, category: fitting, pert: [1, {{fitting}}, 40] }
+          - { name: fitting, category: labour,      expr: "fitting_hours * 62.5" }
           - { name: crew,   category: labour,     basis: per_time, unit: days, constant: {{crew_day}} }
           - { name: hours,  category: hours,      basis: per_time, unit: days, constant: {{crew_hours}} }
           - { name: output, category: production, basis: per_time, unit: days, pert: [5000, {{output}}, 30000] }

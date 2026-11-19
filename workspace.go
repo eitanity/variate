@@ -234,16 +234,26 @@ func (w *Workspace) setupStream(nw int) error {
 	return nil
 }
 
+// newWorker is a worker's samplers, period draws, trigger sums, queues
+// and, for a model with expressions, the values they read.
+func newWorker(m *Compiled, pool int) *worker {
+	wk := &worker{ss: dist.NewSamplerSet(m.pools, pool), period: make([]float64, m.periodSlots), sums: make([]float64, len(m.trigs))}
+	for _, q := range m.queues {
+		wk.queues = append(wk.queues, newWQueue(q))
+	}
+	if len(m.exprs) > 0 {
+		wk.vals = make([]float64, len(m.fns))
+	}
+	return wk
+}
+
 // startPool allocates the workers' private state and starts the worker
 // and finaliser goroutines, the only goroutines the engine creates.
 func (w *Workspace) startPool(nw, pool int) {
 	m := w.m
 	// bound: workers or slots, fixed at construction
 	for i := 0; i < nw; i++ {
-		wk := &worker{ss: dist.NewSamplerSet(m.pools, pool), period: make([]float64, m.periodSlots), sums: make([]float64, len(m.trigs))}
-		for _, q := range m.queues {
-			wk.queues = append(wk.queues, newWQueue(q))
-		}
+		wk := newWorker(m, pool)
 		if m.renewal {
 			wk.phase = make([]int32, len(m.srcs))
 			wk.downUntil = make([]float64, len(m.srcs))

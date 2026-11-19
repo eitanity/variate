@@ -121,6 +121,42 @@ event ends; a trigger's node is no different. The graph must be acyclic.
 | `scope` | `event` (default): drawn afresh for every event. `period`: drawn once per period and shared by every event of that period. |
 | `factor` | a factor's id (below): the value, or a `per_time` function's rate, is multiplied by the factor's draw for the period, shared with every value and rate naming it. |
 | a distribution | the value, written inline beside the keys above: `pert: [...]`, `lognormal: {...}`, a number, and so on. |
+| `expr` | in place of a distribution: the value as an expression of the node's other `on_entry` functions (below). |
+
+#### Expressions
+
+A function's value can be computed from the values its event draws at
+the same node, in place of a distribution of its own:
+
+```yaml
+functions:
+  - { name: hours, category: hours,  gamma: { mean: 8, sd: 2 } }
+  - { name: wage,  category: wage,   gamma: { mean: 60, sd: 10 } }
+  - { name: parts, category: parts,  lognormal: { median: 300, p90: 800 } }
+  - { name: bill,  category: cost,   expr: "hours * wage + parts" }
+outside_total: [hours, wage, parts]
+```
+
+An expression has numbers, the names of the node's `on_entry`
+functions, `+`, `-`, `*` and parentheses; a name is that function's
+value for the event, after any factor on it. It may name another
+expression, except one with a factor, and not round a cycle. Each
+function named is booked to its own category as usual, so a value read
+only by an expression is usually kept outside the total.
+
+Limits: 64 tokens, parentheses 16 deep, and 256 terms once the
+expression is multiplied out. Once multiplied out no value may be
+multiplied by itself, so `hours * hours` and `hours * (wage + hours)`
+are refused; an expression that could be below 0, such as `parts - 500`,
+is refused too. With those rules the exact mean and variance stay exact:
+they need only each value's mean and variance.
+
+An expression is booked on entry (`basis: on_entry`), drawn per event
+(no `scope`) and has no range. It may not name a `per_time` function or
+the value a threshold tests, be the value a threshold tests, or be a
+trigger's input. A factor on an expression multiplies its value. The
+exact distribution (the transform) is not computed for a model with an
+expression; the mean, variance and simulation are.
 
 ### Outcomes
 

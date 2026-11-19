@@ -327,7 +327,7 @@ func TestDemoTotals(t *testing.T) {
 	}
 	net := r.Series.NamedColumn(3, make([]float64, r.Series.Periods()))
 	for p := range r.Series.Periods() {
-		hours, labour := r.Series.Category(cat["hours"], p), r.Series.Category(cat["labour"], p)
+		hours, labour := r.Series.Category(cat["hours"], p)+r.Series.Category(cat["fitting"], p), r.Series.Category(cat["labour"], p)
 		if math.Abs(labour-hours*1500/24) > 1e-6*math.Max(1, labour) {
 			t.Fatalf("period %d: labour %v for %v hours", p, labour, hours)
 		}
@@ -342,8 +342,9 @@ func TestDemoTotals(t *testing.T) {
 		t.Errorf("P(net ≤ 0) %v at a margin of 8000, %v at 4000", s3.AtMostZero[0].P, s.AtMostZero[0].P)
 	}
 	_, _, s2 := run(map[string]float64{"crew_hours": 48})
-	if math.Abs(s2.Total.Mean-s.Total.Mean) > 1e-12*s.Total.Mean || math.Abs(s2.Totals["worked"].Mean-2*s.Totals["worked"].Mean) > 1e-9*s.Totals["worked"].Mean {
-		t.Errorf("crew hours 48: total %v worked %v, against %v and %v", s2.Total.Mean, s2.Totals["worked"].Mean, s.Total.Mean, s.Totals["worked"].Mean)
+	crew, crew2 := s.Totals["worked"].Mean-s.ByCategory["fitting"].Mean, s2.Totals["worked"].Mean-s2.ByCategory["fitting"].Mean
+	if math.Abs(s2.Total.Mean-s.Total.Mean) > 1e-12*s.Total.Mean || math.Abs(crew2-2*crew) > 1e-9*crew {
+		t.Errorf("crew hours 48: total %v crew %v, against %v and %v", s2.Total.Mean, crew2, s.Total.Mean, crew)
 	}
 }
 
@@ -427,5 +428,44 @@ func TestDemoPrices(t *testing.T) {
 	rhoW, sdW := corr(cw, rw)
 	if !(rhoN < 0.05 && rhoW > 0.3 && sdW > 1.2*sdN) {
 		t.Errorf("parts and revenue: correlation %v narrow, %v wide; parts sd %v and %v", rhoN, rhoW, sdN, sdW)
+	}
+}
+
+// TestDemoFitting: the factory line's fitting labour is its hours times
+// 62.5, so more fitting hours raise the exact labour 62.5 times as much
+// as the hours, and the simulated labour is within its error.
+func TestDemoFitting(t *testing.T) {
+	run := func(h float64) (*variate.Compiled, *variate.Expectation, variate.Summary) {
+		cfg := variate.Config{Periods: 20000, Seed: 1, AllowUnconverged: true}
+		c, _, err := demoGraph(t, "line", map[string]float64{"fitting": h}).Compile(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, err := c.Analytic()
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := c.NewWorkspace(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer w.Close()
+		if _, err := w.Run(context.Background(), 1); err != nil {
+			t.Fatal(err)
+		}
+		var s variate.Summary
+		w.Summarize(&s)
+		return c, e, s
+	}
+	cl, el, _ := run(4)
+	_, eh, sh := run(30)
+	labour, hours := slices.Index(cl.Categories(), "labour"), slices.Index(cl.Categories(), "fitting")
+	dl := eh.MeanByCategory[labour] - el.MeanByCategory[labour]
+	dh := eh.MeanByCategory[hours] - el.MeanByCategory[hours]
+	if !(dh > 0) || math.Abs(dl/dh-62.5) > 1e-9 {
+		t.Errorf("labour rises %v for %v hours, want 62.5 each", dl, dh)
+	}
+	if got := sh.ByCategory["labour"]; math.Abs(got.Mean-eh.MeanByCategory[labour]) > 4*got.StdErr {
+		t.Errorf("labour %v ± %v, exact %v", got.Mean, got.StdErr, eh.MeanByCategory[labour])
 	}
 }

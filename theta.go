@@ -57,7 +57,7 @@ type thetaMix struct {
 func (m *Compiled) periodQuantities() []thetaQuantity {
 	var qs []thetaQuantity
 	for f, c := range m.fns {
-		if m.poolPeriod[c.pool] != noIndex {
+		if c.pool != noIndex && m.poolPeriod[c.pool] != noIndex {
 			qs = append(qs, thetaQuantity{pool: c.pool, fn: index(f)})
 		}
 	}
@@ -300,6 +300,10 @@ func (m *Compiled) zeroProbability() float64 {
 		// nothing, with a probability the sources' mixture does not give.
 		return math.NaN()
 	}
+	if !m.exprsZeroKnown() {
+		// An expression's chance of 0 is not its draws'.
+		return math.NaN()
+	}
 	qs := m.periodQuantities()
 	for i := range qs {
 		if qs[i].fn == noIndex {
@@ -504,6 +508,8 @@ func (m *Compiled) zeroGiven(drawn, z []float64, rules []quadRule, srcs []int) f
 			pool := m.fns[f].pool
 			switch {
 			case !m.fnInTotal(f):
+			case pool == noIndex:
+				pz = 0 // an expression above 0 for certain
 			case m.poolPeriod[pool] == noIndex:
 				pz *= m.pools[pool].CDF(0)
 			case drawn[pool] != 0:

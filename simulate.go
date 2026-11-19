@@ -284,6 +284,9 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode, d 
 	// bound: functions of one node
 	for f := n.fnStart; f < n.fnEnd; f++ {
 		x := w.value(wk, f)
+		if wk.vals != nil {
+			wk.vals[f] = x
+		}
 		w.book(row, k, v, m.fns[f].category, x, d)
 		w.feed(wk, f, x)
 		booked += x
@@ -298,11 +301,17 @@ func (w *Workspace) bookEntry(wk *worker, row []float64, k, v int32, n cnode, d 
 	return booked
 }
 
-// value draws function f's value, times the period's draw of the
-// factor on it.
+// value draws function f's value, or computes an expression's from the
+// node's values drawn before it, times the period's draw of the factor
+// on it.
 func (w *Workspace) value(wk *worker, f int32) float64 {
 	fn := w.m.fns[f]
-	x := w.draw(wk, fn.pool)
+	var x float64
+	if fn.expr != noIndex {
+		x = w.m.exprs[fn.expr].eval(wk.vals)
+	} else {
+		x = w.draw(wk, fn.pool)
+	}
 	if fn.factor != noIndex {
 		x *= wk.period[w.m.poolPeriod[fn.factor]]
 	}

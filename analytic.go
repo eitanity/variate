@@ -74,42 +74,78 @@ type nodeMoments struct {
 // fnMoments returns E[X], E[X²] and whether the draw is period-scoped for
 // function f under the filter; a filtered-out function contributes 0.
 func (m *Compiled) fnMoments(f int32, filt valueFilter) (mean, second float64, period bool) {
+	sign, ok := m.fnSign(f, filt)
+	switch {
+	case !ok:
+		return 0, 0, false
+	case filt.kind == filterDraws:
+		if m.fns[f].expr != noIndex {
+			return 0, 0, false
+		}
+		return 1, 1, false
+	}
+	mean, second, period = m.drawMoments(f)
+	return sign * mean, second, period
+}
+
+// fnSign is whether function f's value is in the filter, and its sign
+// there: -1 for a value a named total subtracts.
+func (m *Compiled) fnSign(f int32, filt valueFilter) (float64, bool) {
 	c := m.fns[f]
 	if filt.disc != discAny && m.discounted[c.category] != (filt.disc == discOnly) {
-		return 0, 0, false
+		return 0, false
 	}
 	switch filt.kind {
 	case filterAll:
 		if !m.inTotal[c.category] {
-			return 0, 0, false
+			return 0, false
 		}
 	case filterCategory:
 		if c.category != filt.index {
-			return 0, 0, false
+			return 0, false
 		}
 	case filterNode:
 		if m.fnNode[f] != filt.index || !m.inTotal[c.category] {
-			return 0, 0, false
+			return 0, false
 		}
 	case filterTotal:
 		if !m.totals[filt.index].has[c.category] {
-			return 0, 0, false
+			return 0, false
 		}
-	case filterDraws:
-		return 1, 1, false
+		return m.totals[filt.index].sign(int(c.category)), true
 	}
-	d := m.pools[c.pool]
-	mean = d.Mean()
-	second = d.Var() + mean*mean
+	return 1, true
+}
+
+// drawMoments is E[X], E[X²] and whether X is drawn once a period, for
+// function f's value: its law's, or its expression's over its node's
+// draws, times its factor's moments.
+func (m *Compiled) drawMoments(f int32) (mean, second float64, period bool) {
+	c := m.fns[f]
+	if c.expr == noIndex {
+		return m.lawMoments(f)
+	}
+	mean, second, _ = m.polyMoments(m.exprTerms(f, 1, nil))
 	if c.factor != noIndex {
-		// The factor's moments stand in for it; Analytic conditions on it.
 		g := m.pools[c.factor]
 		mean *= g.Mean()
 		second *= g.Var() + g.Mean()*g.Mean()
 	}
-	if filt.kind == filterTotal {
-		// A subtracted value's mean changes sign; its square does not.
-		mean *= m.totals[filt.index].sign(int(c.category))
+	return mean, second, false
+}
+
+// lawMoments is drawMoments for a drawn function: its law's moments
+// times its factor's, which stand in for it; Analytic conditions on the
+// factor.
+func (m *Compiled) lawMoments(f int32) (mean, second float64, period bool) {
+	c := m.fns[f]
+	d := m.pools[c.pool]
+	mean = d.Mean()
+	second = d.Var() + mean*mean
+	if c.factor != noIndex {
+		g := m.pools[c.factor]
+		mean *= g.Mean()
+		second *= g.Var() + g.Mean()*g.Mean()
 	}
 	return mean, second, m.poolPeriod[c.pool] != noIndex
 }
@@ -117,6 +153,9 @@ func (m *Compiled) fnMoments(f int32, filt valueFilter) (mean, second float64, p
 // sumMoments combines independent terms: the mean, E[(Σ)²] and the
 // Θ-version of E[(Σ)²].
 func (m *Compiled) sumMoments(from, to int32, filt valueFilter) (mean, second, secondTheta float64) {
+	if to > from && m.fns[to-1].expr != noIndex && filt.kind != filterDraws {
+		return m.nodePolyMoments(from, to, filt)
+	}
 	// bound: table length
 	for f := from; f < to; f++ {
 		x, x2, period := m.fnMoments(f, filt)

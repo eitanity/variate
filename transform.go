@@ -251,6 +251,9 @@ func (m *Compiled) atomUnit() float64 {
 	unit := 0.0
 	smallest := 0.0
 	for _, f := range m.fns {
+		if f.pool == noIndex {
+			continue // an expression; the transform refuses it
+		}
 		d := m.pools[f.pool]
 		lo, hi := d.Support()
 		atom := 0.0
@@ -278,6 +281,9 @@ func (m *Compiled) atomUnit() float64 {
 // values between multiples.
 func (m *Compiled) LatticeUnit() float64 {
 	for f, fn := range m.fns {
+		if fn.expr != noIndex {
+			return 0
+		}
 		lo, hi := m.pools[fn.pool].Support()
 		if lo != hi || m.fnPerTime[f] {
 			return 0
@@ -329,6 +335,9 @@ func (t *transformer) applicable() string {
 	}
 	if len(m.valueFactors()) > 0 {
 		return "a factor scales a function's value"
+	}
+	if len(m.exprs) > 0 {
+		return "a function's value is an expression of other values"
 	}
 	if m.cycle.over {
 		return "the schedules' combined cycle is longer than " + itoa(maxJointPeriods) + " periods or has more than " + itoa(maxJointPoints) + " distinct places"
