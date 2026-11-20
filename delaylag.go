@@ -187,7 +187,7 @@ func subMoments(d dist.Distribution, n int, mu *[4][]float64) (f0, tail float64)
 			if scale > 0 {
 				sub = min(subMaxCells, max(1, int(math.Ceil(h*lagFine/scale))))
 			}
-			cellOnSubs(d, lo, hi, sub, gx, gw, mu, j)
+			lawCell(d, lo, hi, sub, gx, gw, mu, j)
 		}
 		lo = hi
 	}
@@ -196,6 +196,22 @@ func subMoments(d dist.Distribution, n int, mu *[4][]float64) (f0, tail float64)
 
 // lawPoint is a law's CDF and survival at x.
 type lawPoint struct{ x, f, s float64 }
+
+// lawCell adds cell j's moments from lo to hi, split where the law's
+// support starts or ends inside it, past which its CDF is not smooth,
+// each piece on sub sub-cells.
+func lawCell(d dist.Distribution, lo, hi lawPoint, sub int, gx, gw []float64, mu *[4][]float64, j int) {
+	from, to := d.Support()
+	a := lo
+	for _, x := range [2]float64{from, to} {
+		if x > a.x && x < hi.x {
+			b := lawPoint{x: x, f: d.CDF(x), s: d.Survival(x)}
+			cellOnSubs(d, a, b, sub, gx, gw, mu, j)
+			a = b
+		}
+	}
+	cellOnSubs(d, a, hi, sub, gx, gw, mu, j)
+}
 
 // cellOnSubs adds cell j's moments, from lo to hi, taken on sub equal
 // sub-cells by the Gauss–Legendre rule gx, gw.

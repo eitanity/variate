@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"code.eitanity.com/variate"
+	"code.eitanity.com/variate/config"
 	"code.eitanity.com/variate/dist"
 )
 
@@ -355,4 +356,55 @@ func TestDelayPlan(t *testing.T) {
 		return
 	}
 	t.Error("no target-rse row for the total")
+}
+
+// TestDelayBoundedHolding: a PERT holding, its density a power of the
+// distance to each end of its support, which falls inside a cell, over
+// a period or over days: the variance is the fixed holding's averaged
+// over the law, by Simpson's rule on its density over 2^20 panels, to
+// 1e-8, the grids settling to 1e-9.
+func TestDelayBoundedHolding(t *testing.T) {
+	for _, pts := range [][3]float64{{0.1, 0.3, 1.2}, {1.0 / 365, 3.0 / 365, 10.0 / 365}} {
+		p, _ := dist.NewPERT(pts[0], pts[1], pts[2], dist.DefaultPERTShape)
+		_, e := depExact(t, heldPath(p))
+		const panels = 1 << 20
+		lo, hi := pts[0], pts[2]
+		h := (hi - lo) / panels
+		f := func(x float64) float64 { return math.Exp(p.LogDensity(x)) * heldConstExact(x) }
+		want := 0.0
+		for i := 1; i < panels; i++ {
+			want += float64(2+2*(i%2)) * f(lo+float64(i)*h)
+		}
+		want *= h / 3
+		if !within(e.Var, want, 1e-8) {
+			t.Errorf("PERT %v: var %v, want %v", pts, e.Var, want)
+		}
+	}
+}
+
+// TestDelayExamples: the examples with holding times and drawn rates,
+// the pump station's bounded holdings among them, have an exact
+// variance of the total, each category and each source within four
+// errors of 2^20 simulated periods.
+func TestDelayExamples(t *testing.T) {
+	for _, f := range []string{"pump_station", "delays", "sites", "line"} {
+		cm, err := config.Load("../../examples/" + f + ".yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, e := depExact(t, cm.Graph)
+		if math.IsNaN(e.Var) {
+			t.Errorf("%s: no exact variance", f)
+			continue
+		}
+		r := runSeries(t, cm.Graph, 1<<20, 3)
+		n := r.Series.Periods()
+		checkBlockVar(t, f+" total", e.Var, r.Series.TotalColumn(make([]float64, n)))
+		for c, cat := range m.Categories() {
+			checkBlockVar(t, f+" "+cat, e.VarByCategory[c], r.Series.CategoryColumn(c, make([]float64, n)))
+		}
+		for k, s := range m.SourceIDs() {
+			checkBlockVar(t, f+" source "+s, e.VarBySource[k], r.Series.SourceColumn(k, make([]float64, n)))
+		}
+	}
 }
