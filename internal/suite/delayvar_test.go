@@ -133,9 +133,9 @@ func TestDelayDependence(t *testing.T) {
 // normal bend where its holding crosses a period; at holdings of 2 days
 // (but rank 0.99), 3 months and a year, with a drawn rate at 3 months,
 // whose lag profiles bend at every lag, at rank 0.95 and in lockstep,
-// and on a path of two of the group's holdings, the exact variance is
-// within four errors of 2^21 simulated periods by total, category and
-// source.
+// and at a year at rank 0.95, and on a path of two of the group's
+// holdings, the exact variance is within four errors of 2^21 simulated
+// periods by total, category and source.
 func TestDelayNearLockstep(t *testing.T) {
 	members := []string{"a.x", "a->b", "b.y"}
 	cases := map[string]variate.Graph{}
@@ -160,6 +160,11 @@ func TestDelayNearLockstep(t *testing.T) {
 	lockDrawn.Sources[0].Frequency = rate
 	lockDrawn.Dependence = []variate.Dependence{{Members: members, Rank: 1}}
 	cases["drawn rate, lockstep"] = lockDrawn
+	year, _ := dist.NewLognormalFromMedianP90(1, 3)
+	drawnYear := heldPath(year)
+	drawnYear.Sources[0].Frequency = rate
+	drawnYear.Dependence = []variate.Dependence{{Members: members, Rank: 0.95}}
+	cases["drawn rate, a year"] = drawnYear
 	two := heldPath(tau)
 	two.Nodes[1].Next, two.Nodes[1].NextHolding = "c", tau
 	two.Nodes = append(two.Nodes, variate.Node{ID: "c", Functions: []variate.Function{Fn("z", "z", C(2))}})
