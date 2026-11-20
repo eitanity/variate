@@ -473,7 +473,9 @@ func TestDemoFitting(t *testing.T) {
 // TestDemoTogether: the factory line's spares and downtime moving
 // together leave the exact means as they are and widen the simulated
 // year's cost; the exact standard deviation, with the downtime's
-// holding, is the simulated within its error apart and at rank 0.5.
+// holding, is the simulated within its error apart and at ranks 0.5
+// and 0.95, where the downtime crossing the year's end bends the
+// figures in the group's normal.
 func TestDemoTogether(t *testing.T) {
 	run := func(rank float64) (*variate.Expectation, variate.Summary) {
 		cfg := variate.Config{Periods: 20000, Seed: 1, AllowUnconverged: true}
@@ -499,11 +501,12 @@ func TestDemoTogether(t *testing.T) {
 	}
 	e0, s0 := run(0)
 	eh, sh := run(0.5)
+	en, sn := run(0.95)
 	e1, s1 := run(1)
 	for _, c := range []struct {
 		e *variate.Expectation
 		s variate.Summary
-	}{{e0, s0}, {eh, sh}} {
+	}{{e0, s0}, {eh, sh}, {en, sn}} {
 		sd, se := math.Sqrt(c.e.Var), c.s.Total.StdDev/math.Sqrt(2*float64(c.s.Total.N))
 		if !(math.Abs(c.s.Total.StdDev-sd) <= 4*se) {
 			t.Errorf("exact sd %v, simulated %v ± %v", sd, c.s.Total.StdDev, se)

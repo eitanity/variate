@@ -54,6 +54,10 @@ const (
 	// lagFine is the cells a holding's median spans at least on the first
 	// grid, so that no coarse cell holds most of a narrow law.
 	lagFine = 16
+	// lagSpread is the cells a group's holding spans at least, given the
+	// group's normal, on the first grid, so that the rule over the normal
+	// does not read the grid's cells.
+	lagSpread = 8
 	// delayBudget caps the cells the grids and their mixtures sum to.
 	delayBudget = 1 << 27
 )
@@ -369,30 +373,37 @@ func (m *Compiled) delayExact() bool {
 }
 
 // delayStart is the first grid: delayCellsStart cells, or more so that
-// the median of each holding in a group spans lagFine of them, its law
-// given the group's normal taken on the grid; another holding's cells
+// the median of each holding in a group spans lagFine of them, and, for
+// a rule split at its kinks, its spread given the group's normal,
+// between its quantiles at Φ(±√(1−ρ)), lagSpread, its law given the
+// normal taken on the grid; another holding's cells
 // take their moments on sub-cells as narrow as it is, and a fixed one is
 // one point, which no cell need resolve.
-func (m *Compiled) delayStart() int {
+func (m *Compiled) delayStart(split bool) int {
 	n := delayCellsStart
-	member := map[int32]bool{}
+	spread := map[int32]float64{}
 	for _, g := range m.groups {
 		for _, mb := range g.members {
 			if mb.fn == noIndex {
-				member[mb.out] = true
+				spread[mb.out] = g.sq1
 			}
 		}
 	}
 	for j, o := range m.outs {
-		if o.hold == noIndex || !member[index(j)] {
+		b, ok := spread[index(j)]
+		if o.hold == noIndex || !ok {
 			continue
 		}
-		if lo, hi := m.pools[o.hold].Support(); lo == hi {
+		d := m.pools[o.hold]
+		if lo, hi := d.Support(); lo == hi {
 			continue
 		}
-		med := m.pools[o.hold].Quantile(0.5)
+		med, width := d.Quantile(0.5), 0.0
+		if split {
+			width = copulaValue(d, b) - copulaValue(d, -b)
+		}
 		// bound: doublings to delayCellsMax
-		for n < delayCellsMax && med > 0 && med*float64(n) < lagFine {
+		for n < delayCellsMax && med > 0 && (med*float64(n) < lagFine || split && width*float64(n) < lagSpread) {
 			n *= 2
 		}
 	}
@@ -552,14 +563,13 @@ func (m *Compiled) delayFigures(lam []float64) (perPeriod, longRun map[delayKey]
 	if !ok {
 		return nan()
 	}
-	models, weights := []*Compiled{m}, []float64{1}
+	models, weights, start := []*Compiled{m}, []float64{1}, m.delayStart(false)
 	if len(m.groups) > 0 {
 		var ok bool
-		if models, weights, ok = m.depRule(keys, lam); !ok {
+		if models, weights, start, ok = m.depRule(keys, lam); !ok {
 			return nan()
 		}
 	}
-	start := m.delayStart()
 	vs := settleGrids(start, models, weights, keys, lam)
 	var bs []float64
 	var profs [][]float64
@@ -853,25 +863,72 @@ func (m *Compiled) rateLong(key delayKey, m1 []float64) float64 {
 	return v
 }
 
-// depRule chooses the rule over the groups' normals: doubled on a fixed
-// grid until every key's mixture settles, the grid's error being smooth
-// in the normals. A point of little weight then counts by its weight
-// when the grid doubles for the mixture as a whole.
-func (m *Compiled) depRule(keys []delayKey, lam []float64) ([]*Compiled, []float64, bool) {
-	var prev []float64
+// depRule chooses the rule over the groups' normals and the first grid,
+// the rule doubled on that grid until every key's mixture settles, the
+// grid's error being smooth in the normals: a Gauss–Hermite rule for
+// each group, or, where that does not settle, one split at each group's
+// kinks, its pieces' rules doubling to depMixMax nodes and a group
+// without kinks keeping its Gauss–Hermite rule there. A split rule's first grid
+// resolves the holdings given the normal, and is refused when it leaves
+// the grids no room to double: in lockstep or near it they are all but
+// points, and the rule reads the grid's cells. A point of little weight
+// then counts by its weight when the grid doubles for the mixture as a
+// whole.
+func (m *Compiled) depRule(keys []delayKey, lam []float64) ([]*Compiled, []float64, int, bool) {
 	scores := &scoreCache{z: map[[2]int][2][]float64{}}
 	if m.cfg.rules != nil {
 		scores = m.cfg.rules.scores
 	}
-	// bound: the rules from depNodesStart to depMixMax
-	for n := depNodesStart; n <= depMixMax; n *= 2 {
-		cs, ws, ok := m.depPoints(n, scores)
+	none := make([][]float64, len(m.groups))
+	start := m.delayStart(false)
+	if cs, cw, ok := m.depSettle(keys, lam, none, start, scores); ok {
+		return cs, cw, start, true
+	}
+	kinks := make([][]float64, len(m.groups))
+	split := false
+	for gi := range m.groups {
+		var ok bool
+		if kinks[gi], ok = m.groupKinks(index(gi)); !ok {
+			return nil, nil, 0, false
+		}
+		split = split || kinks[gi] != nil
+	}
+	if start = m.delayStart(true); !split || start > delayCellsMax/4 {
+		return nil, nil, 0, false
+	}
+	cs, cw, ok := m.depSettle(keys, lam, kinks, start, scores)
+	return cs, cw, start, ok
+}
+
+// depSettle doubles the rules over the groups' normals, each split at
+// its kinks or, without, a Gauss–Hermite rule, until every key's mixture
+// on the n-cell grid settles.
+func (m *Compiled) depSettle(keys []delayKey, lam []float64, kinks [][]float64, n int, scores *scoreCache) ([]*Compiled, []float64, bool) {
+	first := depNodesStart
+	for _, k := range kinks {
+		if k != nil {
+			first = depSplitStart
+		}
+	}
+	var prev []float64
+	xs, ws := make([][]float64, len(m.groups)), make([][]float64, len(m.groups))
+	// bound: the rules from first to depMixMax
+	for s := 0; first<<s <= depMixMax; s++ {
+		for gi, k := range kinks {
+			if h := min(depNodesStart<<s, depMixMax); k == nil {
+				xs[gi], ws[gi] = make([]float64, h), make([]float64, h)
+				dist.HermiteRule(xs[gi], ws[gi])
+			} else {
+				xs[gi], ws[gi] = splitRule(k, depSplitStart<<s)
+			}
+		}
+		cs, cw, ok := m.depPoints(xs, ws, scores)
 		if !ok {
 			return nil, nil, false
 		}
-		v := mixAt(cs, ws, keys, lam, m.delayStart())
+		v := mixAt(cs, cw, keys, lam, n)
 		if prev != nil && allSettled(prev, v, valueSettle) {
-			return cs, ws, true
+			return cs, cw, true
 		}
 		prev = v
 	}

@@ -653,15 +653,13 @@ func maxIndex(i int32) int32 {
 // is chosen on the first lag grid.
 const depMixMax = 128
 
-// depPoints is the tensor of the groups' n-node rules: the conditioned
+// depPoints is the tensor of the groups' rules xs, ws: the conditioned
 // model at each point and its weight, the points sharing the members'
 // scores; false past valuePointsMax.
-func (m *Compiled) depPoints(n int, scores *scoreCache) ([]*Compiled, []float64, bool) {
-	x, w := make([]float64, n), make([]float64, n)
-	dist.HermiteRule(x, w)
+func (m *Compiled) depPoints(xs, ws [][]float64, scores *scoreCache) ([]*Compiled, []float64, bool) {
 	points := 1
-	for range m.groups {
-		if points *= n; points > valuePointsMax {
+	for _, x := range xs {
+		if points *= len(x); points > valuePointsMax {
 			return nil, nil, false
 		}
 	}
@@ -669,20 +667,20 @@ func (m *Compiled) depPoints(n int, scores *scoreCache) ([]*Compiled, []float64,
 	dist.HermiteRule(hx, hw)
 	idx := make([]int, len(m.groups))
 	at := make([]float64, len(m.groups))
-	cs, ws := make([]*Compiled, 0, points), make([]float64, 0, points)
+	cs, cw := make([]*Compiled, 0, points), make([]float64, 0, points)
 	// bound: valuePointsMax points
 	for range points {
 		weight := 1.0
 		for gi := range idx {
-			at[gi], weight = x[idx[gi]], weight*w[idx[gi]]
+			at[gi], weight = xs[gi][idx[gi]], weight*ws[gi][idx[gi]]
 		}
-		cs, ws = append(cs, m.depConditioned(at, hx, hw, scores)), append(ws, weight)
+		cs, cw = append(cs, m.depConditioned(at, hx, hw, scores)), append(cw, weight)
 		for gi := range idx {
-			if idx[gi]++; idx[gi] < n {
+			if idx[gi]++; idx[gi] < len(xs[gi]) {
 				break
 			}
 			idx[gi] = 0
 		}
 	}
-	return cs, ws, true
+	return cs, cw, true
 }

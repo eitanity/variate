@@ -194,10 +194,11 @@ independent draws but one sequence: the figure is the cycle's, the
 schedule taken as a rate drawn each period from its values, with the
 variance of the mean booked from all lags at each place of the joint
 cycle in place of each lag's on its own. A path through two holdings
-drawn once a period, holdings in lockstep, a schedule beside a value
-factor or a value or probability drawn once a period, triggers, repairs
-or queues still leave no exact variance with holding times, as does a
-mixture of more than 64 points or one whose work is past its cap.
+drawn once a period, holdings in lockstep or all but, a schedule beside
+a value factor or a value or probability drawn once a period, triggers,
+repairs or queues still leave no exact variance with holding times, as
+does a mixture of more than 64 points or one whose work is past its
+cap.
 
 ### Thresholds
 
@@ -459,8 +460,13 @@ quadrature, times the chance a round books both. With holding times
 (above) each round is conditioned on its groups' normals, the members
 then independent with their conditional laws, and the variance is the
 Gauss–Hermite mixture over the normals, for values, rates and holdings
-alike; in lockstep (rank 1) with holding times it is not computed. P(T
-= 0) is not given when a member value can be 0.
+alike. Where a member holding moves a booking across a period's edge,
+the figures bend in the normal, and where the Gauss–Hermite mixture
+does not settle the normal is split at each bend with a Gauss–Legendre
+rule on each piece, on a grid fine enough for the holdings' spread
+given it. In lockstep (rank 1), or so near it that that grid is past
+its cap, as at rank 0.99 over days, the variance with holding times is
+not computed. P(T = 0) is not given when a member value can be 0.
 
 A member may not be drawn once a period, be the value a threshold tests,
 an expression or an expression's operand, be at a node a trigger reads,

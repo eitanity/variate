@@ -128,6 +128,56 @@ func TestDelayDependence(t *testing.T) {
 	}
 }
 
+// TestDelayNearLockstep: values and a holding that move together at rank
+// 0.9, 0.95 and 0.99, where a booking's figures given the group's normal
+// bend where its holding crosses a period; at holdings of 2 days (to
+// rank 0.95), 3 months and a year, with a drawn rate at 3 months, whose
+// lag profiles bend at every lag, and on a path of two of the group's
+// holdings, the exact variance is within four errors of 2^21 simulated
+// periods by total, category and source.
+func TestDelayNearLockstep(t *testing.T) {
+	members := []string{"a.x", "a->b", "b.y"}
+	cases := map[string]variate.Graph{}
+	for _, med := range []float64{2.0 / 365, 0.25, 1} {
+		for _, rank := range []float64{0.9, 0.95, 0.99} {
+			if med < 0.25 && rank > 0.95 {
+				continue
+			}
+			tau, _ := dist.NewLognormalFromMedianP90(med, 3*med)
+			g := heldPath(tau)
+			g.Dependence = []variate.Dependence{{Members: members, Rank: rank}}
+			cases[fmt.Sprintf("rank %v, median %.3g", rank, med)] = g
+		}
+	}
+	tau, _ := dist.NewLognormalFromMedianP90(0.25, 0.75)
+	rate, _ := dist.NewGammaFromMeanSD(8, 2)
+	drawn := heldPath(tau)
+	drawn.Sources[0].Frequency = rate
+	drawn.Dependence = []variate.Dependence{{Members: members, Rank: 0.95}}
+	cases["drawn rate"] = drawn
+	two := heldPath(tau)
+	two.Nodes[1].Next, two.Nodes[1].NextHolding = "c", tau
+	two.Nodes = append(two.Nodes, variate.Node{ID: "c", Functions: []variate.Function{Fn("z", "z", C(2))}})
+	two.Dependence = []variate.Dependence{{Members: []string{"a.x", "a->b", "b->c", "b.y"}, Rank: 0.95}}
+	cases["two holdings"] = two
+	for name, g := range cases {
+		m, e := depExact(t, g)
+		if math.IsNaN(e.Var) {
+			t.Errorf("%s: var NaN", name)
+			continue
+		}
+		r := runSeries(t, g, 1<<21, 7)
+		n := r.Series.Periods()
+		checkBlockVar(t, name+" total", e.Var, r.Series.TotalColumn(make([]float64, n)))
+		for c, cat := range m.Categories() {
+			checkBlockVar(t, name+" "+cat, e.VarByCategory[c], r.Series.CategoryColumn(c, make([]float64, n)))
+		}
+		for k, src := range m.SourceIDs() {
+			checkBlockVar(t, name+" source "+src, e.VarBySource[k], r.Series.SourceColumn(k, make([]float64, n)))
+		}
+	}
+}
+
 // checkSD fails when an exact variance's standard deviation is beyond
 // four standard errors of the simulated one.
 func checkSD(t *testing.T, what string, vr float64, st variate.Stat) {
@@ -290,7 +340,8 @@ func checkBlockVar(t *testing.T, what string, vr float64, x []float64) {
 }
 
 // TestDelayNotComputed: two holdings drawn once a period on one path,
-// holdings in lockstep, and a schedule beside a value factor or a value
+// holdings in lockstep, or at rank 0.99 over 2 days, all but points
+// given the group's normal, and a schedule beside a value factor or a value
 // drawn once a period leave the variance with holding times NaN.
 func TestDelayNotComputed(t *testing.T) {
 	tau, _ := dist.NewLognormalFromMedianP90(0.25, 0.75)
@@ -300,13 +351,16 @@ func TestDelayNotComputed(t *testing.T) {
 	twice.Nodes = append(twice.Nodes, variate.Node{ID: "c", Functions: []variate.Function{Fn("z", "y", C(1))}})
 	lockstep := heldPath(tau)
 	lockstep.Dependence = []variate.Dependence{{Members: []string{"a.x", "a->b", "b.y"}, Rank: 1}}
+	short, _ := dist.NewLognormalFromMedianP90(2.0/365, 6.0/365)
+	near := heldPath(short)
+	near.Dependence = []variate.Dependence{{Members: []string{"a.x", "a->b", "b.y"}, Rank: 0.99}}
 	f, _ := dist.NewLognormalFromMeanSD(1, 0.5)
 	factor := scheduled(heldPath(tau))
 	factor.Factors = []variate.Factor{{ID: "f", Model: f}}
 	factor.Nodes[1].Functions[0].Factor = "f"
 	period := scheduled(heldPath(tau))
 	period.Nodes[1].Functions[0].Scope = variate.PerPeriod
-	for name, g := range map[string]variate.Graph{"twice": twice, "lockstep": lockstep, "schedule and factor": factor, "schedule and period value": period} {
+	for name, g := range map[string]variate.Graph{"twice": twice, "lockstep": lockstep, "near lockstep, 2 days": near, "schedule and factor": factor, "schedule and period value": period} {
 		if _, e := depExact(t, g); !math.IsNaN(e.Var) {
 			t.Errorf("%s: var %v, want NaN", name, e.Var)
 		}
