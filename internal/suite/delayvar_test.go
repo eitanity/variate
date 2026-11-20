@@ -129,18 +129,19 @@ func TestDelayDependence(t *testing.T) {
 }
 
 // TestDelayNearLockstep: values and a holding that move together at rank
-// 0.9, 0.95 and 0.99, where a booking's figures given the group's normal
-// bend where its holding crosses a period; at holdings of 2 days (to
-// rank 0.95), 3 months and a year, with a drawn rate at 3 months, whose
-// lag profiles bend at every lag, and on a path of two of the group's
-// holdings, the exact variance is within four errors of 2^21 simulated
-// periods by total, category and source.
+// 0.9, 0.95, 0.99 and 1, where a booking's figures given the group's
+// normal bend where its holding crosses a period; at holdings of 2 days
+// (but rank 0.99), 3 months and a year, with a drawn rate at 3 months,
+// whose lag profiles bend at every lag, at rank 0.95 and in lockstep,
+// and on a path of two of the group's holdings, the exact variance is
+// within four errors of 2^21 simulated periods by total, category and
+// source.
 func TestDelayNearLockstep(t *testing.T) {
 	members := []string{"a.x", "a->b", "b.y"}
 	cases := map[string]variate.Graph{}
 	for _, med := range []float64{2.0 / 365, 0.25, 1} {
-		for _, rank := range []float64{0.9, 0.95, 0.99} {
-			if med < 0.25 && rank > 0.95 {
+		for _, rank := range []float64{0.9, 0.95, 0.99, 1} {
+			if med < 0.25 && rank == 0.99 {
 				continue
 			}
 			tau, _ := dist.NewLognormalFromMedianP90(med, 3*med)
@@ -155,6 +156,10 @@ func TestDelayNearLockstep(t *testing.T) {
 	drawn.Sources[0].Frequency = rate
 	drawn.Dependence = []variate.Dependence{{Members: members, Rank: 0.95}}
 	cases["drawn rate"] = drawn
+	lockDrawn := heldPath(tau)
+	lockDrawn.Sources[0].Frequency = rate
+	lockDrawn.Dependence = []variate.Dependence{{Members: members, Rank: 1}}
+	cases["drawn rate, lockstep"] = lockDrawn
 	two := heldPath(tau)
 	two.Nodes[1].Next, two.Nodes[1].NextHolding = "c", tau
 	two.Nodes = append(two.Nodes, variate.Node{ID: "c", Functions: []variate.Function{Fn("z", "z", C(2))}})
@@ -174,6 +179,44 @@ func TestDelayNearLockstep(t *testing.T) {
 		}
 		for k, src := range m.SourceIDs() {
 			checkBlockVar(t, name+" source "+src, e.VarBySource[k], r.Series.SourceColumn(k, make([]float64, n)))
+		}
+	}
+}
+
+// TestDelayLockstepExact: rounds at rate 8 book x on arrival and y a
+// lognormal holding τ later, the three in lockstep, so x, τ and y are
+// quantiles of one uniform U: the period's variance is 8·(E[x²] + E[y²])
+// + 16·E[x·y·(1 − τ)⁺], the two booked in one period when τ < 1, the
+// last an integral over U to 1e-12; the exact variance is it to 1e-8,
+// at holdings of 2 days, 3 months and a year.
+func TestDelayLockstepExact(t *testing.T) {
+	x, _ := dist.NewGammaFromMeanSD(3, 1)
+	y, _ := dist.NewGammaFromMeanSD(5, 2)
+	for _, med := range []float64{2.0 / 365, 0.25, 1} {
+		tau, _ := dist.NewLognormalFromMedianP90(med, 3*med)
+		g := variate.Graph{ID: "lockstep",
+			Sources: []variate.Source{{ID: "s", Frequency: C(8), To: "a"}},
+			Nodes: []variate.Node{
+				{ID: "a", Functions: []variate.Function{Fn("x", "x", x)}, Next: "b", NextHolding: tau},
+				{ID: "b", Functions: []variate.Function{Fn("y", "y", y)}},
+			},
+			Dependence: []variate.Dependence{{Members: []string{"a.x", "a->b", "b.y"}, Rank: 1}},
+		}
+		// E[x·y·(1 − τ)⁺] over the normal score of U, up to where τ = 1.
+		top := math.Min(8, -math.Sqrt2*math.Erfcinv(2*tau.CDF(1)))
+		const nodes = 4000
+		lx, lw := make([]float64, nodes), make([]float64, nodes)
+		dist.LegendreRule(lx, lw)
+		cross := 0.0
+		for i := range lx {
+			z := -8 + (top+8)*lx[i]
+			u := 0.5 * math.Erfc(-z/math.Sqrt2)
+			cross += lw[i] * (top + 8) * math.Exp(-z*z/2) / math.Sqrt(2*math.Pi) * x.Quantile(u) * y.Quantile(u) * (1 - tau.Quantile(u))
+		}
+		second := func(d dist.Distribution) float64 { return d.Var() + d.Mean()*d.Mean() }
+		want := 8*(second(x)+second(y)) + 16*cross
+		if _, e := depExact(t, g); !within(e.Var, want, 1e-8) {
+			t.Errorf("median %v: var %v, want %v", med, e.Var, want)
 		}
 	}
 }
@@ -340,8 +383,8 @@ func checkBlockVar(t *testing.T, what string, vr float64, x []float64) {
 }
 
 // TestDelayNotComputed: two holdings drawn once a period on one path,
-// holdings in lockstep, or at rank 0.99 over 2 days, all but points
-// given the group's normal, and a schedule beside a value factor or a value
+// holdings at rank 0.99 over 2 days, all but points given the group's
+// normal yet not points, and a schedule beside a value factor or a value
 // drawn once a period leave the variance with holding times NaN.
 func TestDelayNotComputed(t *testing.T) {
 	tau, _ := dist.NewLognormalFromMedianP90(0.25, 0.75)
@@ -349,8 +392,6 @@ func TestDelayNotComputed(t *testing.T) {
 	twice.Nodes[0].NextScope = variate.PerPeriod
 	twice.Nodes[1].Next, twice.Nodes[1].NextHolding, twice.Nodes[1].NextScope = "c", tau, variate.PerPeriod
 	twice.Nodes = append(twice.Nodes, variate.Node{ID: "c", Functions: []variate.Function{Fn("z", "y", C(1))}})
-	lockstep := heldPath(tau)
-	lockstep.Dependence = []variate.Dependence{{Members: []string{"a.x", "a->b", "b.y"}, Rank: 1}}
 	short, _ := dist.NewLognormalFromMedianP90(2.0/365, 6.0/365)
 	near := heldPath(short)
 	near.Dependence = []variate.Dependence{{Members: []string{"a.x", "a->b", "b.y"}, Rank: 0.99}}
@@ -360,7 +401,7 @@ func TestDelayNotComputed(t *testing.T) {
 	factor.Nodes[1].Functions[0].Factor = "f"
 	period := scheduled(heldPath(tau))
 	period.Nodes[1].Functions[0].Scope = variate.PerPeriod
-	for name, g := range map[string]variate.Graph{"twice": twice, "lockstep": lockstep, "near lockstep, 2 days": near, "schedule and factor": factor, "schedule and period value": period} {
+	for name, g := range map[string]variate.Graph{"twice": twice, "near lockstep, 2 days": near, "schedule and factor": factor, "schedule and period value": period} {
 		if _, e := depExact(t, g); !math.IsNaN(e.Var) {
 			t.Errorf("%s: var %v, want NaN", name, e.Var)
 		}

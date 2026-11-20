@@ -122,7 +122,18 @@ func (m *Compiled) lagRules(g *lagGrid) ([]*lagRule, bool) {
 			return nil, false
 		}
 		out[j] = m.cfg.rules.rule(key, func() lagRule {
-			r := lagRuleWith(s, g.cells, func(mu *[4][]float64) (float64, float64) { return subMoments(s, g.cells, mu) })
+			floor := 0.0
+			if key.member {
+				floor = lawNegligible
+			}
+			r := lagRuleWith(s, g.cells, func(mu *[4][]float64) (float64, float64) {
+				if f0, tail, ok := m.cfg.rules.spanOf(key, mu); ok {
+					return f0, tail
+				}
+				f0, tail := subMomentsAbove(s, g.cells, mu, floor)
+				m.cfg.rules.keepSpan(key, mu, f0, tail)
+				return f0, tail
+			})
 			r.ePhi = phiExpect(&r, g)
 			r.cum = [4][]float64{}
 			return r
@@ -171,6 +182,13 @@ const subMaxCells = 1 << 12
 // stops where the survival is lawNegligible, and gives the mass at 0 and
 // past 1.
 func subMoments(d dist.Distribution, n int, mu *[4][]float64) (f0, tail float64) {
+	return subMomentsAbove(d, n, mu, 0)
+}
+
+// subMomentsAbove is subMoments with the cells whose CDF at their end is
+// below floor left empty: a group member's law given its normal, narrow,
+// has no mass to speak of below its own spread.
+func subMomentsAbove(d dist.Distribution, n int, mu *[4][]float64, floor float64) (f0, tail float64) {
 	h := 1 / float64(n)
 	med := d.Quantile(0.5)
 	iqr := d.Quantile(0.75) - d.Quantile(0.25)
@@ -179,9 +197,12 @@ func subMoments(d dist.Distribution, n int, mu *[4][]float64) (f0, tail float64)
 	lo := lawPoint{x: 0, f: f0, s: d.Survival(0)}
 	// bound: n cells
 	for j := range n {
+		if lo.s < lawNegligible {
+			break
+		}
 		b := float64(j+1) * h
 		hi := lawPoint{x: b, f: d.CDF(b), s: d.Survival(b)}
-		if lo.s >= lawNegligible {
+		if hi.f >= floor {
 			scale := iqr * math.Max(1, lo.x/med)
 			sub := subMaxCells
 			if scale > 0 {

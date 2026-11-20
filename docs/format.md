@@ -194,7 +194,7 @@ independent draws but one sequence: the figure is the cycle's, the
 schedule taken as a rate drawn each period from its values, with the
 variance of the mean booked from all lags at each place of the joint
 cycle in place of each lag's on its own. A path through two holdings
-drawn once a period, holdings in lockstep or all but, a schedule beside
+drawn once a period, holdings all but in lockstep, a schedule beside
 a value factor or a value or probability drawn once a period, triggers,
 repairs or queues still leave no exact variance with holding times, as
 does a mixture of more than 64 points or one whose work is past its
@@ -414,18 +414,21 @@ graphs:
 ```
 
 The value multiplied is the value: a threshold tests it, a trigger sums
-it and a layer pays on it. A constant factor is folded into the laws,
-so a factor of 1 changes nothing. The exact mean and variance condition
-on the factors: given their draws the model is the same model with
-those values and rates scaled, and over a Gauss rule for each factor
-the figures are mixed, the variance as the mean of the variances given
-the draws plus the variance of the means. The moments given the draws
-are polynomials in them, which a three-node rule integrates exactly; a
+it and a layer pays on it. A constant factor is folded into the laws, so
+a factor of 1 changes nothing. The exact mean and variance condition on
+the factors: given their draws the model is the same model with those
+values and rates scaled, and over a Gauss rule for each factor the
+figures are mixed, the variance as the mean of the variances given the
+draws plus the variance of the means. The moments given the draws are
+polynomials in them, which a three-node rule integrates exactly; a
 threshold or a trigger on a scaled value is not, and the rule doubles
-until every figure settles, a figure that does not being simulated
-with its error. A factor on values needs a finite variance for these
-figures. The exact distribution is not computed for a model with a
-factor on a value.
+until every figure settles, a figure that does not being simulated with
+its error. With holding times and one value factor, the variance with
+holding times is taken at three of its nodes and at a fourth, which
+tests the quadratic through the three; where it holds, to 1e-9, the
+other nodes read it, and otherwise each is taken. A factor on values
+needs a finite variance for these figures. The exact distribution is not
+computed for a model with a factor on a value.
 
 ## Values that move together
 
@@ -462,11 +465,14 @@ then independent with their conditional laws, and the variance is the
 Gauss–Hermite mixture over the normals, for values, rates and holdings
 alike. Where a member holding moves a booking across a period's edge,
 the figures bend in the normal, and where the Gauss–Hermite mixture
-does not settle the normal is split at each bend with a Gauss–Legendre
-rule on each piece, on a grid fine enough for the holdings' spread
-given it. In lockstep (rank 1), or so near it that that grid is past
-its cap, as at rank 0.99 over days, the variance with holding times is
-not computed. P(T = 0) is not given when a member value can be 0.
+does not settle the normal is split at each bend and where its tails
+start, with the normal's own Gauss rule on each piece, on a grid fine
+enough for the holdings' spread given it. In lockstep (rank 1) a
+holding given the normal is a point, spread over one cell of each grid
+so that the figures do not bend at every cell, the spread's error going
+with the grid's. So near lockstep that that grid is past its cap, as at
+rank 0.99 over days, the variance with holding times is not computed.
+P(T = 0) is not given when a member value can be 0.
 
 A member may not be drawn once a period, be the value a threshold tests,
 an expression or an expression's operand, be at a node a trigger reads,

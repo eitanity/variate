@@ -82,3 +82,12 @@ func TestTogetherDraws(t *testing.T) {
 		}
 	}
 }
+
+// TestLockstepRank: a group of rank 1 is in lockstep, √(1 − ρ) = 0,
+// where the sine of π/6 would leave it 1e-8.
+func TestLockstepRank(t *testing.T) {
+	tau, _ := dist.NewLognormalFromMedianP90(0.25, 0.75)
+	if m := heldGroup(t, tau, 1); m.groups[0].sq1 != 0 || m.groups[0].sq != 1 {
+		t.Errorf("rank 1: √ρ %v, √(1−ρ) %v", m.groups[0].sq, m.groups[0].sq1)
+	}
+}

@@ -235,6 +235,9 @@ type Config struct {
 	// conditioning on value factors for the models it compiles; nil
 	// otherwise.
 	rules *ruleCache
+	// factorAt is the value of the one value factor a conditioned model
+	// fixes, its delay figures then read from rules' memo; NaN otherwise.
+	factorAt float64
 	// profiles asks the variance with holding times for each figure's
 	// mean booking by lag, set for the models a mixture over draws once a
 	// period combines.

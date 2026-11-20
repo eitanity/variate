@@ -239,7 +239,12 @@ func (b *builder) flattenDependence(m *Compiled) {
 		if d.Rank == 0 {
 			continue
 		}
+		// At rank 1 the sine is one ulp short of 1, which would leave each
+		// member a spread of 1e-8 in lockstep.
 		rho := math.Min(1, 2*math.Sin(math.Pi*d.Rank/6))
+		if d.Rank == 1 {
+			rho = 1
+		}
 		g := cgroup{sq: math.Sqrt(rho), sq1: math.Sqrt(math.Max(0, 1-rho))}
 		for _, s := range d.Members {
 			g.members = append(g.members, m.resolveMember(b, s))
@@ -671,12 +676,12 @@ func (m *Compiled) depPoints(xs, ws [][]float64, scores *scoreCache) ([]*Compile
 	// bound: valuePointsMax points
 	for range points {
 		weight := 1.0
-		for gi := range idx {
-			at[gi], weight = xs[gi][idx[gi]], weight*ws[gi][idx[gi]]
+		for gi, x := range xs {
+			at[gi], weight = x[idx[gi]], weight*ws[gi][idx[gi]]
 		}
 		cs, cw = append(cs, m.depConditioned(at, hx, hw, scores)), append(cw, weight)
-		for gi := range idx {
-			if idx[gi]++; idx[gi] < len(xs[gi]) {
+		for gi, x := range xs {
+			if idx[gi]++; idx[gi] < len(x) {
 				break
 			}
 			idx[gi] = 0

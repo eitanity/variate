@@ -135,7 +135,10 @@ func (m *Compiled) mixedAnalytic(factors []int, n int, rules *ruleCache) (*Expec
 			weight *= ws[j][idx[j]]
 		}
 		cfg := m.cfg
-		cfg.rules, cfg.profiles = rules, m.hasDelays
+		cfg.rules, cfg.profiles, cfg.factorAt = rules, m.hasDelays, math.NaN()
+		if len(factors) == 1 {
+			cfg.factorAt = xs[0][idx[0]]
+		}
 		e, err := conditioned(g, cfg)
 		if err != nil {
 			return nil, false, err

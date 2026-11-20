@@ -276,7 +276,9 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 func (m *Compiled) analytic() (*Expectation, error) {
 	e, lam, m1, m2 := m.means()
 	if m.hasDelays && !m.Started() && !m.cfg.meansOnly && m.delayExact() {
-		e.delayed, e.longRun, e.profile = m.delayFigures(lam)
+		e.delayed, e.longRun, e.profile = m.cfg.rules.delaysAt(m.cfg.factorAt, func() (map[delayKey]float64, map[delayKey]float64, map[delayKey][]float64) {
+			return m.delayFigures(lam)
+		})
 	}
 	e.Var = m.varianceIn(e, valueFilter{kind: filterAll}, lam, m1, m2, e.Mean)
 	d1, d2 := m.valueToGo(valueFilter{kind: filterDraws})

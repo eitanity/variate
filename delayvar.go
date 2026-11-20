@@ -2,6 +2,7 @@ package variate
 
 import (
 	"math"
+	"slices"
 
 	"code.eitanity.com/variate/dist"
 	"gonum.org/v1/gonum/dsp/fourier"
@@ -145,6 +146,22 @@ type lawGrid struct {
 }
 
 // bound is the CDF and survival at the grid's i-th bound.
+// condCut is the conditional normal score past which a law given its
+// group's normal has no mass to speak of, Φ(−9.3) = 1e-20.
+const condCut = 9.3
+
+// beyond reports whether cell j of a law given its group's normal lies
+// wholly past condCut of it, below or above, its moments then 0 to
+// 1e-20: the narrower the law given the normal, the fewer cells it
+// spans.
+func (g *lawGrid) beyond(j int) bool {
+	if g.zb == nil {
+		return false
+	}
+	lo, hi := (g.zb[j]-g.a)/g.b, (g.zb[j+1]-g.a)/g.b
+	return hi < -condCut || lo > condCut
+}
+
 func (g *lawGrid) bound(i int) (float64, float64) {
 	if g.zb != nil {
 		return normalPair((g.zb[i] - g.a) / g.b)
@@ -267,6 +284,9 @@ func cellMoments(g *lawGrid, n int, mu *[4][]float64) (f0, tail float64) {
 	gx, gw := legendre()
 	// bound: n cells
 	for j := range n {
+		if g.beyond(j) {
+			continue
+		}
 		a := float64(j) * h
 		b := a + h
 		fa, sa := g.bound(j)
@@ -403,7 +423,7 @@ func (m *Compiled) delayStart(split bool) int {
 			width = copulaValue(d, b) - copulaValue(d, -b)
 		}
 		// bound: doublings to delayCellsMax
-		for n < delayCellsMax && med > 0 && (med*float64(n) < lagFine || split && width*float64(n) < lagSpread) {
+		for n < delayCellsMax && med > 0 && (med*float64(n) < lagFine || split && b > 0 && width*float64(n) < lagSpread) {
 			n *= 2
 		}
 	}
@@ -431,14 +451,70 @@ func (m *Compiled) delayRules(n int) []*lagRule {
 		if lo, hi := d.Support(); lo == hi {
 			key.fixed, key.at = true, lo
 		}
-		out[j] = m.cfg.rules.rule(key, func() lagRule {
-			if grid != nil || key.member {
-				return newLagRule(d, n, grid)
-			}
-			return lagRuleWith(d, n, func(mu *[4][]float64) (float64, float64) { return subMoments(d, n, mu) })
-		})
+		out[j] = m.cfg.rules.rule(key, func() lagRule { return m.holdingRule(key, d, n, grid) })
 	}
 	return out
+}
+
+// holdingRule builds holding law d's rule on n cells under key: a point
+// in lockstep spread over a cell, a law given its group's normal from
+// its grid, another on sub-cells; the cells' moments kept in the cache.
+func (m *Compiled) holdingRule(key ruleKey, d dist.Distribution, n int, grid *lawGrid) lagRule {
+	if key.member && grid == nil && key.fixed {
+		return lockstepRule(key.at, n)
+	}
+	return lagRuleWith(d, n, func(mu *[4][]float64) (float64, float64) {
+		if f0, tail, ok := m.cfg.rules.spanOf(key, mu); ok {
+			return f0, tail
+		}
+		var f0, tail float64
+		switch {
+		case grid != nil:
+			f0, tail = cellMoments(grid, n, mu)
+		case key.member:
+			g := baseGrid(d, n)
+			f0, tail = cellMoments(&g, n, mu)
+		default:
+			f0, tail = subMoments(d, n, mu)
+		}
+		m.cfg.rules.keepSpan(key, mu, f0, tail)
+		return f0, tail
+	})
+}
+
+// lockstepRule is the rule of a holding in lockstep, at tau given its
+// group's normal, spread evenly over one cell about tau. At a point the
+// rule reads the grid's linear steps, which bend at each cell the
+// holding crosses, so the figures over the normal bend at every cell;
+// spread over one, they are smooth but for the period's edges, and the
+// spread's bias, of the order of the grid's own, goes as the grid
+// doubles. Below half a cell its share under 0 books at once. Its
+// cells' moments are the uniform's, ∫ u^k du/h over each cell's part.
+func lockstepRule(tau float64, n int) lagRule {
+	h := 1 / float64(n)
+	a, b := tau-h/2, tau+h/2
+	u, err := dist.NewUniform(a, b)
+	if err != nil {
+		k, _ := dist.NewConstant(tau)
+		return newLagRule(k, n, nil)
+	}
+	return lagRuleWith(u, n, func(mu *[4][]float64) (float64, float64) {
+		f0 := math.Max(0, math.Min(b, 0)-a) / h
+		tail := math.Max(0, b-math.Max(a, 1)) / h
+		lo := max(0, int(math.Floor(a*float64(n))))
+		// bound: the two cells the spread covers
+		for j := lo; j < n && float64(j)*h < b; j++ {
+			x0, x1 := math.Max(a, float64(j)*h), math.Min(b, float64(j+1)*h)
+			if x1 <= x0 {
+				continue
+			}
+			for k := range mu {
+				p := float64(k + 1)
+				mu[k][j] = (math.Pow(x1, p) - math.Pow(x0, p)) / (p * h)
+			}
+		}
+		return f0, tail
+	})
 }
 
 // delayScratch holds one grid's working arrays, reused by every pass
@@ -868,12 +944,14 @@ func (m *Compiled) rateLong(key delayKey, m1 []float64) float64 {
 // grid's error being smooth in the normals: a Gauss–Hermite rule for
 // each group, or, where that does not settle, one split at each group's
 // kinks, its pieces' rules doubling to depMixMax nodes and a group
-// without kinks keeping its Gauss–Hermite rule there. A split rule's first grid
-// resolves the holdings given the normal, and is refused when it leaves
-// the grids no room to double: in lockstep or near it they are all but
-// points, and the rule reads the grid's cells. A point of little weight
-// then counts by its weight when the grid doubles for the mixture as a
-// whole.
+// without kinks keeping its Gauss–Hermite rule there. A split rule's
+// first grid resolves the holdings given the normal, and is refused
+// when it leaves the grids no room to double. In lockstep a holding
+// given the normal is a point, spread over a cell of each grid
+// (lockstepRule), and the rule is split at the edges of the first
+// grid's bands about the kinks; a finer grid's narrower bands move the
+// figures by 1e-12. A point of little weight then counts by its weight
+// when the grid doubles for the mixture as a whole.
 func (m *Compiled) depRule(keys []delayKey, lam []float64) ([]*Compiled, []float64, int, bool) {
 	scores := &scoreCache{z: map[[2]int][2][]float64{}}
 	if m.cfg.rules != nil {
@@ -884,17 +962,28 @@ func (m *Compiled) depRule(keys []delayKey, lam []float64) ([]*Compiled, []float
 	if cs, cw, ok := m.depSettle(keys, lam, none, start, scores); ok {
 		return cs, cw, start, true
 	}
+	if start = m.delayStart(true); start > delayCellsMax/4 {
+		return nil, nil, 0, false
+	}
 	kinks := make([][]float64, len(m.groups))
 	split := false
-	for gi := range m.groups {
+	for gi, g := range m.groups {
+		band := 0.0
+		if g.sq1 == 0 {
+			band = 1 / float64(start)
+		}
 		var ok bool
-		if kinks[gi], ok = m.groupKinks(index(gi)); !ok {
+		if kinks[gi], ok = m.groupKinks(index(gi), band); !ok {
 			return nil, nil, 0, false
 		}
 		split = split || kinks[gi] != nil
 	}
-	if start = m.delayStart(true); !split || start > delayCellsMax/4 {
+	if !split {
 		return nil, nil, 0, false
+	}
+	if len(m.groups) == 1 {
+		cs, cw, ok := m.pieceSettle(keys, lam, kinks[0], start, scores)
+		return cs, cw, start, ok
 	}
 	cs, cw, ok := m.depSettle(keys, lam, kinks, start, scores)
 	return cs, cw, start, ok
@@ -1274,17 +1363,70 @@ type ruleKey struct {
 // models the conditioning on value factors compiles: a factor never
 // scales a holding, so every point's rules are the same.
 type ruleCache struct {
-	rules  map[ruleKey]*lagRule
-	scores *scoreCache
-	bytes  int
+	rules     map[ruleKey]*lagRule
+	spans     map[ruleKey]*cellSpan
+	delays    delayMemo
+	scores    *scoreCache
+	bytes     int
+	spanBytes int
 }
 
 func newRuleCache() *ruleCache {
-	return &ruleCache{rules: map[ruleKey]*lagRule{}, scores: &scoreCache{z: map[[2]int][2][]float64{}}}
+	return &ruleCache{rules: map[ruleKey]*lagRule{}, spans: map[ruleKey]*cellSpan{}, scores: &scoreCache{z: map[[2]int][2][]float64{}}}
 }
 
 // rule is the cached rule, or build's, kept while the cache has room;
 // its transform is filled in when first applied, and kept with it.
+// cellSpan is a law's cells' moments where any is not 0, from cell lo,
+// with its mass at 0 and past 1: all a rule is built from.
+type cellSpan struct {
+	lo       int
+	mu       [4][]float64
+	f0, tail float64
+}
+
+// momentBytes caps the cell moments a rule cache keeps.
+const momentBytes = 64 << 20
+
+// spanOf fills mu from the cell moments kept by k, false when none are:
+// a rule past the cache's cap is built again from them, which is
+// arithmetic, where filling them reads the law at every cell.
+func (rc *ruleCache) spanOf(k ruleKey, mu *[4][]float64) (f0, tail float64, ok bool) {
+	if rc == nil {
+		return 0, 0, false
+	}
+	c, ok := rc.spans[k]
+	if !ok {
+		return 0, 0, false
+	}
+	for i := range mu {
+		copy(mu[i][c.lo:], c.mu[i])
+	}
+	return c.f0, c.tail, true
+}
+
+// keepSpan keeps mu's cells where any moment is not 0, by k, within
+// momentBytes.
+func (rc *ruleCache) keepSpan(k ruleKey, mu *[4][]float64, f0, tail float64) {
+	if rc == nil {
+		return
+	}
+	lo, hi := len(mu[0]), 0
+	for j := range mu[0] {
+		if mu[0][j] != 0 || mu[1][j] != 0 || mu[2][j] != 0 || mu[3][j] != 0 {
+			lo, hi = min(lo, j), j+1
+		}
+	}
+	lo = min(lo, hi)
+	if size := 32 * (hi - lo); rc.spanBytes+size <= momentBytes {
+		c := &cellSpan{lo: lo, f0: f0, tail: tail}
+		for i := range mu {
+			c.mu[i] = slices.Clone(mu[i][lo:hi])
+		}
+		rc.spans[k], rc.spanBytes = c, rc.spanBytes+size
+	}
+}
+
 func (rc *ruleCache) rule(k ruleKey, build func() lagRule) *lagRule {
 	if rc == nil {
 		r := build()
