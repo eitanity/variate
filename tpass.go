@@ -55,6 +55,12 @@ type pipeline struct {
 	// dropped mass that its walk's functions carry.
 	walk                         []complex128
 	walkMean, walkDrop, walkBeta float64
+	// The scaled functions' lattice at the current point of the mixture,
+	// and each function's factor draw its cached transform was taken at
+	// with its lattice there.
+	point latticeAcct
+	fnAt  []float64
+	fnLat []fnLattice
 }
 
 // graphResult holds the tilted generating functions of the quantities.
@@ -63,6 +69,7 @@ type graphResult struct {
 	cats  [][]complex128
 	srcs  [][]complex128
 	walk  []complex128 // the whole-total trigger's walk, or nil
+	acct  latticeAcct  // the scaled functions' lattice, mixed as the functions are
 }
 
 // pass evaluates both pipelines at (h, M) with the tilt chosen for the
@@ -90,10 +97,12 @@ func (t *transformer) pass(h float64, m int, xStar float64) (*passResult, string
 	if reason != "" {
 		return nil, reason
 	}
+	down.merge(gDown.acct)
 	gUp, reason := up.graph()
 	if reason != "" {
 		return nil, reason
 	}
+	up.merge(gUp.acct)
 	t.passes = up.mix.passes()
 	res.total = brackets{down: down.invert(gDown.total), up: up.invert(gUp.total)}
 	res.pzero = up.pzero
@@ -147,7 +156,7 @@ func (t *transformer) newPipeline(h float64, m int, r float64, up bool) (*pipeli
 		}
 		atoms *= len(q.nodes)
 	}
-	p.mix = t.m.newThetaMix(qs)
+	p.mix = t.m.newThetaMix(t.m.valueFactorQuantities(qs))
 	return p, ""
 }
 
@@ -310,7 +319,8 @@ func (p *pipeline) tensorFrom(prev *graphResult, scale float64) (*graphResult, s
 // every point, or only those with a fresh node.
 func (p *pipeline) sumPoints(out *graphResult, onlyFresh bool) (*graphResult, string) {
 	if p.mix.passes() > 1 && p.fnG == nil {
-		p.fnG = make([][]complex128, len(p.t.m.fns))
+		n := len(p.t.m.fns)
+		p.fnG, p.fnAt, p.fnLat = make([][]complex128, n), make([]float64, n), make([]fnLattice, n)
 	}
 	// bound: maxPasses
 	for ok := p.mix.start(); ok; ok = p.mix.next() {
@@ -382,6 +392,7 @@ func (g *graphResult) scaled(s complex128) *graphResult {
 		return out
 	}
 	out := &graphResult{total: cp(g.total), walk: cp(g.walk), cats: make([][]complex128, len(g.cats))}
+	out.acct.add(g.acct, real(s))
 	for c := range g.cats {
 		out.cats[c] = cp(g.cats[c])
 	}
@@ -398,6 +409,7 @@ func (g *graphResult) scaled(s complex128) *graphResult {
 func (g *graphResult) add(o *graphResult, w complex128, n int) {
 	addScaled(g.total, o.total, w, n)
 	addScaled(g.walk, o.walk, w, n)
+	g.acct.add(o.acct, real(w))
 	for c := range g.cats {
 		addScaled(g.cats[c], o.cats[c], w, n)
 	}
@@ -438,11 +450,12 @@ func (p *pipeline) graphGiven() (*graphResult, string) {
 	if p.t.sourceBounds() {
 		out.srcs = make([][]complex128, len(m.srcs))
 	}
+	p.point = latticeAcct{}
 	total, reason := p.recurse(-1, out.srcs)
 	if reason != "" {
 		return nil, reason
 	}
-	out.total = total
+	out.total, out.acct = total, p.point
 	out.walk = p.walk
 	for c := range p.t.categories() {
 		gc, reason := p.recurse(index(c), nil)
@@ -647,7 +660,7 @@ func (p *pipeline) nodeFunctions(gv []complex128, n cnode, cat int32) {
 			p.multiplyAtom(gv, int(math.Round(p.mix.drawn[m.fns[f].pool]/p.h)))
 			continue
 		}
-		p.multiplyFunction(gv, f, cat == -1 && !p.accounted)
+		p.multiplyFunction(gv, f, cat)
 	}
 }
 
@@ -670,7 +683,7 @@ func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, cat int32, g [][]c
 				branch = p.grid()
 			}
 			copy(branch, child)
-			p.multiplyFunction(branch, f, cat == -1 && !p.accounted)
+			p.multiplyFunction(branch, f, cat)
 			child = branch
 		}
 		for i := range mix[:p.half] {
@@ -686,27 +699,6 @@ func (p *pipeline) nodeMix(gv []complex128, v int32, n cnode, cat int32, g [][]c
 	}
 	for i := range gv[:p.half] {
 		gv[i] *= mix[i]
-	}
-}
-
-// accountDrop adds a bound on the mean a dropped tail carries, and to
-// the walk's part when the function is the walk's alone.
-func (p *pipeline) accountDrop(f int32, drop float64) {
-	p.dropMean += drop
-	if p.t.walkFn != nil && p.t.walkFn[f] {
-		p.walkDrop += drop
-	}
-}
-
-// accountFunction adds a function's dropped mass and lattice mean, per
-// period by its draws, and to the walk's parts when the function is the
-// walk's alone.
-func (p *pipeline) accountFunction(f int32, dropped, lmean float64) {
-	p.beta += p.t.draws[f] * dropped
-	p.mean += p.t.draws[f] * lmean
-	if p.t.walkFn != nil && p.t.walkFn[f] {
-		p.walkBeta += p.t.draws[f] * dropped
-		p.walkMean += p.t.draws[f] * lmean
 	}
 }
 
@@ -728,22 +720,60 @@ func (p *pipeline) multiplyAtom(gv []complex128, k int) {
 
 // multiplyFunction multiplies gv by function f's tilted generating
 // function, computed from its lattice masses with folding and cached
-// when the mixture has more than one point. The lattice mean and the
-// dropped mass are accounted once, in the first all-functions pass.
-func (p *pipeline) multiplyFunction(gv []complex128, f int32, account bool) {
-	if p.fnG != nil && p.fnG[f] != nil {
+// when the mixture has more than one point, for a scaled function at
+// its factor's draw. In the total's recursion its lattice is accounted:
+// an unscaled function's once, in the first all-functions pass, and a
+// scaled one's at every point.
+func (p *pipeline) multiplyFunction(gv []complex128, f int32, cat int32) {
+	d, g, ok := p.fnLaw(f)
+	if !ok {
+		return // a factor drawn at 0 books 0
+	}
+	scaled := p.t.m.fns[f].factor != noIndex
+	account := cat == -1 && (scaled || !p.accounted)
+	if p.fnG != nil && p.fnG[f] != nil && (!scaled || p.fnAt[f] == g) {
+		if account {
+			p.account(f, p.fnLat[f])
+		}
 		for i := range gv[:p.half] {
 			gv[i] *= p.fnG[f][i]
 		}
 		return
 	}
-	d := p.t.m.pools[p.t.m.fns[f].pool]
-	_, hi := d.Support()
 	tilted := p.tilted
 	clear(tilted)
+	l, scanned := p.latticeOf(d, tilted)
+	if scaled {
+		// A scaled law's lattice is taken at every point of the mixture.
+		p.t.work += int64(scanned)
+	}
+	if account {
+		p.account(f, l)
+	}
+	gf := p.fft.Coefficients(p.gf, tilted)
+	p.t.work += int64(p.m)
+	// The masses are real, so the coefficients are conjugate-symmetric up
+	// to round-off; made exactly so, every product of them is too.
+	mirror(gf)
+	if p.fnG != nil {
+		p.fnG[f] = append(p.fnG[f][:0], gf...)
+		p.fnAt[f], p.fnLat[f] = g, l
+	}
+	for i := range gv[:p.half] {
+		gv[i] *= gf[i]
+	}
+}
+
+// latticeOf fills tilted with law d's tilted lattice masses, folded
+// over the grid, and returns its lattice per draw. The tail beyond the
+// last fold is left out: its tilted weight is below round-off, and its
+// values lie beyond the grid, so the exceedance still counts it; only
+// the lattice mean misses it, by at most √(E[X²]·P(X ≥ cut)). scanned
+// is the lattice points it evaluated the law at.
+func (p *pipeline) latticeOf(d distribution, tilted []complex128) (l fnLattice, scanned int) {
+	_, hi := d.Support()
 	rm := 1.0 // r^(nM)
-	dropped := 1.0
-	var lmean float64
+	l.dropped = 1
 	// bound: maxFolds grid lengths
 	for n := 0; n < maxFolds; n++ {
 		base := float64(n * p.m)
@@ -757,41 +787,23 @@ func (p *pipeline) multiplyFunction(gv []complex128, f int32, account bool) {
 				break
 			}
 			next := cdfAt(d, x+p.h, p.h, p.up)
+			scanned++
 			f := math.Max(0, next-prev)
 			prev = next
 			tilted[k] += complex(f*rk, 0)
-			lmean += f * x
+			l.mean += f * x
 			mass += f
 			rk *= p.r
 		}
 		rm *= math.Pow(p.r, float64(p.m))
-		dropped = survival(d, (base+float64(p.m))*p.h)
-		if rm*dropped < unitRoundoff || mass == 0 && n > 0 {
-			// The tail beyond here is left out of the lattice function. Its
-			// tilted weight is below round-off, and its values lie beyond
-			// the grid, so the exceedance still counts it; only the lattice
-			// mean misses it, by at most √(E[X²]·P(X ≥ cut)).
-			if account {
-				p.accountDrop(f, p.t.draws[f]*math.Sqrt((d.Var()+d.Mean()*d.Mean())*dropped))
-			}
-			dropped = 0
+		l.dropped = survival(d, (base+float64(p.m))*p.h)
+		if rm*l.dropped < unitRoundoff || mass == 0 && n > 0 {
+			l.drop = math.Sqrt((d.Var() + d.Mean()*d.Mean()) * l.dropped)
+			l.dropped = 0
 			break
 		}
 	}
-	if account {
-		p.accountFunction(f, dropped, lmean)
-	}
-	gf := p.fft.Coefficients(p.gf, tilted)
-	p.t.work += int64(p.m)
-	// The masses are real, so the coefficients are conjugate-symmetric up
-	// to round-off; made exactly so, every product of them is too.
-	mirror(gf)
-	if p.fnG != nil {
-		p.fnG[f] = append([]complex128(nil), gf...)
-	}
-	for i := range gv[:p.half] {
-		gv[i] *= gf[i]
-	}
+	return l, scanned
 }
 
 // compound applies source k's mixed-Poisson generating function to the

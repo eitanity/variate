@@ -124,9 +124,10 @@ type transformer struct {
 	e         *Expectation
 	cfg       TransformConfig
 	tailP     float64
-	lam       []float64 // E[λ_k]
-	draws     []float64 // expected function draws per period, by function
-	unit      float64   // a value every constant function is a multiple of; 0 if none
+	lam       []float64   // E[λ_k]
+	draws     []float64   // expected function draws per period, by function
+	shares    [][]float64 // for a scaled function, each source's share of its draws; nil otherwise
+	unit      float64     // a value every constant function is a multiple of; 0 if none
 	quadN     int
 	constRate []float64 // per source: its rate when constant and closed-form, else NaN
 	logForm   []bool    // per source: a random rate whose transform has a closed logarithm
@@ -235,6 +236,7 @@ func newTransformer(m *Compiled, cfg TransformConfig) *transformer {
 		t.totalOnly = true
 		t.walkFn = m.walkFunctions()
 	}
+	t.rateShares()
 	t.unit = m.atomUnit()
 	t.order, t.uses = m.transformOrder()
 	return t
@@ -251,8 +253,8 @@ func (m *Compiled) atomUnit() float64 {
 	unit := 0.0
 	smallest := 0.0
 	for _, f := range m.fns {
-		if f.pool == noIndex {
-			continue // an expression; the transform refuses it
+		if f.pool == noIndex || f.factor != noIndex {
+			continue // an expression, which the transform refuses, or a scaled value, whose atoms move with its factor
 		}
 		d := m.pools[f.pool]
 		lo, hi := d.Support()
@@ -281,7 +283,7 @@ func (m *Compiled) atomUnit() float64 {
 // values between multiples.
 func (m *Compiled) LatticeUnit() float64 {
 	for f, fn := range m.fns {
-		if fn.expr != noIndex {
+		if fn.expr != noIndex || fn.factor != noIndex {
 			return 0
 		}
 		lo, hi := m.pools[fn.pool].Support()
@@ -333,8 +335,8 @@ func (t *transformer) applicable() string {
 	if m.HasTriggers() && m.whole == nil {
 		return "a trigger fires on a period's sum, which the rest of the total depends on, unless it is the only trigger and sums every value the sources book"
 	}
-	if len(m.valueFactors()) > 0 {
-		return "a factor scales a function's value"
+	if reason := m.valueFactorReason(); reason != "" {
+		return reason
 	}
 	if len(m.exprs) > 0 {
 		return "a function's value is an expression of other values"

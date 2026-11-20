@@ -31,7 +31,7 @@ const (
 type thetaQuantity struct {
 	pool   int32
 	fn     int32       // the function for a value; noIndex for a probability or a factor
-	factor bool        // a shared factor on rates, or the schedules, which sit on no node
+	factor bool        // a shared factor on rates or values, or the schedules, which sit on no node
 	cycle  *jointCycle // the schedules' joint cycle, its nodes the indices of its points; nil otherwise
 	nodes  []float64
 	weight []float64

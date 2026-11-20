@@ -427,8 +427,16 @@ its error. With holding times and one value factor, the variance with
 holding times is taken at three of its nodes and at a fourth, which
 tests the quadratic through the three; where it holds, to 1e-9, the
 other nodes read it, and otherwise each is taken. A factor on values
-needs a finite variance for these figures. The exact distribution is not
-computed for a model with a factor on a value.
+needs a finite variance for these figures. The exact distribution mixes
+over a factor on values as over one on rates: at each node of the
+factor's rule the scaled values take their laws times the node, on the
+pass's lattice, and their lattice means at that node's draws per period
+are mixed with the transforms by the same weights, the rule doubling
+until the transforms settle. Each node costs a pass over the scaled
+values' laws, so a lognormal factor's 63 nodes make the transform some
+twenty times as long as with the factor fixed. It is not computed when
+a factor on values can be negative, scales a value drawn once a period
+or a value a threshold tests, or when a trigger sums the whole total.
 
 ## Values that move together
 

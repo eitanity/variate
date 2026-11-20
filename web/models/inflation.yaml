@@ -1,0 +1,16 @@
+# A shock to the size of losses, not how often they come: one year's
+# price rise, drawn once a year, scales every repair and every part that
+# year, so a dear year is dear for both; the call-out fee is fixed.
+period: { days: 365 }
+factors:
+  - { id: prices, lognormal: { mean: {{prices_mean}}, sd: {{prices_sd}} } }
+graphs:
+  - id: plant
+    sources:
+      - { id: breakdown, frequency: {{rate}}, to: repair }
+    nodes:
+      - id: repair
+        functions:
+          - { name: callout, category: fees,   constant: 400 }
+          - { name: labour,  category: labour, lognormal: { median: 2000, p90: 6000 }, factor: prices }
+          - { name: parts,   category: parts,  lognormal: { median: {{parts_median}}, p90: 20000 }, factor: prices }

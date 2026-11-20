@@ -431,6 +431,34 @@ func TestDemoPrices(t *testing.T) {
 	}
 }
 
+// TestDemoInflation: one year's prices on every repair's labour and
+// parts give the exact distribution at the browser's tolerance, mixed
+// over the prices; a wider spread leaves the exact mean as it is and
+// moves the 99th percentile out.
+func TestDemoInflation(t *testing.T) {
+	q99 := func(sd float64) (float64, float64) {
+		c, _, err := demoGraph(t, "inflation", map[string]float64{"prices_sd": sd}).Compile(variate.Config{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		tr, err := c.Transform(variate.TransformConfig{Tol: 0.01})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !tr.Applicable || tr.Passes < 2 {
+			t.Fatalf("spread %v: applicable %v, %d passes: %s", sd, tr.Applicable, tr.Passes, tr.Reason)
+		}
+		e, _ := c.Analytic()
+		_, hi := tr.Total.Quantile(0.99)
+		return e.Mean, hi
+	}
+	mn, qn := q99(0.05)
+	mw, qw := q99(0.3)
+	if math.Abs(mn-mw) > 1e-9*mn || !(qw > 1.03*qn) {
+		t.Errorf("mean %v narrow, %v wide; 99th percentile %v and %v", mn, mw, qn, qw)
+	}
+}
+
 // TestDemoFitting: the factory line's fitting labour is its hours times
 // 62.5, so more fitting hours raise the exact labour 62.5 times as much
 // as the hours, and the simulated labour is within its error.

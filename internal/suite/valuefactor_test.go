@@ -1,7 +1,9 @@
 package suite
 
 import (
+	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -191,11 +193,75 @@ func TestValueFactorRefusals(t *testing.T) {
 	}
 }
 
-// TestValueFactorTransform: the exact distribution is not computed for
-// a model with a factor on a value, and says why.
+// TestValueFactorTransform: the exact distribution mixes over a factor
+// on a value as over one on a rate: inflation (lognormal mean 1.1, sd
+// 0.4) on a cost, and on the cost and the rate, brackets 200,000
+// simulated periods' curve and quantiles, its mean the conditioned
+// one; a constant factor gives the transform of the model with the
+// value scaled, bit for bit.
 func TestValueFactorTransform(t *testing.T) {
-	_, tr := transformOf(t, inflationGraph(false), variate.TransformConfig{})
-	if tr.Applicable || !strings.Contains(tr.Reason, "factor scales a function's value") {
-		t.Errorf("applicable %v: %s", tr.Applicable, tr.Reason)
+	for _, onRate := range []bool{false, true} {
+		g := inflationGraph(onRate)
+		m, tr := transformOf(t, g, variate.TransformConfig{Tol: 1e-2})
+		if !tr.Applicable {
+			t.Fatalf("on rate %v: not applicable: %s", onRate, tr.Reason)
+		}
+		if tr.Passes < 2 {
+			t.Errorf("on rate %v: the factor should make the transform mix: %d passes", onRate, tr.Passes)
+		}
+		e, _ := m.Analytic()
+		mean, _ := inflationExact(onRate)
+		if math.Abs(e.Mean-mean) > 1e-9*mean {
+			t.Errorf("on rate %v: mean %v, want %v", onRate, e.Mean, mean)
+		}
+		t.Logf("on rate %v: %d passes, grid %d, work %d", onRate, tr.Passes, tr.M, tr.Work)
+		const h = 200000
+		_, r := run(t, g, variate.Config{Periods: h, Series: true}, 8)
+		totals := r.Series.TotalColumn(make([]float64, h))
+		name := fmt.Sprintf("on rate %v", onRate)
+		checkBracketsSeries(t, name, tr.Total, totals, 100, 4.5)
+		checkQuantilesSeries(t, name, tr.Total, totals, 4.5)
+	}
+	fixed := inflationGraph(false)
+	c, _ := dist.NewConstant(1.3)
+	fixed.Factors[0].Model = c
+	_, a := transformOf(t, fixed, variate.TransformConfig{})
+	plain := inflationGraph(false)
+	x, _ := dist.NewGammaFromMeanSD(2, 1)
+	sx, _ := dist.NewScaled(x, 1.3)
+	plain.Factors, plain.Nodes[0].Functions[0].Factor, plain.Nodes[0].Functions[0].Model = nil, "", sx
+	_, b := transformOf(t, plain, variate.TransformConfig{})
+	if !slices.Equal(a.Total.Upper, b.Total.Upper) || !slices.Equal(a.Total.Lower, b.Total.Lower) {
+		t.Errorf("a constant factor's transform differs from the scaled value's")
+	}
+}
+
+// TestValueFactorLattice: a constant value scaled by a drawn factor
+// takes any value, so the totals are on no lattice; without the factor
+// they are multiples of it.
+func TestValueFactorLattice(t *testing.T) {
+	g, _ := dist.NewLognormalFromMeanSD(1.1, 0.4)
+	fee := Fn("fee", "fee", C(100))
+	fee.Factor = "inflation"
+	graph := variate.Graph{ID: "fees",
+		Factors: []variate.Factor{{ID: "inflation", Model: g}},
+		Sources: []variate.Source{{ID: "s", Frequency: C(4), To: "a"}},
+		Nodes:   []variate.Node{{ID: "a", Functions: []variate.Function{fee}}},
+	}
+	for _, scaled := range []bool{true, false} {
+		if !scaled {
+			graph.Factors, graph.Nodes[0].Functions[0].Factor = nil, ""
+		}
+		m, _, err := graph.Compile(variate.Config{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := 100.0
+		if scaled {
+			want = 0
+		}
+		if u := m.LatticeUnit(); u != want {
+			t.Errorf("scaled %v: lattice unit %v, want %v", scaled, u, want)
+		}
 	}
 }
