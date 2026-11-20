@@ -432,7 +432,9 @@ func (s *sweeper) exact(g Graph, fig sweepFigure) (Range, error) {
 // conditioning on them, as Analytic gives them.
 func (m *Compiled) sweepMeans() (*Expectation, error) {
 	if len(m.valueFactors()) > 0 {
-		return m.Analytic()
+		c := *m
+		c.expect, c.cfg.meansOnly = nil, true
+		return c.Analytic()
 	}
 	e, _, _, _ := m.means()
 	// A trigger's unknown P(fire) has a bound standing in for it in the

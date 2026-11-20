@@ -38,6 +38,10 @@ type Expectation struct {
 	pzero    float64
 	delayed  map[delayKey]float64 // the variances with holding times, computed together; nil without
 	longRun  map[delayKey]float64 // beside them, the long-run variances per period the plan sizes by
+	// profile is, beside them, each key's mean booking by period lag,
+	// which a mixture over draws once a period takes its between-period
+	// term from; nil unless asked for.
+	profile map[delayKey][]float64
 }
 
 // valueFilter selects which function values the recursion books: every
@@ -271,8 +275,8 @@ func (m *Compiled) Analytic() (*Expectation, error) {
 // their means standing in for them.
 func (m *Compiled) analytic() (*Expectation, error) {
 	e, lam, m1, m2 := m.means()
-	if m.hasDelays && !m.Started() && m.delayExact() {
-		e.delayed, e.longRun = m.delayFigures(lam)
+	if m.hasDelays && !m.Started() && !m.cfg.meansOnly && m.delayExact() {
+		e.delayed, e.longRun, e.profile = m.delayFigures(lam)
 	}
 	e.Var = m.varianceIn(e, valueFilter{kind: filterAll}, lam, m1, m2, e.Mean)
 	d1, d2 := m.valueToGo(valueFilter{kind: filterDraws})

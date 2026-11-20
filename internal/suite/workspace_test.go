@@ -271,8 +271,9 @@ func TestSummarize(t *testing.T) {
 }
 
 // TestFixedRunBlocks: a fixed run without a block setting gets enough
-// blocks for the batch-means error of a model with delays, an explicit
-// block setting is kept, and an adaptive run keeps the default.
+// blocks for the batch-means error of a model with delays, whose plan
+// sizes the total by its exact variance; an explicit block setting is
+// kept, and an adaptive run keeps the default.
 func TestFixedRunBlocks(t *testing.T) {
 	m, err := config.Load("../../examples/delays.yaml")
 	if err != nil {
@@ -298,7 +299,7 @@ func TestFixedRunBlocks(t *testing.T) {
 	var sum variate.Summary
 	w.Summarize(&sum)
 	for _, row := range sum.Plan {
-		if row.Criterion == "target-rse" && row.Driver == "total" && (row.PeriodsNeeded != 0 || math.IsInf(row.Observed, 1)) {
+		if row.Criterion == "target-rse" && row.Driver == "total" && (row.PeriodsNeeded <= 0 || math.IsInf(row.Observed, 1)) {
 			t.Errorf("target-rse total: planned %d observed %g", row.PeriodsNeeded, row.Observed)
 		}
 	}

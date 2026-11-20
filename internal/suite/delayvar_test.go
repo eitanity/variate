@@ -126,16 +126,182 @@ func TestDelayDependence(t *testing.T) {
 	}
 }
 
-// TestDelayNotComputed: a mixed frequency, a value drawn once a period
-// and a schedule leave the variance with holding times NaN.
+// checkSD fails when an exact variance's standard deviation is beyond
+// four standard errors of the simulated one.
+func checkSD(t *testing.T, what string, vr float64, st variate.Stat) {
+	t.Helper()
+	sd := math.Sqrt(vr)
+	if se := st.StdDev / math.Sqrt(2*float64(st.N)); !(math.Abs(st.StdDev-sd) <= 4*se) {
+		t.Errorf("%s: exact sd %v, simulated %v ± %v", what, sd, st.StdDev, se)
+	}
+}
+
+// TestDelayMixedRate: a rate drawn once a period, gamma of mean 8 and sd
+// 2, moves the rounds of a period together, so a period's total takes
+// the rounds of the periods before it with their own rates: the exact
+// standard deviation of the total, each category and the source is
+// within its error of the simulated over 2^20 periods, at lognormal
+// holdings of median 2 days, 3 months and a year.
+func TestDelayMixedRate(t *testing.T) {
+	rate, _ := dist.NewGammaFromMeanSD(8, 2)
+	for _, med := range []float64{2.0 / 365, 0.25, 1} {
+		tau, _ := dist.NewLognormalFromMedianP90(med, 3*med)
+		g := heldPath(tau)
+		g.Sources[0].Frequency = rate
+		m, e := depExact(t, g)
+		_, _, s := runSummary(t, g, 1<<20, 6)
+		checkSD(t, "total", e.Var, s.Total)
+		for _, c := range []string{"x", "y", "lost"} {
+			checkSD(t, "category "+c, e.VarByCategory[indexOf(m.Categories(), c)], s.ByCategory[c])
+		}
+		checkSD(t, "source", e.VarBySource[0], s.BySource["s"])
+	}
+}
+
+// TestDelayMixedRateExact: a booking of 1 a fixed 0.25 or 2.5 periods
+// after its round's arrival falls in the next period by K, so with a
+// rate Λ drawn once a period Var = λ + Var(Λ)·((3/4)² + (1/4)²) and
+// Var(Λ)·2·(1/2)²: 8 + 4·0.625 and 8 + 4·0.5.
+func TestDelayMixedRateExact(t *testing.T) {
+	rate, _ := dist.NewGammaFromMeanSD(8, 2)
+	for c, want := range map[float64]float64{0.25: 8 + 4*0.625, 2.5: 8 + 4*0.5} {
+		g := variate.Graph{ID: "fixed",
+			Sources: []variate.Source{{ID: "s", Frequency: rate, To: "a"}},
+			Nodes: []variate.Node{
+				{ID: "a", Next: "b", NextHolding: C(c)},
+				{ID: "b", Functions: []variate.Function{Fn("v", "v", C(1))}},
+			}}
+		if _, e := depExact(t, g); !within(e.Var, want, 1e-9) {
+			t.Errorf("holding %v: var %v, want %v", c, e.Var, want)
+		}
+	}
+}
+
+// TestDelayFactor: a value factor drawn once a period scales only its
+// period's rounds, so with a holding the rounds booking into a period
+// draw it apart: for a booking of 1 times the factor, mean 1 and sd 0.5,
+// a fixed 1.5 periods after arrival, Var = λ·E[g²] + λ²·Var(g)·Σ_d K² =
+// 5·1.25 + 25·0.25·0.5; and at a lognormal holding the exact standard
+// deviation is within its error of the simulated.
+func TestDelayFactor(t *testing.T) {
+	f, _ := dist.NewLognormalFromMeanSD(1, 0.5)
+	graph := func(tau dist.Continuous) variate.Graph {
+		return variate.Graph{ID: "factor",
+			Factors: []variate.Factor{{ID: "f", Model: f}},
+			Sources: []variate.Source{{ID: "s", Frequency: C(5), To: "a"}},
+			Nodes: []variate.Node{
+				{ID: "a", Next: "b", NextHolding: tau},
+				{ID: "b", Functions: []variate.Function{{Name: "v", Category: "v", Model: C(1), Factor: "f"}}},
+			}}
+	}
+	if _, e := depExact(t, graph(C(1.5))); !within(e.Var, 5*1.25+25*0.25*0.5, 1e-9) {
+		t.Errorf("fixed holding: var %v, want %v", e.Var, 5*1.25+25*0.25*0.5)
+	}
+	tau, _ := dist.NewLognormalFromMedianP90(2, 6)
+	g := graph(tau)
+	_, e := depExact(t, g)
+	_, _, s := runSummary(t, g, 1<<20, 7)
+	checkSD(t, "lognormal holding", e.Var, s.Total)
+}
+
+// TestDelayPeriodDraws: a value, a probability and a holding drawn once
+// a period, each on its own and together with a drawn rate: the exact
+// variance of the total and each category is within four errors of the
+// simulated over 2^21 periods, the error from 64 blocks of the run, as
+// draws shared by a period and its neighbours leave σ/√(2N) far short.
+func TestDelayPeriodDraws(t *testing.T) {
+	tau, _ := dist.NewLognormalFromMedianP90(0.25, 0.75)
+	short, _ := dist.NewLognormalFromMedianP90(2.0/365, 6.0/365)
+	q, _ := dist.NewBeta(3, 5)
+	rate, _ := dist.NewGammaFromMeanSD(8, 2)
+	value := heldPath(tau)
+	value.Nodes[1].Functions[0].Scope = variate.PerPeriod
+	prob := heldPath(tau)
+	prob.Nodes[0].Next, prob.Nodes[0].NextHolding = "", nil
+	prob.Nodes[0].Outcomes = []variate.Outcome{{To: "b", P: q, Holding: tau}, {To: "c", Holding: short}}
+	prob.Nodes = append(prob.Nodes, variate.Node{ID: "c", Functions: []variate.Function{Fn("z", "y", C(2))}})
+	holding := heldPath(tau)
+	holding.Nodes[0].NextScope = variate.PerPeriod
+	all := prob
+	all.Nodes = append([]variate.Node(nil), prob.Nodes...)
+	all.Nodes[0].Outcomes = []variate.Outcome{{To: "b", P: q, Holding: tau, HoldingScope: variate.PerPeriod}, {To: "c", Holding: short}}
+	all.Nodes[1].Functions = []variate.Function{{Name: "y", Category: "y", Model: prob.Nodes[1].Functions[0].Model, Scope: variate.PerPeriod}}
+	all.Sources = []variate.Source{{ID: "s", Frequency: rate, To: "a"}}
+	for name, g := range map[string]variate.Graph{"value": value, "probability": prob, "holding": holding, "all": all} {
+		m, e := depExact(t, g)
+		r := runSeries(t, g, 1<<21, 8)
+		n := r.Series.Periods()
+		checkBlockVar(t, name+" total", e.Var, r.Series.TotalColumn(make([]float64, n)))
+		for c, cat := range m.Categories() {
+			checkBlockVar(t, name+" category "+cat, e.VarByCategory[c], r.Series.CategoryColumn(c, make([]float64, n)))
+		}
+	}
+}
+
+// runSeries runs g for a fixed length with its series kept.
+func runSeries(t *testing.T, g variate.Graph, periods int64, seed uint64) *variate.Result {
+	t.Helper()
+	cfg := variate.Config{Periods: periods, AllowUnconverged: true, Workers: 4, Series: true}
+	m, _, err := g.Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := m.NewWorkspace(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	r, err := w.Run(context.Background(), seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := *r
+	return &res
+}
+
+// checkBlockVar fails when an exact variance is beyond four standard
+// errors of the series' variance, the error from the spread of 64
+// blocks' variances about the whole series' mean.
+func checkBlockVar(t *testing.T, what string, vr float64, x []float64) {
+	t.Helper()
+	const blocks = 64
+	mean := 0.0
+	for _, v := range x {
+		mean += v
+	}
+	mean /= float64(len(x))
+	per := len(x) / blocks
+	var s1, s2 float64
+	for b := range blocks {
+		bv := 0.0
+		for _, v := range x[b*per : (b+1)*per] {
+			bv += (v - mean) * (v - mean)
+		}
+		bv /= float64(per)
+		s1, s2 = s1+bv, s2+bv*bv
+	}
+	got := s1 / blocks
+	se := math.Sqrt((s2/blocks - got*got) / (blocks - 1))
+	if !(math.Abs(got-vr) <= 4*se) {
+		t.Errorf("%s: exact var %v, simulated %v ± %v", what, vr, got, se)
+	}
+}
+
+// TestDelayNotComputed: a schedule, two holdings drawn once a period on
+// one path, and holdings in lockstep leave the variance with holding
+// times NaN.
 func TestDelayNotComputed(t *testing.T) {
 	tau, _ := dist.NewLognormalFromMedianP90(0.25, 0.75)
-	mixed := heldPath(tau)
-	f, _ := dist.NewGammaFromMeanSD(8, 2)
-	mixed.Sources[0].Frequency = f
-	period := heldPath(tau)
-	period.Nodes[1].Functions[0].Scope = variate.PerPeriod
-	for name, g := range map[string]variate.Graph{"mixed": mixed, "period": period} {
+	scheduled := heldPath(tau)
+	scheduled.Schedules = []variate.Schedule{{ID: "season", Values: []float64{0.75, 1.25}}}
+	scheduled.Sources[0].Schedule = "season"
+	twice := heldPath(tau)
+	twice.Nodes[0].NextScope = variate.PerPeriod
+	twice.Nodes[1].Next, twice.Nodes[1].NextHolding, twice.Nodes[1].NextScope = "c", tau, variate.PerPeriod
+	twice.Nodes = append(twice.Nodes, variate.Node{ID: "c", Functions: []variate.Function{Fn("z", "y", C(1))}})
+	lockstep := heldPath(tau)
+	lockstep.Dependence = []variate.Dependence{{Members: []string{"a.x", "a->b", "b.y"}, Rank: 1}}
+	for name, g := range map[string]variate.Graph{"schedule": scheduled, "twice": twice, "lockstep": lockstep} {
 		if _, e := depExact(t, g); !math.IsNaN(e.Var) {
 			t.Errorf("%s: var %v, want NaN", name, e.Var)
 		}

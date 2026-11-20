@@ -103,19 +103,32 @@ func TestAnalyticSequentialMatchesTwoWay(t *testing.T) {
 	}
 }
 
+// TestAnalyticDelaysAndInfinite: a holding of whole periods moves a
+// branch's bookings into later periods, apart from the rest of their
+// round's and their period's rate, the same at 1 period as at 3 and
+// below the variance with none; an infinite variance is +Inf.
 func TestAnalyticDelaysAndInfinite(t *testing.T) {
-	g := diamond()
-	g.Nodes[0].Outcomes[0].Holding = c(1)
-	m, _ := mustCompile(t, g, Config{})
-	e, _ := m.Analytic()
-	if !math.IsNaN(e.Var) || !near(e.Mean, (13.0/6)*(0.6+10), 1e-12) {
-		t.Errorf("with delays: var %g mean %g", e.Var, e.Mean)
+	vars := map[float64]float64{}
+	for _, h := range []float64{0, 1, 3} {
+		g := diamond()
+		if h > 0 {
+			g.Nodes[0].Outcomes[0].Holding = c(h)
+		}
+		m, _ := mustCompile(t, g, Config{})
+		e, _ := m.Analytic()
+		if !near(e.Mean, (13.0/6)*(0.6+10), 1e-12) {
+			t.Errorf("holding %v: mean %g", h, e.Mean)
+		}
+		vars[h] = e.Var
 	}
-	g = diamond()
+	if !near(vars[1], vars[3], 1e-9) || !(vars[1] < vars[0]) {
+		t.Errorf("variances with holdings of 0, 1 and 3 periods: %v", vars)
+	}
+	g := diamond()
 	pa, _ := dist.NewPareto(1, 1.5)
 	g.Nodes[3].Functions[0].Model = pa
-	m, _ = mustCompile(t, g, Config{})
-	e, _ = m.Analytic()
+	m, _ := mustCompile(t, g, Config{})
+	e, _ := m.Analytic()
 	if !math.IsInf(e.Var, 1) || math.IsInf(e.Mean, 0) {
 		t.Errorf("infinite variance: var %g mean %g", e.Var, e.Mean)
 	}

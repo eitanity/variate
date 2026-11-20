@@ -235,6 +235,13 @@ type Config struct {
 	// conditioning on value factors for the models it compiles; nil
 	// otherwise.
 	rules *ruleCache
+	// profiles asks the variance with holding times for each figure's
+	// mean booking by lag, set for the models a mixture over draws once a
+	// period combines.
+	profiles bool
+	// meansOnly leaves the variances with holding times uncomputed, for a
+	// caller that reads only the means.
+	meansOnly bool
 }
 
 // Level is a value X of a quantity, named as Workspace.QuantityRow

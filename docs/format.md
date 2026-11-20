@@ -171,16 +171,28 @@ expression; the mean, variance and simulation are.
 
 A holding time lets a round book into later periods, so two of its
 values land in one period only when they are less than a period apart.
-For Poisson sources of fixed rates, with nothing drawn once a period
-(a value factor is conditioned on, below), the exact variance of the
-period's total is λ·E[Q], Q = ∫∫ (1 − |x − y|)⁺ μ(dx) μ(dy), μ a round's
-bookings over the time from its arrival, uniform in its period. It is
-computed by a backward pass over the nodes on a grid of lags under one
-period against each holding's CDF, any law's, the grid doubling until
-the figure settles to 1e-9; the category, source, node and named total
-variances alike. A model with mixed frequencies, values or probabilities
-drawn once a period, schedules, triggers, repairs or queues still has
-no exact variance with holding times.
+For Poisson sources of fixed rates, with nothing drawn once a period,
+the exact variance of the period's total is λ·E[Q], Q = ∫∫ (1 − |x −
+y|)⁺ μ(dx) μ(dy), μ a round's bookings over the time from its arrival,
+uniform in its period. It is computed by a backward pass over the nodes
+on a grid of lags under one period against each holding's CDF, any
+law's, the grid doubling until the figure settles to 1e-9; the
+category, source, node and named total variances alike.
+
+What is drawn once a period is shared by that period's rounds only,
+and a period's total takes rounds from the periods before it, each with
+its own draw. A rate drawn once a period (a mixed frequency, or a
+factor on rates) adds Σ_{k,l} (E[Λ_k Λ_l] − λ_k λ_l)·Σ_d W_k(d)·W_l(d),
+W_k(d) the mean a round of source k books into the period d after its
+own; a value factor, a value or a probability drawn once a period adds
+Σ_d Var(M(d)) of the period's mean booking by lag over the draw, values
+and probabilities exactly on two points each; a holding drawn once a
+period adds the covariance of the bookings it shifts over its law. The
+mean bookings by lag are taken on a second grid over the periods the
+holdings reach, to 1e-9 of the figure. A schedule, a path through two
+holdings drawn once a period, holdings in lockstep, triggers, repairs or
+queues still leave no exact variance with holding times, as does a
+mixture of more than 64 points or one whose work is past its cap.
 
 ### Thresholds
 

@@ -39,9 +39,11 @@ const (
 type lagRule struct {
 	f0, tail float64
 	c        []float64
-	eH       []float64 // E[H(t + τ)] on the grid
-	eG2      float64   // E[G₂(τ)]
-	eHtau    float64   // E[H(τ)]
+	ePhi     []float64    // on a profile grid, E[Φ(τ − t)] at each lag t
+	cum      [4][]float64 // the cells' moments summed from 0, for ePhi
+	eH       []float64    // E[H(t + τ)] on the grid
+	eG2      float64      // E[G₂(τ)]
+	eHtau    float64      // E[H(τ)]
 	fft      *fourier.FFT
 	rev      []complex128 // the rule's transform, reversed, at the FFT's size
 }
@@ -64,6 +66,18 @@ const (
 // grid is the law's CDF and survival on the grid's points, or nil to
 // evaluate them.
 func newLagRule(d dist.Distribution, n int, grid *lawGrid) lagRule {
+	return lagRuleWith(d, n, func(mu *[4][]float64) (float64, float64) {
+		if grid == nil {
+			g := baseGrid(d, n)
+			grid = &g
+		}
+		return cellMoments(grid, n, mu)
+	})
+}
+
+// lagRuleWith is law d's rule on n cells, the cells' moments of a law
+// that is not constant from moments.
+func lagRuleWith(d dist.Distribution, n int, moments func(mu *[4][]float64) (f0, tail float64)) lagRule {
 	h := 1 / float64(n)
 	r := lagRule{c: make([]float64, n+1)}
 	var mu [4][]float64
@@ -84,11 +98,7 @@ func newLagRule(d dist.Distribution, n int, grid *lawGrid) lagRule {
 			}
 		}
 	} else {
-		if grid == nil {
-			g := baseGrid(d, n)
-			grid = &g
-		}
-		r.f0, r.tail = cellMoments(grid, n, &mu)
+		r.f0, r.tail = moments(&mu)
 	}
 	// bound: n cells
 	for m := range n + 1 {
@@ -115,6 +125,7 @@ func newLagRule(d dist.Distribution, n int, grid *lawGrid) lagRule {
 	}
 	r.eHtau = r.eH[0]
 	r.eG2 = cum[2][n] - cum[3][n]/3 + math.Max(0, d.Mean()-cum[1][n]) - r.tail/3
+	r.cum = cum
 	return r
 }
 
@@ -174,16 +185,41 @@ func newLawGrid(n int) lawGrid {
 	return lawGrid{fb: make([]float64, n+1), sb: make([]float64, n+1), fq: make([]float64, n*lagNodes), sq: make([]float64, n*lagNodes)}
 }
 
-// baseGrid evaluates law d on the grid.
+// lawNegligible is the survival past which a law's grid is taken as
+// exhausted: its cells hold nothing and its CDF is 1.
+const lawNegligible = 1e-15
+
+// baseGrid evaluates law d on the grid, up to the bound where its
+// survival is lawNegligible, past which every cell is exhausted.
 func baseGrid(d dist.Distribution, n int) lawGrid {
 	g := newLawGrid(n)
-	gridPoints(n, func(bound bool, i int, u float64) {
-		if bound {
-			g.fb[i], g.sb[i] = d.CDF(u), d.Survival(u)
-		} else {
-			g.fq[i], g.sq[i] = d.CDF(u), d.Survival(u)
+	last := n
+	h := 1 / float64(n)
+	// bound: n + 1 bounds
+	for i := range n + 1 {
+		u := float64(i) * h
+		if i > last {
+			g.fb[i], g.sb[i] = 1, 0
+			continue
 		}
-	})
+		g.fb[i], g.sb[i] = d.CDF(u), d.Survival(u)
+		if g.sb[i] < lawNegligible && last == n {
+			last = i
+		}
+	}
+	gx, _ := legendre()
+	// bound: n cells
+	for j := range n {
+		for q, x := range gx {
+			k := j*lagNodes + q
+			if j >= last {
+				g.fq[k], g.sq[k] = 1, 0
+				continue
+			}
+			u := (float64(j) + x) * h
+			g.fq[k], g.sq[k] = d.CDF(u), d.Survival(u)
+		}
+	}
 	return g
 }
 
@@ -280,8 +316,9 @@ func (r *lagRule) at0(g []float64) float64 {
 func (r *lagRule) apply(g []float64) []float64 {
 	n := len(g) - 1
 	size := 1
-	// bound: doublings to 4n
-	for size < 4*n+4 {
+	// bound: doublings to 3n + 2, past which the circular correlation of
+	// g, extended to 2n, with the rule's n + 1 weights does not wrap
+	for size < 3*n+2 {
 		size *= 2
 	}
 	ext := make([]float64, size)
@@ -311,15 +348,14 @@ func (r *lagRule) apply(g []float64) []float64 {
 }
 
 // delayExact reports whether the variance with holding times is
-// computed: Poisson sources of fixed rates, nothing drawn once a
-// period, and no repair, trigger, queue or outage holding.
+// computed: Poisson sources, their rates fixed or drawn once a period,
+// and no schedule, repair, trigger, queue or outage holding.
 func (m *Compiled) delayExact() bool {
-	if m.hasRepair || m.renewal || m.HasTriggers() || len(m.queues) > 0 || len(m.schedules) > 0 || len(m.periodQuantities()) > 0 {
+	if m.hasRepair || m.renewal || m.HasTriggers() || len(m.queues) > 0 || len(m.schedules) > 0 {
 		return false
 	}
 	for _, s := range m.srcs {
-		lo, hi := m.pools[s.pool].Support()
-		if lo != hi || s.factor != noIndex || s.schedule != noIndex || s.trigger != noIndex {
+		if s.schedule != noIndex || s.trigger != noIndex || s.every > 1 || s.chainEnd > s.chainStart {
 			return false
 		}
 	}
@@ -332,11 +368,25 @@ func (m *Compiled) delayExact() bool {
 }
 
 // delayStart is the first grid: delayCellsStart cells, or more so that
-// each holding's median spans lagFine of them.
+// the median of each holding in a group spans lagFine of them, its law
+// given the group's normal taken on the grid; another holding's cells
+// take their moments on sub-cells as narrow as it is, and a fixed one is
+// one point, which no cell need resolve.
 func (m *Compiled) delayStart() int {
 	n := delayCellsStart
-	for _, o := range m.outs {
-		if o.hold == noIndex {
+	member := map[int32]bool{}
+	for _, g := range m.groups {
+		for _, mb := range g.members {
+			if mb.fn == noIndex {
+				member[mb.out] = true
+			}
+		}
+	}
+	for j, o := range m.outs {
+		if o.hold == noIndex || !member[index(j)] {
+			continue
+		}
+		if lo, hi := m.pools[o.hold].Support(); lo == hi {
 			continue
 		}
 		med := m.pools[o.hold].Quantile(0.5)
@@ -366,7 +416,15 @@ func (m *Compiled) delayRules(n int) []*lagRule {
 			key.member, key.lockstepAt = true, c.a
 		}
 		d := m.pools[o.hold]
-		out[j] = m.cfg.rules.rule(key, func() lagRule { return newLagRule(d, n, grid) })
+		if lo, hi := d.Support(); lo == hi {
+			key.fixed, key.at = true, lo
+		}
+		out[j] = m.cfg.rules.rule(key, func() lagRule {
+			if grid != nil || key.member {
+				return newLagRule(d, n, grid)
+			}
+			return lagRuleWith(d, n, func(mu *[4][]float64) (float64, float64) { return subMoments(d, n, mu) })
+		})
 	}
 	return out
 }
@@ -475,8 +533,242 @@ type delayKey struct {
 // delayFigures is every variance an Analytic call reports, with holding
 // times, computed together so that the conditioned models and the
 // holdings' rules are built once for all of them, and beside each the
-// long-run variance per period the plan sizes its runs by.
-func (m *Compiled) delayFigures(lam []float64) (perPeriod, longRun map[delayKey]float64) {
+// long-run variance per period the plan sizes its runs by. With drawn
+// rates, or when profiles is set for a mixture over draws once a
+// period, it adds the between-period term and gives each key's mean
+// booking by lag; profiles is nil otherwise.
+func (m *Compiled) delayFigures(lam []float64) (perPeriod, longRun map[delayKey]float64, profiles map[delayKey][]float64) {
+	keys := m.delayKeys()
+	perPeriod, longRun = make(map[delayKey]float64, len(keys)), make(map[delayKey]float64, len(keys))
+	nan := func() (map[delayKey]float64, map[delayKey]float64, map[delayKey][]float64) {
+		for _, k := range keys {
+			perPeriod[k], longRun[k] = math.NaN(), math.NaN()
+		}
+		return perPeriod, longRun, nil
+	}
+	draws := m.periodDraws()
+	cuts, ok := m.delayDraws(draws)
+	if !ok {
+		return nan()
+	}
+	models, weights := []*Compiled{m}, []float64{1}
+	if len(m.groups) > 0 {
+		var ok bool
+		if models, weights, ok = m.depRule(keys, lam); !ok {
+			return nan()
+		}
+	}
+	start := m.delayStart()
+	vs := settleGrids(start, models, weights, keys, lam)
+	var bs []float64
+	var profs [][]float64
+	long := make([]float64, len(keys))
+	switch {
+	case len(draws) > 0:
+		var ok bool
+		if bs, profs, long, ok = m.drawMixture(draws, keys, lam, vs); !ok {
+			return nan()
+		}
+	case m.mixedRates() || m.cfg.profiles || len(cuts) > 0:
+		var ok bool
+		if bs, profs, long, ok = m.ownBetween(models, weights, keys, lam, vs); !ok {
+			return nan()
+		}
+	}
+	if profs != nil {
+		profiles = make(map[delayKey][]float64, len(keys))
+	}
+	for i, k := range keys {
+		perPeriod[k] = vs[i]
+		if bs != nil {
+			perPeriod[k] += bs[i]
+			profiles[k] = profs[i]
+		}
+		longRun[k] = long[i]
+		for j, c := range models {
+			longRun[k] += weights[j] * c.roundSecond(k, lam)
+		}
+	}
+	return perPeriod, longRun, profiles
+}
+
+// delayDraws is the outcomes whose holding is drawn once a period;
+// false where the variance with holding times is not computed: a path
+// through two of them, values or probabilities drawn once a period with
+// groups, or past the points' cap.
+func (m *Compiled) delayDraws(draws []int32) ([]int32, bool) {
+	cuts, ok := m.periodCuts()
+	if !ok || len(draws) > 0 && len(m.groups) > 0 {
+		return nil, false
+	}
+	_, _, _, ok = m.periodRules(draws)
+	return cuts, ok
+}
+
+// ownBetween is the between-period term, the mean booking by lag and the
+// long-run variance's share beyond λ·E[B²] for each key of a model
+// without values or probabilities drawn once a period, its rounds' means
+// mixed over the groups' normals; false past the span's bound.
+func (m *Compiled) ownBetween(models []*Compiled, weights []float64, keys []delayKey, lam, within []float64) ([]float64, [][]float64, []float64, bool) {
+	l := m.lagSpan()
+	if !(l < float64(delayBudget)) {
+		return nil, nil, nil, false
+	}
+	bs, profs, _ := settleBetween(int(math.Ceil(l)), models, weights, keys, lam, within, lagBudget)
+	long := make([]float64, len(keys))
+	for i, k := range keys {
+		m1 := make([]float64, len(m.nodes))
+		for j, c := range models {
+			c1, _ := c.valueToGo(k.filt)
+			for v := range m1 {
+				m1[v] += weights[j] * c1[v]
+			}
+		}
+		long[i] = m.rateLong(k, m1) + m.cutLong(k)
+	}
+	return bs, profs, long, true
+}
+
+// pointBetween is each key's between-period term on the n-cell grid,
+// extrapolated from it and the grid of half as many cells, and its
+// mean booking by lag on the n-cell grid.
+func pointBetween(c *Compiled, keys []delayKey, lam []float64, n, span int) ([]float64, [][]float64, bool) {
+	done := make([]bool, len(keys))
+	half, v := make([]float64, len(keys)), make([]float64, len(keys))
+	if _, ok := betweenAt([]*Compiled{c}, []float64{1}, keys, done, lam, n/2, span, half); !ok {
+		return nil, nil, false
+	}
+	at, ok := betweenAt([]*Compiled{c}, []float64{1}, keys, done, lam, n, span, v)
+	if !ok {
+		return nil, nil, false
+	}
+	for k := range v {
+		v[k] += (v[k] - half[k]) / 3
+	}
+	return v, at, true
+}
+
+// drawMixture is the between-period term, the mean booking by lag and
+// the long-run variance's share beyond λ·E[B²] for each key, mixed over
+// the points of the values and probabilities drawn once a period: at
+// each point the model with them fixed gives its own between-period
+// term, and the points add Σ_d Var(M(d)) of their mean bookings by lag,
+// and to the long-run variance the variance of the period's whole mean.
+// A round's within-period term is linear in each draw's moments, so the
+// model's own, from their laws, is the mixture's. False when the points
+// pass their cap or a point's term does not settle.
+func (m *Compiled) drawMixture(draws []int32, keys []delayKey, lam []float64, within []float64) (bs []float64, profs [][]float64, long []float64, ok bool) {
+	xs, ws, points, ok := m.periodRules(draws)
+	if !ok {
+		return nil, nil, nil, false
+	}
+	rules := m.cfg.rules
+	if rules == nil {
+		rules = newRuleCache()
+	}
+	l := m.lagSpan()
+	if !(l < float64(delayBudget)) {
+		return nil, nil, nil, false
+	}
+	span := int(math.Ceil(l))
+	// The model as it is settles the grid, its draws at their means, where
+	// a mean booking by lag multilinear in them is their mean; each point
+	// takes that grid and the one of half as many cells, extrapolated.
+	mm := *m
+	mm.cfg.rules = rules
+	settled, _, grid := settleBetween(span, []*Compiled{&mm}, []float64{1}, keys, lam, within, lagBudget/(points+1))
+	for _, b := range settled {
+		if math.IsNaN(b) {
+			return nil, nil, nil, false
+		}
+	}
+	if points*profileWork(m, grid*(span+1)*3/2, keys, make([]bool, len(keys))) > lagBudget {
+		return nil, nil, nil, false
+	}
+	acc := newPointMix(len(keys))
+	idx := make([]int, len(draws))
+	at := make([]float64, len(draws))
+	// bound: periodPointsMax points
+	for range points {
+		w := 1.0
+		for i := range draws {
+			at[i], w = xs[i][idx[i]], w*ws[i][idx[i]]
+		}
+		c, err := m.fixedAt(draws, at)
+		if err != nil {
+			return nil, nil, nil, false
+		}
+		c.cfg.rules = rules
+		b, pr, ok := pointBetween(c, keys, lam, grid, span)
+		if !ok || !acc.add(c, keys, lam, w, b, pr) {
+			return nil, nil, nil, false
+		}
+		for i := range idx {
+			if idx[i]++; idx[i] < len(xs[i]) {
+				break
+			}
+			idx[i] = 0
+		}
+	}
+	bs, profs, long = acc.result()
+	return bs, profs, long, true
+}
+
+// pointMix sums a mixture's points for each key: the weighted
+// between-period terms, mean bookings by lag and their squares, the
+// rates' and holdings' long-run shares, and the period's whole mean and
+// its square.
+type pointMix struct {
+	bs, sq, long, mw, mq []float64
+	profs                [][]float64
+}
+
+func newPointMix(n int) *pointMix {
+	return &pointMix{bs: make([]float64, n), sq: make([]float64, n), long: make([]float64, n),
+		mw: make([]float64, n), mq: make([]float64, n), profs: make([][]float64, n)}
+}
+
+// add takes point c of weight w, its terms b and profiles pr; false when
+// a term is NaN.
+func (a *pointMix) add(c *Compiled, keys []delayKey, lam []float64, w float64, b []float64, pr [][]float64) bool {
+	for k, key := range keys {
+		if math.IsNaN(b[k]) {
+			return false
+		}
+		a.bs[k] += w * b[k]
+		for len(a.profs[k]) < len(pr[k]) {
+			a.profs[k] = append(a.profs[k], 0)
+		}
+		for d, x := range pr[k] {
+			a.profs[k][d] += w * x
+		}
+		a.sq[k] += w * dot(pr[k], pr[k])
+		c1, _ := c.valueToGo(key.filt)
+		mean := 0.0
+		for s, src := range c.srcs {
+			if key.src < 0 || key.src == s {
+				mean += lam[s] * c1[src.to]
+			}
+		}
+		a.long[k] += w * (c.rateLong(key, c1) + c.cutLong(key))
+		a.mw[k], a.mq[k] = a.mw[k]+w*mean, a.mq[k]+w*mean*mean
+	}
+	return true
+}
+
+// result is each key's between-period term with Σ_d Var(M(d)) over the
+// points, its mean booking by lag, and its long-run share with the
+// variance of the period's whole mean.
+func (a *pointMix) result() (bs []float64, profs [][]float64, long []float64) {
+	for k := range a.bs {
+		a.bs[k] += math.Max(0, a.sq[k]-dot(a.profs[k], a.profs[k]))
+		a.long[k] += math.Max(0, a.mq[k]-a.mw[k]*a.mw[k])
+	}
+	return a.bs, a.profs, a.long
+}
+
+// delayKeys is every variance the batch computes.
+func (m *Compiled) delayKeys() []delayKey {
 	keys := []delayKey{{filt: valueFilter{kind: filterAll}, src: -1}}
 	for k := range m.srcs {
 		keys = append(keys, delayKey{filt: valueFilter{kind: filterAll}, src: k})
@@ -492,26 +784,7 @@ func (m *Compiled) delayFigures(lam []float64) (perPeriod, longRun map[delayKey]
 	for i := range m.totals {
 		keys = append(keys, delayKey{filt: valueFilter{kind: filterTotal, index: index(i)}, src: -1})
 	}
-	perPeriod, longRun = make(map[delayKey]float64, len(keys)), make(map[delayKey]float64, len(keys))
-	models, weights := []*Compiled{m}, []float64{1}
-	if len(m.groups) > 0 {
-		var ok bool
-		if models, weights, ok = m.depRule(keys, lam); !ok {
-			for _, k := range keys {
-				perPeriod[k], longRun[k] = math.NaN(), math.NaN()
-			}
-			return perPeriod, longRun
-		}
-	}
-	for i, v := range settleGrids(m.delayStart(), models, weights, keys, lam) {
-		perPeriod[keys[i]] = v
-	}
-	for _, k := range keys {
-		for i, c := range models {
-			longRun[k] += weights[i] * c.roundSecond(k, lam)
-		}
-	}
-	return perPeriod, longRun
+	return keys
 }
 
 // roundSecond is Σ_k λ_k·E[B²] of source k's rounds under the key, B a
@@ -524,6 +797,53 @@ func (m *Compiled) roundSecond(key delayKey, lam []float64) float64 {
 	for k, src := range m.srcs {
 		if key.src < 0 || key.src == k {
 			v += weighted(lam[k], m2[src.to])
+		}
+	}
+	return v
+}
+
+// cutLong is the holdings drawn once a period's share of the long-run
+// variance per period: a rate booked over such a holding books ρ·τ for
+// every round of the period that takes it, so the period's whole
+// booking moves with τ, by Var(τ)·(ρ·p)²·Σ_{k,l} E[Λ_k Λ_l]·r_k·r_l, r_k
+// the chance a round of source k reaches the holding's node.
+func (m *Compiled) cutLong(key delayKey) float64 {
+	cuts, _ := m.periodCuts()
+	v := 0.0
+	for _, j := range cuts {
+		node := m.outcomeNode[j]
+		rho := m.nodeMomentsFor(node, key.filt).rho
+		if rho == 0 {
+			continue
+		}
+		b := rho * m.outcomeMeanProb(node, j)
+		pair := 0.0
+		for k := range m.srcs {
+			for l := range m.srcs {
+				if key.src >= 0 && (key.src != k || key.src != l) {
+					continue
+				}
+				pair += (m.rateExcess(k, l) + m.countMean[k]*m.countMean[l]) * m.reach[k][node] * m.reach[l][node]
+			}
+		}
+		v += m.pools[m.outs[j].hold].Var() * b * b * pair
+	}
+	return v
+}
+
+// rateLong is the drawn rates' share of the long-run variance per
+// period, Σ_{k,l} (E[Λ_k Λ_l] − λ_k λ_l)·E[B_k]·E[B_l], from each
+// node's mean booking m1.
+func (m *Compiled) rateLong(key delayKey, m1 []float64) float64 {
+	v := 0.0
+	for k, s := range m.srcs {
+		for l, t := range m.srcs {
+			if key.src >= 0 && (key.src != k || key.src != l) {
+				continue
+			}
+			if c := m.rateExcess(k, l); c != 0 {
+				v += c * m1[s.to] * m1[t.to]
+			}
 		}
 	}
 	return v
@@ -576,7 +896,7 @@ func settleGrids(start int, cs []*Compiled, ws []float64, keys []delayKey, lam [
 	st := make([]gridSettle, len(keys))
 	out := make([]float64, len(keys))
 	for k := range keys {
-		st[k] = gridSettle{prev: math.NaN(), prevR: math.NaN()}
+		st[k] = gridSettle{prev: math.NaN(), prevR: math.NaN(), dv: math.NaN(), dr: math.NaN()}
 		out[k] = math.NaN()
 	}
 	left, work := len(keys), 0
@@ -597,8 +917,13 @@ func settleGrids(start int, cs []*Compiled, ws []float64, keys []delayKey, lam [
 			}
 		}
 		for k := range keys {
-			if !st[k].done && st[k].step(v[k]) {
+			switch {
+			case st[k].done:
+			case st[k].step(v[k]):
 				out[k] = st[k].value
+				left--
+			case st[k].hopeless(n):
+				st[k].done = true
 				left--
 			}
 		}
@@ -606,9 +931,194 @@ func settleGrids(start int, cs []*Compiled, ws []float64, keys []delayKey, lam [
 	return out
 }
 
+// settleBetween doubles the profile grid from profileStart until each
+// key's between-period term settles beside its whole figure, within
+// its within-period part, within the budget of work: two grids' terms, or two extrapolations, agree
+// to delaySettle of within + between. It returns the terms and each
+// key's mean booking by lag on the grid it settled on; a key unsettled
+// by lagCellsMax, or whose within-period part is NaN, is NaN.
+func settleBetween(span int, cs []*Compiled, ws []float64, keys []delayKey, lam, within []float64, budget int) ([]float64, [][]float64, int) {
+	out := make([]float64, len(keys))
+	profs := make([][]float64, len(keys))
+	done := make([]bool, len(keys))
+	st := make([]gridSettle, len(keys))
+	left := 0
+	for k := range keys {
+		out[k] = math.NaN()
+		st[k] = gridSettle{prev: math.NaN(), prevR: math.NaN(), dv: math.NaN(), dr: math.NaN()}
+		if done[k] = math.IsNaN(within[k]); !done[k] {
+			left++
+		}
+	}
+	work, reached := 0, 0
+	// bound: the profile grids from the first to lagCellsMax
+	for n := profileStart(delayCellsStart, span); n*(span+1) <= lagCellsMax && left > 0; n *= 2 {
+		reached = n
+		if work += profileWork(cs[0], n*(span+1), keys, done) * len(cs); work > budget {
+			break
+		}
+		v := make([]float64, len(keys))
+		at, ok := betweenAt(cs, ws, keys, done, lam, n, span, v)
+		if !ok {
+			break
+		}
+		for k := range keys {
+			if done[k] {
+				continue
+			}
+			// Settled beside the whole figure: the within-period part
+			// stands in the comparison as a constant.
+			whole := v[k] + within[k]
+			if st[k].step(whole) {
+				out[k], done[k], profs[k] = st[k].value-within[k], true, at[k]
+				left--
+			} else if st[k].hopeless(n * (span + 1) * delayCellsMax / lagCellsMax) {
+				done[k] = true
+				left--
+			}
+		}
+	}
+	return out, profs, reached
+}
+
+// profileWork is the work of one profile grid of the given cells: for
+// each filter the unsettled keys take, a pass over the outcomes and, per
+// cut, a pass for each source's part and each pair's product.
+func profileWork(m *Compiled, cells int, keys []delayKey, done []bool) int {
+	cuts, _ := m.periodCuts()
+	return cells * (len(m.outs) + 1 + len(cuts)*len(m.srcs)*(len(m.srcs)+3)/2) * len(unsettledFilters(keys, done))
+}
+
+// betweenAt adds each unsettled key's between-period term on an n-cell
+// a period profile grid to v, and returns its mean booking by lag: the
+// sources' profiles mixed over the models, the groups' normals being
+// drawn per round.
+func betweenAt(cs []*Compiled, ws []float64, keys []delayKey, done []bool, lam []float64, n, span int, v []float64) ([][]float64, bool) {
+	g := newLagGrid(n, span)
+	byFilt, cutRules, ok := mixProfiles(cs, ws, keys, done, &g)
+	if !ok {
+		return nil, false
+	}
+	at := make([][]float64, len(keys))
+	covs := map[valueFilter]*cutCovs{}
+	for k, key := range keys {
+		if done[k] {
+			continue
+		}
+		acc := byFilt[key.filt]
+		cc := covs[key.filt]
+		if cc == nil {
+			cc = newCutCovs(&g, cutRules, acc.through)
+			covs[key.filt] = cc
+		}
+		b, prof := cs[0].between(key, acc.mean, cc, lam)
+		v[k] += b
+		at[k] = prof
+	}
+	return at, true
+}
+
+// mixedProfiles is one filter's sources' mean profiles and, per cut,
+// their parts through it, mixed over the models.
+type mixedProfiles struct {
+	mean    [][]float64
+	through [][][]float64
+}
+
+// add adds w times one model's profiles.
+func (p *mixedProfiles) add(mean [][]float64, through [][][]float64, w float64) {
+	if p.mean == nil {
+		p.mean = make([][]float64, len(mean))
+	}
+	addRows(p.mean, mean, w)
+	for len(p.through) < len(through) {
+		p.through = append(p.through, nil)
+	}
+	for t, rows := range through {
+		if p.through[t] == nil {
+			p.through[t] = make([][]float64, len(rows))
+		}
+		addRows(p.through[t], rows, w)
+	}
+}
+
+// mixProfiles is each unsettled key's filter's profiles mixed over the
+// models, and the cuts' rules, the first model's.
+func mixProfiles(cs []*Compiled, ws []float64, keys []delayKey, done []bool, g *lagGrid) (map[valueFilter]*mixedProfiles, []*lagRule, bool) {
+	cuts, ok := cs[0].periodCuts()
+	if !ok {
+		return nil, nil, false
+	}
+	byFilt := map[valueFilter]*mixedProfiles{}
+	var cutRules []*lagRule
+	// bound: the models of the mixture
+	for i, c := range cs {
+		rules, ok := c.lagRules(g)
+		if !ok {
+			return nil, nil, false
+		}
+		if i == 0 {
+			for _, j := range cuts {
+				cutRules = append(cutRules, rules[j])
+			}
+		}
+		// unordered: each filter's profiles are its own
+		for f := range unsettledFilters(keys, done) {
+			mean, through := c.sourceProfiles(f, rules, g, cuts)
+			acc := byFilt[f]
+			if acc == nil {
+				acc = &mixedProfiles{}
+				byFilt[f] = acc
+			}
+			acc.add(mean, through, ws[i])
+		}
+	}
+	return byFilt, cutRules, true
+}
+
+// unsettledFilters is the filters the unsettled keys take.
+func unsettledFilters(keys []delayKey, done []bool) map[valueFilter]bool {
+	filters := map[valueFilter]bool{}
+	for k, key := range keys {
+		if !done[k] {
+			filters[key.filt] = true
+		}
+	}
+	return filters
+}
+
+// addRows adds w·x to acc row by row, a nil row of x adding nothing.
+func addRows(acc, x [][]float64, w float64) {
+	for r := range x {
+		if x[r] == nil {
+			continue
+		}
+		if acc[r] == nil {
+			acc[r] = make([]float64, len(x[r]))
+		}
+		for d := range x[r] {
+			acc[r][d] += w * x[r][d]
+		}
+	}
+}
+
+// profileStart is the first profile grid's cells a period: start over
+// a span of a period, fewer over a longer one, down to lagCellsMin. A
+// narrow holding needs no finer grid, its cells' moments being taken on
+// sub-cells as narrow as it is.
+func profileStart(start, span int) int {
+	n := start
+	// bound: halvings of start
+	for n > lagCellsMin && n*(span+1) > 2*start {
+		n /= 2
+	}
+	return n
+}
+
 // gridSettle is one key's doubling: its last figure and extrapolation.
 type gridSettle struct {
 	prev, prevR, value float64
+	dv, dr             float64 // the last two grids' differences
 	done               bool
 }
 
@@ -616,14 +1126,31 @@ type gridSettle struct {
 // figures agree, or two extrapolations v + (v − v_prev)/3 do.
 func (g *gridSettle) step(v float64) bool {
 	r := v + (v-g.prev)/3
+	dv, dr := math.Abs(v-g.prev), math.Abs(r-g.prevR)
 	switch {
-	case math.Abs(v-g.prev) <= delaySettle*math.Abs(v):
+	case dv <= delaySettle*math.Abs(v):
 		g.value, g.done = v, true
-	case math.Abs(r-g.prevR) <= delaySettle*math.Abs(r):
+	case dr <= delaySettle*math.Abs(r):
 		g.value, g.done = r, true
 	}
-	g.prev, g.prevR = v, r
+	g.prev, g.prevR, g.dv, g.dr = v, r, dv, dr
 	return g.done
+}
+
+// hopeless reports whether the key cannot settle by delayCellsMax from
+// an n-cell grid: its differences fall by about four a doubling, and
+// neither the figures' nor the extrapolations' reach delaySettle in the
+// doublings left.
+func (g *gridSettle) hopeless(n int) bool {
+	if math.IsNaN(g.dr) {
+		return false
+	}
+	reach := delaySettle * math.Abs(g.prev)
+	// bound: doublings to delayCellsMax
+	for m := n; m < delayCellsMax; m *= 2 {
+		reach *= 4
+	}
+	return g.dv > reach && g.dr > reach
 }
 
 // allSettled reports whether every figure of b is within tol of a's.
@@ -654,13 +1181,17 @@ func (m *Compiled) delayAt(key delayKey, lam []float64, rules []*lagRule, n int,
 const ruleCacheBytes = 64 << 20
 
 // ruleKey is a holding's rule: its pool, the grid and, for a member,
-// its conditioning a and b, or its point in lockstep.
+// its conditioning a and b, or its point in lockstep; for a pool fixed
+// at a point of its once-a-period law, that point; and for a profile
+// grid, its span.
 type ruleKey struct {
 	pool       int32
-	n          int
+	n, span    int
 	a, b       float64
 	member     bool
 	lockstepAt float64
+	fixed      bool
+	at         float64
 }
 
 // ruleCache keeps the holdings' rules and the members' scores for the

@@ -135,7 +135,7 @@ func (m *Compiled) mixedAnalytic(factors []int, n int, rules *ruleCache) (*Expec
 			weight *= ws[j][idx[j]]
 		}
 		cfg := m.cfg
-		cfg.rules = rules
+		cfg.rules, cfg.profiles = rules, m.hasDelays
 		e, err := conditioned(g, cfg)
 		if err != nil {
 			return nil, false, err
@@ -188,60 +188,98 @@ func conditioned(g Graph, cfg Config) (*Expectation, error) {
 }
 
 // exactFig is one exact figure: a mean and, where it has one, its
-// variance.
-type exactFig struct{ mean, vr *float64 }
+// variance, and where holding times give that variance, its key.
+type exactFig struct {
+	mean, vr *float64
+	key      delayKey
+	keyed    bool
+}
 
 // figures lists every figure of e in a fixed order, which models of the
 // same graph share.
 func figures(e *Expectation) []exactFig {
-	fs := []exactFig{{&e.Mean, &e.Var}, {&e.DrawsMean, &e.DrawsVar},
-		{&e.StepsPerPeriod, nil}, {&e.ArrivalsPerPeriod, nil}, {&e.RoundsPerPeriod, nil}}
-	pair := func(a, b []float64) {
+	all := valueFilter{kind: filterAll}
+	fs := []exactFig{{mean: &e.Mean, vr: &e.Var, key: delayKey{filt: all, src: -1}, keyed: true}, {mean: &e.DrawsMean, vr: &e.DrawsVar},
+		{mean: &e.StepsPerPeriod}, {mean: &e.ArrivalsPerPeriod}, {mean: &e.RoundsPerPeriod}}
+	pair := func(a, b []float64, key func(i int) (delayKey, bool)) {
 		for i := range a {
-			var v *float64
+			f := exactFig{mean: &a[i]}
 			if len(b) == len(a) {
-				v = &b[i]
+				f.vr = &b[i]
+				if key != nil {
+					f.key, f.keyed = key(i)
+				}
 			}
-			fs = append(fs, exactFig{&a[i], v})
+			fs = append(fs, f)
 		}
 	}
-	pair(e.MeanByCategory, e.VarByCategory)
-	pair(e.MeanBySource, e.VarBySource)
-	pair(e.MeanByTotal, e.VarByTotal)
-	pair(e.Contrib, e.ContribVar)
-	pair(e.EntriesPer, nil)
-	pair(e.OutcomeRate, nil)
+	by := func(kind int) func(i int) (delayKey, bool) {
+		return func(i int) (delayKey, bool) {
+			return delayKey{filt: valueFilter{kind: kind, index: index(i)}, src: -1}, true
+		}
+	}
+	pair(e.MeanByCategory, e.VarByCategory, by(filterCategory))
+	pair(e.MeanBySource, e.VarBySource, func(i int) (delayKey, bool) { return delayKey{filt: all, src: i}, true })
+	pair(e.MeanByTotal, e.VarByTotal, by(filterTotal))
+	pair(e.Contrib, e.ContribVar, by(filterNode))
+	pair(e.EntriesPer, nil, nil)
+	pair(e.OutcomeRate, nil, nil)
 	for _, rows := range [][][]float64{e.Reach, e.Terminal, e.ByPeriod} {
 		for _, r := range rows {
-			pair(r, nil)
+			pair(r, nil, nil)
 		}
 	}
 	for i := range e.Firing {
 		f := &e.Firing[i]
-		fs = append(fs, exactFig{&f.Lo, nil}, exactFig{&f.Hi, nil}, exactFig{&f.SumMean, nil})
+		fs = append(fs, exactFig{mean: &f.Lo}, exactFig{mean: &f.Hi}, exactFig{mean: &f.SumMean})
 	}
 	return fs
 }
 
 // mixAcc sums the conditioned figures: the weighted means, and per
-// variance the weighted conditional variances and second moments.
+// variance the weighted conditional variances and second moments; and
+// for a variance with holding times, the weighted mean bookings by lag
+// and their squares, and the long-run variances.
 type mixAcc struct {
 	e          *Expectation
 	m1, m2, vr []float64
+	pm         [][]float64
+	pq, lr     []float64
+	pn, ln     []int
+	n          int
 }
 
 func newMixAcc(first *Expectation) *mixAcc {
 	e := cloneExpectation(first)
 	n := len(figures(e))
-	return &mixAcc{e: e, m1: make([]float64, n), m2: make([]float64, n), vr: make([]float64, n)}
+	return &mixAcc{e: e, m1: make([]float64, n), m2: make([]float64, n), vr: make([]float64, n),
+		pm: make([][]float64, n), pq: make([]float64, n), lr: make([]float64, n), pn: make([]int, n), ln: make([]int, n)}
 }
 
 func (a *mixAcc) add(e *Expectation, w float64) {
+	a.n++
 	for i, f := range figures(e) {
 		a.m1[i] += w * *f.mean
 		a.m2[i] += w * *f.mean * *f.mean
 		if f.vr != nil {
 			a.vr[i] += w * *f.vr
+		}
+		if !f.keyed {
+			continue
+		}
+		if p, ok := e.profile[f.key]; ok {
+			for len(a.pm[i]) < len(p) {
+				a.pm[i] = append(a.pm[i], 0)
+			}
+			for d, x := range p {
+				a.pm[i][d] += w * x
+			}
+			a.pq[i] += w * dot(p, p)
+			a.pn[i]++
+		}
+		if lr, ok := e.longRun[f.key]; ok {
+			a.lr[i] += w * lr
+			a.ln[i]++
 		}
 	}
 	for i := range e.Firing {
@@ -252,14 +290,38 @@ func (a *mixAcc) add(e *Expectation, w float64) {
 }
 
 // result is the mixture's figures: E[mean | g] and
-// E[Var | g] + Var(E | g).
+// E[Var | g] + Var(E | g). Where holding times spread a round over
+// periods, the rounds booking into one period come from many, each with
+// its own draw, so Var(E | g) is taken lag by lag, Σ_d Var(M(d) | g) of
+// the mean booking by lag; the long-run variance takes it whole.
 func (a *mixAcc) result() *Expectation {
+	var profile map[delayKey][]float64
+	var longRun map[delayKey]float64
 	for i, f := range figures(a.e) {
 		*f.mean = a.m1[i]
-		if f.vr != nil {
-			*f.vr = a.vr[i] + math.Max(0, a.m2[i]-a.m1[i]*a.m1[i])
+		if f.vr == nil {
+			continue
+		}
+		whole := math.Max(0, a.m2[i]-a.m1[i]*a.m1[i])
+		*f.vr = a.vr[i] + whole
+		if !f.keyed {
+			continue
+		}
+		if a.pn[i] == a.n {
+			*f.vr = a.vr[i] + math.Max(0, a.pq[i]-dot(a.pm[i], a.pm[i]))
+			if profile == nil {
+				profile = map[delayKey][]float64{}
+			}
+			profile[f.key] = a.pm[i]
+		}
+		if a.ln[i] == a.n {
+			if longRun == nil {
+				longRun = map[delayKey]float64{}
+			}
+			longRun[f.key] = a.lr[i] + whole
 		}
 	}
+	a.e.profile, a.e.longRun = profile, longRun
 	return a.e
 }
 
