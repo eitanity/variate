@@ -189,9 +189,14 @@ own; a value factor, a value or a probability drawn once a period adds
 and probabilities exactly on two points each; a holding drawn once a
 period adds the covariance of the bookings it shifts over its law. The
 mean bookings by lag are taken on a second grid over the periods the
-holdings reach, to 1e-9 of the figure. A schedule, a path through two
-holdings drawn once a period, holdings in lockstep, triggers, repairs or
-queues still leave no exact variance with holding times, as does a
+holdings reach, to 1e-9 of the figure. A schedule's lags are not
+independent draws but one sequence: the figure is the cycle's, the
+schedule taken as a rate drawn each period from its values, with the
+variance of the mean booked from all lags at each place of the joint
+cycle in place of each lag's on its own. A path through two holdings
+drawn once a period, holdings in lockstep, a schedule beside a value
+factor or a value or probability drawn once a period, triggers, repairs
+or queues still leave no exact variance with holding times, as does a
 mixture of more than 64 points or one whose work is past its cap.
 
 ### Thresholds

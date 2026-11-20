@@ -49,7 +49,7 @@ bracketed between rigorous bounds, with no sampling at all.
   period's exact mean where the paths allow, beside the horizon's total.
 
 `docs/format.md` is the reference for the YAML model file, and
-`examples/` holds twenty-seven complete models with a README saying what
+`examples/` holds twenty-eight complete models with a README saying what
 each shows, from a one-line compound loss to a register of a hundred
 risks, a plant as a block diagram, and a shift with its own period.
 

@@ -2,6 +2,7 @@ package suite
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
@@ -288,23 +289,98 @@ func checkBlockVar(t *testing.T, what string, vr float64, x []float64) {
 	}
 }
 
-// TestDelayNotComputed: a schedule, two holdings drawn once a period on
-// one path, and holdings in lockstep leave the variance with holding
-// times NaN.
+// TestDelayNotComputed: two holdings drawn once a period on one path,
+// holdings in lockstep, and a schedule beside a value factor or a value
+// drawn once a period leave the variance with holding times NaN.
 func TestDelayNotComputed(t *testing.T) {
 	tau, _ := dist.NewLognormalFromMedianP90(0.25, 0.75)
-	scheduled := heldPath(tau)
-	scheduled.Schedules = []variate.Schedule{{ID: "season", Values: []float64{0.75, 1.25}}}
-	scheduled.Sources[0].Schedule = "season"
 	twice := heldPath(tau)
 	twice.Nodes[0].NextScope = variate.PerPeriod
 	twice.Nodes[1].Next, twice.Nodes[1].NextHolding, twice.Nodes[1].NextScope = "c", tau, variate.PerPeriod
 	twice.Nodes = append(twice.Nodes, variate.Node{ID: "c", Functions: []variate.Function{Fn("z", "y", C(1))}})
 	lockstep := heldPath(tau)
 	lockstep.Dependence = []variate.Dependence{{Members: []string{"a.x", "a->b", "b.y"}, Rank: 1}}
-	for name, g := range map[string]variate.Graph{"schedule": scheduled, "twice": twice, "lockstep": lockstep} {
+	f, _ := dist.NewLognormalFromMeanSD(1, 0.5)
+	factor := scheduled(heldPath(tau))
+	factor.Factors = []variate.Factor{{ID: "f", Model: f}}
+	factor.Nodes[1].Functions[0].Factor = "f"
+	period := scheduled(heldPath(tau))
+	period.Nodes[1].Functions[0].Scope = variate.PerPeriod
+	for name, g := range map[string]variate.Graph{"twice": twice, "lockstep": lockstep, "schedule and factor": factor, "schedule and period value": period} {
 		if _, e := depExact(t, g); !math.IsNaN(e.Var) {
 			t.Errorf("%s: var %v, want NaN", name, e.Var)
+		}
+	}
+}
+
+// scheduled puts g's first source on a schedule of four values.
+func scheduled(g variate.Graph) variate.Graph {
+	g.Schedules = append(g.Schedules, variate.Schedule{ID: "season", Values: []float64{0.2, 1, 1.8, 1}})
+	g.Sources[0].Schedule = "season"
+	return g
+}
+
+// schedulePath: 5 rounds a period, on a schedule, book 1 after the
+// holding τ.
+func schedulePath(values []float64, tau dist.Continuous) variate.Graph {
+	return variate.Graph{ID: "seasonal",
+		Schedules: []variate.Schedule{{ID: "season", Values: values}},
+		Sources:   []variate.Source{{ID: "s", Frequency: C(5), To: "a", Schedule: "season"}},
+		Nodes: []variate.Node{
+			{ID: "a", Next: "b", NextHolding: tau},
+			{ID: "b", Functions: []variate.Function{Fn("v", "v", C(1))}},
+		}}
+}
+
+// TestDelayScheduleExact: on a schedule alternating 0.5 and 1.5, a
+// booking a fixed half period after arrival takes half its period's
+// rounds and half the last's, a mean of 5 at every place, so Var = 5;
+// a period later it takes the last period's alone, Var = 5 + 25·0.25.
+// A rate drawn independently each period from the schedule's values
+// would give 5 + 25·0.25·(0.25 + 0.25) at the half period.
+func TestDelayScheduleExact(t *testing.T) {
+	for c, want := range map[float64]float64{0.5: 5, 1: 5 + 25*0.25} {
+		if _, e := depExact(t, schedulePath([]float64{0.5, 1.5}, C(c))); !within(e.Var, want, 1e-9) {
+			t.Errorf("holding %v: var %v, want %v", c, e.Var, want)
+		}
+	}
+}
+
+// TestDelaySchedule: schedules of 2, 4 and 12 values with lognormal
+// holdings of median 2 days, 3 months and a year; a drawn rate, a
+// holding drawn once a period and two sources on schedules of their own,
+// by category and source: the exact variance, the cycle's, is within four
+// errors of 2^21 simulated periods.
+func TestDelaySchedule(t *testing.T) {
+	cases := map[string]variate.Graph{}
+	for _, vals := range [][]float64{{0.5, 1.5}, {0.2, 1, 1.8, 1}, {0.4, 0.5, 0.7, 1, 1.3, 1.6, 1.8, 1.6, 1.3, 1, 0.7, 0.5}} {
+		for _, med := range []float64{2.0 / 365, 0.25, 1} {
+			tau, _ := dist.NewLognormalFromMedianP90(med, 3*med)
+			cases[fmt.Sprintf("%d values, median %.3g", len(vals), med)] = schedulePath(vals, tau)
+		}
+	}
+	tau, _ := dist.NewLognormalFromMedianP90(0.25, 0.75)
+	rate, _ := dist.NewGammaFromMeanSD(8, 2)
+	mixed := scheduled(heldPath(tau))
+	mixed.Sources[0].Frequency = rate
+	cases["drawn rate"] = mixed
+	holding := scheduled(heldPath(tau))
+	holding.Nodes[0].NextScope = variate.PerPeriod
+	cases["holding once a period"] = holding
+	two := scheduled(heldPath(tau))
+	two.Schedules = append(two.Schedules, variate.Schedule{ID: "shift", Values: []float64{1.5, 0.5, 1}})
+	two.Sources = append(two.Sources, variate.Source{ID: "t", Frequency: C(3), To: "b", Schedule: "shift"})
+	cases["two schedules"] = two
+	for name, g := range cases {
+		m, e := depExact(t, g)
+		r := runSeries(t, g, 1<<21, 5)
+		n := r.Series.Periods()
+		checkBlockVar(t, name+" total", e.Var, r.Series.TotalColumn(make([]float64, n)))
+		for c, cat := range m.Categories() {
+			checkBlockVar(t, name+" "+cat, e.VarByCategory[c], r.Series.CategoryColumn(c, make([]float64, n)))
+		}
+		for k, src := range m.SourceIDs() {
+			checkBlockVar(t, name+" source "+src, e.VarBySource[k], r.Series.SourceColumn(k, make([]float64, n)))
 		}
 	}
 }
@@ -382,12 +458,12 @@ func TestDelayBoundedHolding(t *testing.T) {
 	}
 }
 
-// TestDelayExamples: the examples with holding times and drawn rates,
-// the pump station's bounded holdings among them, have an exact
+// TestDelayExamples: the examples with holding times and drawn rates or
+// a schedule, the pump station's bounded holdings among them, have an exact
 // variance of the total, each category and each source within four
 // errors of 2^20 simulated periods.
 func TestDelayExamples(t *testing.T) {
-	for _, f := range []string{"pump_station", "delays", "sites", "line"} {
+	for _, f := range []string{"pump_station", "delays", "sites", "line", "settlement"} {
 		cm, err := config.Load("../../examples/" + f + ".yaml")
 		if err != nil {
 			t.Fatal(err)

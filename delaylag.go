@@ -538,3 +538,151 @@ func dot(a, b []float64) float64 {
 	}
 	return s
 }
+
+// The schedules. Given the place φ of a period in the joint cycle,
+// Var(T) = E_φ Var(T | φ) + Var_φ E(T | φ). A lag's term given φ
+// depends on φ only through the schedules' values at that lag, so the
+// first is the variance with each schedule a rate drawn independently
+// every period from its cycle's values, as the rates' term takes it;
+// that counts Σ_d Var_φ(M_d(φ)) of the mean booked from each lag, M_d(φ)
+// = Σ_k λ_k·(s_k(φ − d)/s̄_k)·W̄_k(d), where the schedules give one
+// sequence, not independent draws, and the second is the variance of
+// their sum: the term is Var_φ(Σ_d M_d(φ)) − Σ_d Var_φ(M_d(φ)).
+
+// scheduleBetween adds the schedules' term, if any, to each key's
+// between-period term bs, settled on the profile grids beside within + bs; false where
+// it is not computed: with values or probabilities drawn once a period,
+// or under a value factor's conditioning, whose mixtures would need the
+// schedules inside each point, or past the cycle's or the span's caps.
+func (m *Compiled) scheduleBetween(draws bool, models []*Compiled, weights []float64, keys []delayKey, lam, within, bs []float64) ([]float64, bool) {
+	if len(m.schedules) == 0 {
+		return bs, true
+	}
+	if draws || m.cfg.profiles || bs == nil {
+		return nil, false
+	}
+	l := m.lagSpan()
+	if !(l < float64(delayBudget)) {
+		return nil, false
+	}
+	span := int(math.Ceil(l))
+	if n, ok := jointLength(m.schedules); !ok || n*int64(len(m.schedules)) > lagBudget {
+		return nil, false
+	}
+	whole := make([]float64, len(keys))
+	for k := range keys {
+		whole[k] = within[k] + bs[k]
+	}
+	cs, _, _ := settleTerm(span, models, weights, keys, lam, whole, lagBudget, scheduleAt)
+	out := make([]float64, len(keys))
+	for k := range keys {
+		out[k] = bs[k] + cs[k]
+	}
+	return out, true
+}
+
+// jointLength is the schedules' joint cycle in periods; false past
+// maxJointPeriods.
+func jointLength(scs []schedule) (int64, bool) {
+	n := int64(1)
+	for _, sc := range scs {
+		k := int64(len(sc.values))
+		n = n / int64(gcd(int(n), int(k))) * k
+		if n > maxJointPeriods {
+			return 0, false
+		}
+	}
+	return n, true
+}
+
+// scheduleAt adds each unsettled key's schedules' term on an n-cell a
+// period profile grid to v, from the sources' mean profiles mixed over
+// the models.
+func scheduleAt(cs []*Compiled, ws []float64, keys []delayKey, done []bool, lam []float64, n, span int, v []float64) ([][]float64, bool) {
+	g := newLagGrid(n, span)
+	byFilt, _, ok := mixProfiles(cs, ws, keys, done, &g)
+	if !ok {
+		return nil, false
+	}
+	for k, key := range keys {
+		if !done[k] {
+			v[k] += cs[0].scheduleTerm(key, byFilt[key.filt].mean, lam)
+		}
+	}
+	return nil, true
+}
+
+// scheduleTerm is Var_φ(Σ_d M_d(φ)) − Σ_d Var_φ(M_d(φ)) for the key from
+// the sources' mean profiles w: each schedule's lags folded onto its
+// cycle and its values convolved with them, the sum over the schedules
+// walked over the joint cycle.
+func (m *Compiled) scheduleTerm(key delayKey, w [][]float64, lam []float64) float64 {
+	b := m.scheduleLags(key, w, lam)
+	perLag := 0.0
+	cycles := make([][]float64, len(m.schedules))
+	for i, sc := range m.schedules {
+		if b[i] == nil {
+			continue
+		}
+		for j, other := range m.schedules {
+			if b[j] != nil {
+				perLag += meanOf(sc.values) * meanOf(other.values) * (m.scheduleRatio[i][j] - 1) * dot(b[i], b[j])
+			}
+		}
+		cycles[i] = cycleSum(sc.values, b[i])
+	}
+	n, _ := jointLength(m.schedules)
+	var s1, s2 float64
+	// bound: the joint cycle, at most maxJointPeriods
+	for p := range n {
+		x := 0.0
+		for _, c := range cycles {
+			if c != nil {
+				x += c[p%int64(len(c))]
+			}
+		}
+		s1, s2 = s1+x, s2+x*x
+	}
+	mean := s1 / float64(n)
+	return math.Max(0, s2/float64(n)-mean*mean) - perLag
+}
+
+// scheduleLags is, per schedule, Σ_k λ_k·W̄_k(d)/s̄_k over the key's
+// sources on it; nil for a schedule with none.
+func (m *Compiled) scheduleLags(key delayKey, w [][]float64, lam []float64) [][]float64 {
+	b := make([][]float64, len(m.schedules))
+	for k, src := range m.srcs {
+		if src.schedule == noIndex || key.src >= 0 && key.src != k {
+			continue
+		}
+		i := m.scheduleIndex(src.schedule)
+		mean := meanOf(m.schedules[i].values)
+		if mean == 0 {
+			continue
+		}
+		if b[i] == nil {
+			b[i] = make([]float64, len(w[k]))
+		}
+		for d, x := range w[k] {
+			b[i][d] += lam[k] * x / mean
+		}
+	}
+	return b
+}
+
+// cycleSum is Σ_d b(d)·v((φ − d) mod L) at each place φ of a cycle of
+// values v, the lags folded onto it.
+func cycleSum(v, b []float64) []float64 {
+	l := len(v)
+	fold := make([]float64, l)
+	for d, x := range b {
+		fold[d%l] += x
+	}
+	out := make([]float64, l)
+	for phi := range out {
+		for r, x := range fold {
+			out[phi] += x * v[((phi-r)%l+l)%l]
+		}
+	}
+	return out
+}

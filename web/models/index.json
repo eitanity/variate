@@ -753,6 +753,46 @@
   ]
  },
  {
+  "id": "settlement",
+  "title": "Claims paid after they settle: a storm season",
+  "file": "settlement.yaml",
+  "about": "Monthly periods. Storm claims follow a twelve-value cycle peaking in late summer, and each is paid a lognormal time after its storm. A month's payments take claims from the months before it, whose storms followed the season at their own places, so the exact variance is that of a month taken at random from the cycle with each month's claims spread over the following months' payments. A longer settlement spreads a storm's claims over more months, which smooths the payments month to month. With holding times there is no exact distribution, so the histogram is the run's.",
+  "knobs": [
+   {
+    "key": "storm_rate",
+    "label": "Storm claims per month, before the season",
+    "min": 0,
+    "max": 20,
+    "step": 0.5,
+    "value": 4
+   },
+   {
+    "key": "storm_peak",
+    "label": "Storm multiplier at the season's peak",
+    "min": 1,
+    "max": 6,
+    "step": 0.1,
+    "value": 2.2
+   },
+   {
+    "key": "settle_median",
+    "label": "Median days from storm to payment",
+    "min": 1,
+    "max": 180,
+    "step": 1,
+    "value": 20
+   },
+   {
+    "key": "settle_p90",
+    "label": "Days by which nine in ten claims are paid",
+    "min": 2,
+    "max": 720,
+    "step": 1,
+    "value": 60
+   }
+  ]
+ },
+ {
   "id": "ageing",
   "title": "Ageing: a failure rate that rises with age",
   "file": "ageing.yaml",

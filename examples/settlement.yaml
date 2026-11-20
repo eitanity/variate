@@ -1,0 +1,20 @@
+# Claims paid after they settle: storm claims over a monthly period
+# follow the twelve-value season of seasonal.yaml, and each is paid a
+# lognormal time after its storm, median 20 days. A month's payments
+# take claims from the months before it, whose storms followed the
+# season at their own places, so the exact variance is the cycle's with
+# each month's claims spread over the next months' payments; with
+# holding times there is no exact distribution.
+period: { days: 30 }
+schedules:
+  - { id: storms, values: [0.3, 0.3, 0.5, 0.8, 1.2, 1.6, 2.0, 2.2, 1.6, 0.8, 0.4, 0.3] }
+graphs:
+  - id: settlement
+    sources:
+      - { id: storm, frequency: 4, schedule: storms, to: claim }
+    nodes:
+      - id: claim
+        next: paid
+        next_holding: { lognormal: { median: 20, p90: 60 }, unit: days }
+      - id: paid
+        functions: [ { name: payment, category: property, lognormal: { median: 8e3, p90: 5e4 } } ]

@@ -348,14 +348,15 @@ func (r *lagRule) apply(g []float64) []float64 {
 }
 
 // delayExact reports whether the variance with holding times is
-// computed: Poisson sources, their rates fixed or drawn once a period,
-// and no schedule, repair, trigger, queue or outage holding.
+// computed: Poisson sources, their rates fixed, drawn once a period or
+// on a schedule whose joint cycle is within its cap, and no repair,
+// trigger, queue or outage holding.
 func (m *Compiled) delayExact() bool {
-	if m.hasRepair || m.renewal || m.HasTriggers() || len(m.queues) > 0 || len(m.schedules) > 0 {
+	if m.hasRepair || m.renewal || m.HasTriggers() || len(m.queues) > 0 || m.cycle.over {
 		return false
 	}
 	for _, s := range m.srcs {
-		if s.schedule != noIndex || s.trigger != noIndex || s.every > 1 || s.chainEnd > s.chainStart {
+		if s.trigger != noIndex || s.every > 1 || s.chainEnd > s.chainStart {
 			return false
 		}
 	}
@@ -574,6 +575,9 @@ func (m *Compiled) delayFigures(lam []float64) (perPeriod, longRun map[delayKey]
 		if bs, profs, long, ok = m.ownBetween(models, weights, keys, lam, vs); !ok {
 			return nan()
 		}
+	}
+	if bs, ok = m.scheduleBetween(len(draws) > 0, models, weights, keys, lam, vs, bs); !ok {
+		return nan()
 	}
 	if profs != nil {
 		profiles = make(map[delayKey][]float64, len(keys))
@@ -938,6 +942,15 @@ func settleGrids(start int, cs []*Compiled, ws []float64, keys []delayKey, lam [
 // key's mean booking by lag on the grid it settled on; a key unsettled
 // by lagCellsMax, or whose within-period part is NaN, is NaN.
 func settleBetween(span int, cs []*Compiled, ws []float64, keys []delayKey, lam, within []float64, budget int) ([]float64, [][]float64, int) {
+	return settleTerm(span, cs, ws, keys, lam, within, budget, betweenAt)
+}
+
+// profileTerm adds each unsettled key's term on an n-cell a period
+// profile grid to v, and may return its mean booking by lag.
+type profileTerm func(cs []*Compiled, ws []float64, keys []delayKey, done []bool, lam []float64, n, span int, v []float64) ([][]float64, bool)
+
+// settleTerm is settleBetween for any term on the profile grids.
+func settleTerm(span int, cs []*Compiled, ws []float64, keys []delayKey, lam, within []float64, budget int, term profileTerm) ([]float64, [][]float64, int) {
 	out := make([]float64, len(keys))
 	profs := make([][]float64, len(keys))
 	done := make([]bool, len(keys))
@@ -958,27 +971,33 @@ func settleBetween(span int, cs []*Compiled, ws []float64, keys []delayKey, lam,
 			break
 		}
 		v := make([]float64, len(keys))
-		at, ok := betweenAt(cs, ws, keys, done, lam, n, span, v)
+		at, ok := term(cs, ws, keys, done, lam, n, span, v)
 		if !ok {
 			break
 		}
 		for k := range keys {
-			if done[k] {
-				continue
-			}
-			// Settled beside the whole figure: the within-period part
-			// stands in the comparison as a constant.
-			whole := v[k] + within[k]
-			if st[k].step(whole) {
-				out[k], done[k], profs[k] = st[k].value-within[k], true, at[k]
-				left--
-			} else if st[k].hopeless(n * (span + 1) * delayCellsMax / lagCellsMax) {
+			if !done[k] && settleKey(&st[k], v[k], within[k], n*(span+1)*delayCellsMax/lagCellsMax, &out[k]) {
 				done[k] = true
 				left--
+				if at != nil {
+					profs[k] = at[k]
+				}
 			}
 		}
 	}
 	return out, profs, reached
+}
+
+// settleKey steps one key's term v, settled beside the whole figure,
+// the within-period part standing in the comparison as a constant: true
+// once it settles, out its term, or cannot settle from a grid of the
+// given equivalent cells, out left NaN.
+func settleKey(st *gridSettle, v, within float64, cells int, out *float64) bool {
+	if st.step(v + within) {
+		*out = st.value - within
+		return true
+	}
+	return st.hopeless(cells)
 }
 
 // profileWork is the work of one profile grid of the given cells: for

@@ -1,0 +1,16 @@
+# Claims paid after they settle: storm claims over a monthly period
+# follow a twelve-value season, and each is paid a lognormal time after
+# its storm.
+period: { days: 30 }
+schedules:
+  - { id: storms, values: [0.3, 0.3, 0.5, 0.8, 1.2, 1.6, 2.0, {{storm_peak}}, 1.6, 0.8, 0.4, 0.3] }
+graphs:
+  - id: settlement
+    sources:
+      - { id: storm, frequency: {{storm_rate}}, schedule: storms, to: claim }
+    nodes:
+      - id: claim
+        next: paid
+        next_holding: { lognormal: { median: {{settle_median}}, p90: {{settle_p90}} }, unit: days }
+      - id: paid
+        functions: [ { name: payment, category: property, lognormal: { median: 8e3, p90: 5e4 } } ]
