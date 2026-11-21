@@ -184,14 +184,23 @@ func (m *Compiled) notApplicable(q int) string {
 	return ""
 }
 
-// periodsFor rounds a period count up; an unknown (NaN or infinite) need
-// gives 0, meaning "observed check only".
+// periodsFor rounds a period count up, a need within needSlack of a
+// whole number taken as that number, so that its last unit's rounding
+// does not add a period; an unknown (NaN or infinite) need gives 0,
+// meaning "observed check only".
 func periodsFor(x float64) int64 {
 	if math.IsNaN(x) || math.IsInf(x, 0) {
 		return 0
 	}
+	if r := math.Round(x); math.Abs(x-r) <= needSlack*r {
+		return int64(r)
+	}
 	return int64(math.Ceil(x))
 }
+
+// needSlack is the relative distance from a whole number within which a
+// period count's need is taken as it.
+const needSlack = 1e-12
 
 // Plan returns the sizing table: one row per criterion, with the periods
 // it needs; Observed and Met are unset.

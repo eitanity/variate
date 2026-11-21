@@ -110,3 +110,19 @@ func TestBoundFormulas(t *testing.T) {
 		t.Errorf("tighten %v %v", lower, upper)
 	}
 }
+
+// TestPeriodsFor: a need rounds up to whole periods, but one a last unit
+// above a whole number, 1,000 hits at a rate of 4 less an ulp, is that
+// number.
+func TestPeriodsFor(t *testing.T) {
+	for _, c := range []struct {
+		x    float64
+		want int64
+	}{
+		{1000 / 3.9999999999999996, 250}, {250, 250}, {250.001, 251}, {0.3, 1}, {1e9 + 0.5, 1e9 + 1}, {math.NaN(), 0}, {math.Inf(1), 0},
+	} {
+		if got := periodsFor(c.x); got != c.want {
+			t.Errorf("periodsFor(%v) = %d, want %d", c.x, got, c.want)
+		}
+	}
+}
