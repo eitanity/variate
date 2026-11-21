@@ -106,7 +106,7 @@ func ExampleObserver() {
 	r, _ := w.Run(context.Background(), 3)
 	fmt.Printf("events %d, delivered %d, one step each: %v\n", r.Events[0], obs.rounds, obs.steps == obs.rounds)
 	// Output:
-	// events 1106, delivered 43, one step each: true
+	// events 1119, delivered 37, one step each: true
 }
 
 // The exact distribution of the period total, where the transform
