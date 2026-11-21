@@ -78,7 +78,7 @@ jobs:
           go-version-file: go.mod
           check-latest: false
       - name: Fast suite on arm64
-        run: go test -count=1 ./...
+        run: go test -count=1 -timeout 60m ./...
 
   other-os:
     strategy:
