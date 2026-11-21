@@ -117,6 +117,17 @@ func roundingSpread(path string, x, y float64) bool {
 	return spread && math.Abs(x) < 1e-15 && math.Abs(y) < 1e-15
 }
 
+// closeScale is what a value's difference is measured against: the
+// larger of the two, or 1 for an exceedance's bounds, probabilities from
+// the transform whose rounding is a share of the whole distribution, so
+// a tail's small probability does not magnify it.
+func closeScale(path string, x, y float64) float64 {
+	if strings.Contains(path, ".exceedance[") && (strings.HasSuffix(path, ".lower") || strings.HasSuffix(path, ".upper")) {
+		return 1
+	}
+	return math.Max(math.Abs(x), math.Abs(y))
+}
+
 func closeValues(a, b any, path string, tol float64) string {
 	switch x := a.(type) {
 	case map[string]any:
@@ -144,7 +155,7 @@ func closeValues(a, b any, path string, tol float64) string {
 		if !ok {
 			return path + ": number vs " + typeName(b)
 		}
-		if x != y && math.Abs(x-y) > tol*math.Max(math.Abs(x), math.Abs(y)) && !roundingSpread(path, x, y) {
+		if x != y && math.Abs(x-y) > tol*closeScale(path, x, y) && !roundingSpread(path, x, y) {
 			return path + ": " + strconv.FormatFloat(x, 'g', -1, 64) + " vs " + strconv.FormatFloat(y, 'g', -1, 64)
 		}
 	default:
