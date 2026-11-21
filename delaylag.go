@@ -541,8 +541,8 @@ func (m *Compiled) between(key delayKey, w [][]float64, cc *cutCovs, lam []float
 func (m *Compiled) pairBetween(k, l int, w [][]float64, cc *cutCovs, lam []float64) float64 {
 	c := m.rateExcess(k, l)
 	v := 0.0
-	if c != 0 {
-		v += c * dot(w[k], w[l])
+	if p := dot(w[k], w[l]); c != 0 && p != 0 {
+		v += c * p
 	}
 	for i := range cc.rules {
 		if cov := cc.at(i, k, l); cov != 0 {

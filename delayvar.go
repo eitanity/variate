@@ -1137,8 +1137,11 @@ func settleTerm(span int, cs []*Compiled, ws []float64, keys []delayKey, lam, wi
 // settleKey steps one key's term v, settled beside the whole figure,
 // the within-period part standing in the comparison as a constant: true
 // once it settles, out its term, or cannot settle from a grid of the
-// given equivalent cells, out left NaN.
+// given equivalent cells or is not finite on this one, out left NaN.
 func settleKey(st *gridSettle, v, within float64, cells int, out *float64) bool {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return true
+	}
 	if st.step(v + within) {
 		*out = st.value - within
 		return true

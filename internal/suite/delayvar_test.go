@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 
 	"code.eitanity.com/variate"
 	"code.eitanity.com/variate/config"
@@ -581,6 +582,44 @@ func TestDelayExamples(t *testing.T) {
 		}
 		for k, s := range m.SourceIDs() {
 			checkBlockVar(t, f+" source "+s, e.VarBySource[k], r.Series.SourceColumn(k, make([]float64, n)))
+		}
+	}
+}
+
+// TestDelayInfiniteRate: a rate drawn from a Pareto of shape 1.98 has
+// no second moment. Over holdings that carry nothing the variance is 0;
+// with values it is not finite. Either way the profile grids stop at
+// once rather than doubling to their cap.
+func TestDelayInfiniteRate(t *testing.T) {
+	par, _ := dist.NewPareto(1.5, 1.98)
+	hold, _ := dist.NewGammaFromMeanSD(0.5, 0.4)
+	empty := heldPath(hold)
+	empty.Sources[0].Frequency = par
+	for i := range empty.Nodes {
+		empty.Nodes[i].Functions = nil
+	}
+	full := heldPath(hold)
+	full.Sources[0].Frequency = par
+	for _, c := range []struct {
+		name   string
+		g      variate.Graph
+		finite bool
+	}{{"no values", empty, true}, {"values", full, false}} {
+		start := time.Now() //nolint:forbidigo // timing a test
+		c.g.ID = "inf"
+		m, _, err := c.g.Compile(variate.Config{AllowUnconverged: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, err := m.Analytic()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if took := time.Since(start); took > 2*time.Second {
+			t.Errorf("%s: compile took %v", c.name, took)
+		}
+		if fin := !math.IsNaN(e.Var) && !math.IsInf(e.Var, 0); fin != c.finite || c.finite && e.Var != 0 {
+			t.Errorf("%s: variance %v", c.name, e.Var)
 		}
 	}
 }
