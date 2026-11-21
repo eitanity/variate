@@ -50,15 +50,19 @@ type slot struct {
 	// Per queue, the waits and stays of the rounds served that reached it
 	// within the block, and their coarse copies for the batch groups.
 	qwait, qwaitC, qstay, qstayC []*stats.LogHist
-	incoming                     []float64 // what the finaliser handed in, by distance back to the task that booked it
-	stats                        []qstat
-	coarse                       []*stats.LogHist // with delays, the block's group histogram per quantity; nil entries without one
-	events                       []uint64
-	reach                        []uint64 // [source×nodes]
-	outs                         []uint64 // [source×outcomes]
-	steps                        uint64
-	closed                       int64 // periods closed by the task
-	tail                         int64 // closed periods with Total at or beyond the tail quantile bound
+	// Per carried queue, the periods its exact starts in the block looked
+	// back, and their number.
+	qback    []float64
+	qstarts  []int64
+	incoming []float64 // what the finaliser handed in, by distance back to the task that booked it
+	stats    []qstat
+	coarse   []*stats.LogHist // with delays, the block's group histogram per quantity; nil entries without one
+	events   []uint64
+	reach    []uint64 // [source×nodes]
+	outs     []uint64 // [source×outcomes]
+	steps    uint64
+	closed   int64 // periods closed by the task
+	tail     int64 // closed periods with Total at or beyond the tail quantile bound
 	// Config.When: the sums of its value half-lines over the block, and
 	// in a started run the horizon's row its return periods keep.
 	when []float64
@@ -91,6 +95,8 @@ func (sl *slot) reset() {
 	clear(sl.reach)
 	clear(sl.outs)
 	clear(sl.when)
+	clear(sl.qback)
+	clear(sl.qstarts)
 	sl.steps = 0
 	sl.dropped = 0
 	for _, hs := range [4][]*stats.LogHist{sl.qwait, sl.qwaitC, sl.qstay, sl.qstayC} {

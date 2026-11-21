@@ -235,9 +235,16 @@ function show(r, ms) {
       }
       return rows;
     }));
-  const longRun = qs.map(([name, q]) => q.long_run && (q.long_run.method
-    ? `${name}: the long-run row is exact, by ${q.long_run.method}: the figures the queue settles to once it has run a long time, which the late periods approach; each quantile lies in the range shown.`
-    : `${name} has no exact long-run figures: ${q.long_run.reason}.`)).filter(Boolean).join(" ");
+  const longRun = qs.map(([name, q]) => {
+    const steady = q.look_back != null;
+    const start = steady ? `${name} starts each run of periods with its line already in its long-run state, drawn exactly, so no period is spent filling it; the draw looked back ${fmt(q.look_back, 3)} periods on average. ` : "";
+    if (!q.long_run) return start;
+    return start + (q.long_run.method
+      ? (steady
+        ? `The long-run row is exact, by ${q.long_run.method}: the simulated row above should agree with it within its errors.`
+        : `${name}: the long-run row is exact, by ${q.long_run.method}: the figures the queue settles to once it has run a long time, which the late periods approach; each quantile lies in the range shown.`)
+      : `${name} has no exact long-run figures: ${q.long_run.reason}.`);
+  }).filter(Boolean).join(" ");
   $("queueNote").textContent = qs.length ? "Times are in periods. A round's wait runs from reaching the queue to a server taking it; its stay adds the service. A queue serves first come, first served, so a few long jobs holding every server make the slowest waits long while the median wait stays short. " + longRun : "";
   // Reach: for each source, the nodes its rounds pass through, in the
   // graph's order, with the share that get there. A model where every

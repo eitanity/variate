@@ -106,7 +106,7 @@ func (q *wqueue) free() int {
 // given state's round keeps its mark.
 func (w *Workspace) parkRound(wk *worker, sl *slot, c int32, k int32, t float64, p int64) {
 	wk.qseq++
-	it := qitem{t: float64(p) + t, p: p, k: k, seq: wk.qseq, rkey: wk.rkey}
+	it := qitem{t: float64(p) + t, p: p, k: k, seq: wk.qseq, rkey: wk.rkey, rated: float64(p) + t}
 	if wk.given {
 		it.given = -1
 	}
@@ -179,15 +179,16 @@ func (w *Workspace) arrive(wk *worker, sl *slot, c int32) {
 // startService puts a round on server s of queue c at time t.
 func (w *Workspace) startService(wk *worker, c int32, s int, it qitem, t float64) {
 	q := &wk.queues[c]
-	q.servers[s] = qserver{item: it, start: t, finish: t + it.work/w.m.queues[c].speed, busy: true}
+	q.servers[s] = qserver{item: it, start: t, finish: t + it.work/w.m.queues[c].speed, spanned: t, busy: true}
 	q.nBusy++
 }
 
 // finishService ends server s's service at queue c: the round's wait and
 // stay count to the period it reached the queue, period 0 for a round of
-// a given state, the node's rates book
-// over the stay, the server takes the next round in line, and the round
-// goes on through the node's outcomes.
+// a given state and the block's first for one carried from an earlier
+// block, the node's rates book over the stay not yet booked, the server
+// takes the next round in line, and the round goes on through the
+// node's outcomes.
 func (w *Workspace) finishService(wk *worker, sl *slot, c int32, s int) {
 	m := w.m
 	q := &wk.queues[c]
@@ -195,11 +196,11 @@ func (w *Workspace) finishService(wk *worker, sl *slot, c int32, s int) {
 	q.servers[s].busy = false
 	q.nBusy--
 	it := sv.item
-	arrived := max(int64(math.Floor(it.t)), it.p)
+	arrived := max(int64(math.Floor(it.t)), it.p, sl.a)
 	w.queueCol(sl, c, qServed, arrived, 1)
 	w.queueCol(sl, c, qWait, arrived, sv.start-it.t)
 	w.queueCol(sl, c, qStay, arrived, sv.finish-it.t)
-	w.queueSpan(sl, c, qBusy, sv.start, sv.finish)
+	w.queueSpan(sl, c, qBusy, math.Max(sv.start, sv.spanned), sv.finish)
 	if arrived < sl.b && sl.task >= 0 {
 		sl.qwait[c].AddPair(sv.start-it.t, sl.qwaitC[c])
 		sl.qstay[c].AddPair(sv.finish-it.t, sl.qstayC[c])
@@ -212,7 +213,7 @@ func (w *Workspace) finishService(wk *worker, sl *slot, c int32, s int) {
 	p := it.p
 	wk.rkey = it.rkey
 	if n.rateStart != n.rateEnd {
-		w.bookRate(wk, sl, it.k, v, n, math.Max(it.t-float64(p), 0), sv.finish-float64(p), p)
+		w.bookRate(wk, sl, it.k, v, n, math.Max(math.Max(it.t, it.rated)-float64(p), 0), sv.finish-float64(p), p)
 	}
 	if n.outStart == n.outEnd || sl.err != nil {
 		return

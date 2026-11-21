@@ -87,6 +87,8 @@ type Compiled struct {
 	infVar                             []bool // per row quantity: its variance is infinite
 	queueInfVar                        []bool // per queue: its wait's and stay's variance is infinite
 	queueLong                          []QueueLongRun
+	qstarts                            []qstart // per queue that carries its line in a steady-state run, its exact start
+	carried                            bool     // a queue carries its line in a steady-state run
 	levels                             []clevel // Config.At, each value with its quantity's row, then a level above 0 for each named total that subtracts
 	userLevels                         int      // how many of levels are Config.At's
 	whens                              []cwhen  // Config.When, each with its quantity's row
@@ -169,6 +171,9 @@ func (g Graph) Compile(cfg Config) (*Compiled, []Warning, error) {
 	}
 	m.markInfiniteVariance(&warnings)
 	m.queueLong = m.longRunQueues()
+	if err := m.buildStarts(); err != nil {
+		return nil, nil, err
+	}
 	m.plan = m.buildPlan(e, m.crit)
 	if err := m.checkCaps(m.crit, e.StepsPerPeriod+e.ArrivalsPerPeriod, cfg.AllowUnconverged); err != nil {
 		return nil, nil, err

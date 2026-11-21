@@ -42,6 +42,7 @@ type worker struct {
 	vals      []float64           // per function, its value at the current node, for the expressions that read it
 	sums      []float64           // per trigger, the period's sum of its inputs so far
 	queues    []wqueue            // per queue, its state within the task
+	start     *starter            // the exact starts' scratch, with a carried queue
 	qseq      uint64              // rounds parked at the queues in the task, to order ties
 	given     bool                // the round walking is a given state's: not counted in the reach or the outcomes
 	hists     [2][]*stats.LogHist // by batch parity
@@ -81,6 +82,10 @@ type sched struct {
 	err       error
 	stop      bool // claim no more tasks
 	done      bool // the finaliser has finished the run
+	// With a carried queue, each timeline's blocks run in order: chain is
+	// the timelines, and lineNext the task each may run next.
+	chain    int64
+	lineNext []int64
 }
 
 // canClaim: a run is active, not stopped, with a task left and a free
@@ -89,8 +94,20 @@ type sched struct {
 // would write into the set the finaliser is merging.
 func (s *sched) canClaim() bool {
 	ahead := s.next < 0 || s.next/s.batch <= max(s.finalNext, 0)/s.batch+1
-	return s.active && !s.stop && s.next < s.tasks && ahead && s.freeSlot() >= 0
+	return s.active && !s.stop && s.next < s.tasks && ahead && s.inTurn() && s.freeSlot() >= 0
 }
+
+// inTurn: without a carried queue any task, else one whose timeline's
+// last block is simulated.
+func (s *sched) inTurn() bool {
+	if s.chain == 0 {
+		return true
+	}
+	return s.lineNext[lineOf(s.next, s.chain)] == s.next
+}
+
+// lineOf is task j's timeline, of n.
+func lineOf(j, n int64) int64 { return ((j % n) + n) % n }
 
 // canClose: a run is active, not stopped, and a slot is handed.
 func (s *sched) canClose() bool {
@@ -207,6 +224,10 @@ func (w *Workspace) endJob(i int, st int8, err error) {
 	s.mu.Lock()
 	s.slotState[i] = st
 	s.running--
+	if st == slotSimulated && s.chain > 0 {
+		sl := w.slots[i]
+		s.lineNext[sl.line] = sl.task + s.chain
+	}
 	if err != nil && s.err == nil {
 		s.err = err
 		s.stop = true

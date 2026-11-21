@@ -627,10 +627,24 @@ included, which the per-time functions book over too, as at any node.
 `period_end: reset` empties the line at each period's end: the rounds
 still waiting or in service go to the node named by `unfinished`,
 which books and routes them like any other. `carry` keeps the line
-from one period to the next, which needs a started run (below): in
-steady state its warm-up has no known bound. In a steady-state run a
-reset queue must be reached within the period its rounds arrive, so no
-holding time, trigger or `unfinished` exit may lie on a path into it.
+from one period to the next. In a steady-state run a queue must be
+reached within the period its rounds arrive, so no holding time,
+trigger, `unfinished` exit or carried queue may lie on a path into it.
+
+A carried queue in a steady-state run starts each of the run's
+independent timelines with its line already in its long-run state,
+drawn exactly rather than warmed up, and each timeline's blocks of
+periods run in turn so the line carries on through them. The draw needs
+the queue's rounds to be a Poisson stream at a constant rate (as for the
+exact long-run figures below), a load below 1, and work whose tail
+falls faster than x⁻⁴, so the wait's fourth moment, which the errors of
+its long-run mean need, is finite; otherwise a started run serves. The
+draw runs the queue backwards from now, as if each server had its own
+line, to the last time all those lines were empty at once, and serves
+the queue forward from there; the report gives how many periods back
+that was, on average. The rounds the draw puts in the line arrived
+before the run began, so only what they book from its start counts:
+their time in the queue and what they book once served.
 
 The report gives, per queue, the wait and the stay of the rounds it
 served, each with its mean, quantiles and their errors, which come
@@ -648,7 +662,8 @@ unreliable; a reset queue's are bounded by the period.
 A carried queue whose rounds arrive as a Poisson stream at a constant
 rate also gets its exact long-run figures, the stationary wait and
 stay it settles to once it has run a long time, which the late periods
-of a long horizon approach: by Erlang C for exponential work at any
+of a long horizon approach, and a steady-state run's figures agree with
+within their errors: by Erlang C for exponential work at any
 number of servers, and by Pollaczek–Khinchine for one server and any
 work. They are the mean wait and stay, and the wait's quantiles, exact
 under Erlang C and under Pollaczek–Khinchine each an interval that

@@ -204,6 +204,17 @@ type Result struct {
 // waits and their stays, waiting and service.
 type QueueResult struct {
 	wait, stay itemAccum
+	lookBack   stats.Neumaier // a carried queue's exact starts: the periods they looked back
+	starts     int64
+}
+
+// LookBack is the mean periods a carried queue's exact start in a
+// steady-state run looked back, over its timelines; NaN without one.
+func (q *QueueResult) LookBack() float64 {
+	if q.starts == 0 {
+		return math.NaN()
+	}
+	return q.lookBack.Value() / float64(q.starts)
 }
 
 // Wait summarises the waits of the rounds served.

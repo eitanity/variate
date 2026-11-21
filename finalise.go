@@ -5,6 +5,10 @@ import "code.eitanity.com/variate/stats"
 // finalise folds a closed task into the result, strictly in task order.
 // A burn-in task adds only its steps.
 func (w *Workspace) finalise(sl *slot) {
+	for c := range sl.qback {
+		w.result.Queues[c].lookBack.Add(sl.qback[c])
+		w.result.Queues[c].starts += sl.qstarts[c]
+	}
 	if sl.task < 0 {
 		w.result.Steps += sl.steps
 		return

@@ -93,6 +93,7 @@ type QueueSummary struct {
 	Utilisation                float64
 	Line                       float64 // the mean line at a period's end
 	LongRun                    QueueLongRun
+	LookBack                   float64 // a carried queue's mean periods its exact start looked back in a steady-state run; NaN otherwise
 }
 
 // exceedancePoints is the number of log-spaced points of the curve.
@@ -306,6 +307,7 @@ func (w *Workspace) summarizeQueues(dst *Summary) {
 		s := QueueSummary{Servers: int(q.servers), Wait: r.Queues[c].Wait(), Stay: r.Queues[c].Stay(),
 			Joined: col(qJoined), Served: col(qServed), Unfinished: col(qUnfinished), Length: col(qLength), Busy: col(qBusy)}
 		s.LongRun = w.m.queueLong[c]
+		s.LookBack = r.Queues[c].LookBack()
 		s.Wait.StdErrUnreliable = w.m.QueueStdErrUnreliable(c)
 		s.Stay.StdErrUnreliable = s.Wait.StdErrUnreliable
 		s.Utilisation = s.Busy.Mean / (float64(q.servers) * periods)

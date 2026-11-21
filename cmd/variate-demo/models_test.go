@@ -548,3 +548,40 @@ func TestDemoTogether(t *testing.T) {
 	}
 	t.Logf("sd %v in lockstep, %v apart", s1.Total.StdDev, s0.Total.StdDev)
 }
+
+// TestDemoLongRun: the long-run backlog with one crew and half an order
+// a month starts its line exactly in its long-run state, so its mean
+// wait over 200,000 months is Pollaczek–Khinchine's within four
+// standard errors, and the start looks back some months; with two crews
+// it has no closed form but runs.
+func TestDemoLongRun(t *testing.T) {
+	for _, crews := range []float64{1, 2} {
+		cfg := variate.Config{Periods: 200_000, Seed: 1, AllowUnconverged: true}
+		c, _, err := demoGraph(t, "longrun", map[string]float64{"crews": crews, "orders": 0.5}).Compile(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := c.NewWorkspace(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Run(context.Background(), cfg.Seed); err != nil {
+			t.Fatal(err)
+		}
+		var s variate.Summary
+		w.Summarize(&s)
+		w.Close()
+		q := s.Queues["backlog"]
+		lr := q.LongRun
+		if (lr.Method == "Pollaczek–Khinchine") != (crews == 1) {
+			t.Errorf("crews %g: long-run method %q, reason %q", crews, lr.Method, lr.Reason)
+		}
+		if crews == 1 && math.Abs(q.Wait.Mean-lr.Wait) > 4*q.Wait.StdErr {
+			t.Errorf("one crew: mean wait %v ± %v, Pollaczek–Khinchine %v", q.Wait.Mean, q.Wait.StdErr, lr.Wait)
+		}
+		if !(q.LookBack > 0) {
+			t.Errorf("crews %g: look-back %v", crews, q.LookBack)
+		}
+		t.Logf("crews %g: wait %.4f ± %.4f, long run %.4f, look-back %.1f", crews, q.Wait.Mean, q.Wait.StdErr, lr.Wait, q.LookBack)
+	}
+}

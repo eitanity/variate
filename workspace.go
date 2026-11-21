@@ -49,7 +49,8 @@ type Workspace struct {
 	started     bool // a started run: a task is one repeat of the horizon, its block
 	workers     []*worker
 	slots       []*slot
-	stores      []pending // per timeline, what its finished tasks booked past the blocks handed so far
+	stores      []pending  // per timeline, what its finished tasks booked past the blocks handed so far
+	carry       [][]qcarry // per timeline and queue, a carried queue's state at its last block's end
 	result      Result
 	hists       []*stats.LogHist // global, by row quantity; nil without a histogram
 	delays      bool
@@ -183,6 +184,12 @@ func (w *Workspace) allocSlots(nslots int) {
 	for i := range w.stores {
 		w.stores[i] = newPending(m.pendCap)
 	}
+	if m.carried {
+		w.carry = make([][]qcarry, w.lines)
+		for i := range w.carry {
+			w.carry[i] = make([]qcarry, len(m.queues))
+		}
+	}
 	// bound: slots, fixed at construction
 	for i := 0; i < nslots; i++ {
 		sl := newSlot(w.l, w.block, m.pendCap, nslots, len(m.srcs), len(m.nodes), len(m.outs))
@@ -197,6 +204,8 @@ func (w *Workspace) allocSlots(nslots int) {
 			sl.qstay = append(sl.qstay, q.stay.Hist.Empty())
 			sl.qstayC = append(sl.qstayC, q.stay.Groups[0].Empty())
 		}
+		sl.qback = make([]float64, len(m.queues))
+		sl.qstarts = make([]int64, len(m.queues))
 		w.slots = append(w.slots, sl)
 	}
 }
@@ -247,6 +256,9 @@ func newWorker(m *Compiled) *worker {
 	}
 	if len(m.exprs) > 0 {
 		wk.vals = paddedF64(len(m.fns))
+	}
+	if m.carried {
+		wk.start = newStarter()
 	}
 	return wk
 }
@@ -689,6 +701,15 @@ func (w *Workspace) Run(ctx context.Context, seed uint64) (*Result, error) {
 	s.running = 0
 	s.active, s.done, s.stop, s.err = true, false, false, nil
 	s.next, s.handNext, s.finalNext = -w.burnIn, -w.burnIn, -w.burnIn
+	if w.m.carried {
+		s.chain = w.lines
+		if len(s.lineNext) != int(w.lines) {
+			s.lineNext = make([]int64, w.lines)
+		}
+		for l := range s.lineNext {
+			s.lineNext[l] = -w.burnIn + int64(l)
+		}
+	}
 	s.seed = seed
 	s.ctx = ctx
 	s.cv.Broadcast()

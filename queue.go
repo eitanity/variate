@@ -58,7 +58,8 @@ type qitem struct {
 	given int32 // its entry of the given state at this queue, from 1; −1 for a given state's round from a holding; 0 for an arrival
 	work  float64
 	seq   uint64
-	rkey  uint64 // the round's key, which its draws after the queue keep
+	rkey  uint64  // the round's key, which its draws after the queue keep
+	rated float64 // when the queue node's rates over its stay are booked to
 }
 
 // qserver is a server: the round it serves, when it began and when it
@@ -66,6 +67,7 @@ type qitem struct {
 type qserver struct {
 	item          qitem
 	start, finish float64
+	spanned       float64 // when its busy time is booked to
 	busy          bool
 }
 
@@ -120,9 +122,10 @@ func (b *builder) checkQueue(n Node) error {
 // checkQueues checks what the queues ask of the rest of the graph. A
 // round reaching a queue loses its walk's own state, so no outage holding
 // is reached from one. No trigger's inputs are reached from a queue,
-// whose rounds may book periods after they arrived. A steady-state run
-// takes reset queues only, each reached within the period its rounds
-// arrive: no holding time, trigger or unfinished exit on the way to it.
+// whose rounds may book periods after they arrived. In a steady-state
+// run each queue is reached within the period its rounds arrive: no
+// holding time, trigger, unfinished exit or queue that carries its line
+// on the way to it.
 func (b *builder) checkQueues() error {
 	queues := false
 	for _, n := range b.g.Nodes {
@@ -160,15 +163,13 @@ func (b *builder) checkAfterQueues() error {
 	return nil
 }
 
-// checkSteadyQueues refuses, in a steady-state run, a queue that carries
-// its line or is reached after its rounds' arrival period.
+// checkSteadyQueues refuses, in a steady-state run, a queue reached
+// after its rounds' arrival period.
 func (b *builder) checkSteadyQueues() error {
 	late := b.lateNodes()
 	for i, n := range b.g.Nodes {
 		switch {
 		case n.Queue == nil:
-		case !n.Queue.Reset:
-			return modelError("queue", n.ID, "a queue that carries its line across periods needs a started run (start: { from: empty, horizon: n }); a steady-state run takes a queue that resets each period")
 		case late[i]:
 			return modelError("queue", n.ID, "in a steady-state run a queue must be reached within the period its rounds arrive: no holding time, trigger or unfinished exit on the way to it; a started run has no such limit")
 		}
@@ -201,8 +202,9 @@ func (b *builder) afterQueues() []bool {
 }
 
 // lateNodes marks the nodes a round can reach after its arrival period:
-// past a holding time, as a trigger's round at the period's end, or by a
-// queue's unfinished exit at its end.
+// past a holding time, as a trigger's round at the period's end, by a
+// queue's unfinished exit at its end, or past a queue that carries its
+// line.
 func (b *builder) lateNodes() []bool {
 	late := make([]bool, len(b.g.Nodes))
 	for i, n := range b.g.Nodes {
@@ -215,11 +217,12 @@ func (b *builder) lateNodes() []bool {
 				late[t] = true
 			}
 		}
+		carries := n.Queue != nil && !n.Queue.Reset
 		for _, o := range n.Outcomes {
-			mark(o.To, o.Holding != nil || o.OutageHolding)
+			mark(o.To, o.Holding != nil || o.OutageHolding || carries)
 		}
 		if n.Next != "" {
-			mark(n.Next, n.NextHolding != nil || n.NextOutage)
+			mark(n.Next, n.NextHolding != nil || n.NextOutage || carries)
 		}
 		if n.Threshold != nil {
 			mark(n.Threshold.Above, false)
@@ -250,11 +253,15 @@ func (b *builder) flattenQueue(m *Compiled, i int32, n Node, cn *cnode) {
 
 // sizeQueues sets each queue's capacity from the rounds expected to reach
 // it in a task: a started run's horizon, or one period, since a reset
-// queue empties at each period's end.
+// queue empties at each period's end, or carriedPeriods for a queue that
+// carries its line in a steady-state run.
 func (m *Compiled) sizeQueues() error {
-	periods := float64(max(m.horizon, 1))
 	for i := range m.queues {
 		q := &m.queues[i]
+		periods := float64(max(m.horizon, 1))
+		if !q.reset && m.horizon == 0 {
+			periods = carriedPeriods
+		}
 		in := 0.0
 		for k := range m.srcs {
 			in += m.countMean[k] * m.reach[k][q.node]

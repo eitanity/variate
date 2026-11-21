@@ -292,7 +292,8 @@ func TestQueueRepeatsExactly(t *testing.T) {
 // TestQueueRefusals: what a queue cannot do, each refused with a reason.
 func TestQueueRefusals(t *testing.T) {
 	expo, _ := dist.NewExponential(1)
-	carry := laneGraph(1, 1, 2, expo, 0)
+	after := laneGraph(1, 1, 2, expo, 0)
+	after.Nodes[1].Queue = &variate.Queue{Servers: 1, Speed: 2, Work: expo}
 	held := resetGraph(1, expo)
 	held.Sources[0].To = "in"
 	held.Nodes = append(held.Nodes, variate.Node{ID: "in", Outcomes: []variate.Outcome{{To: "desk", Holding: expo}}})
@@ -310,7 +311,7 @@ func TestQueueRefusals(t *testing.T) {
 		cfg  variate.Config
 		want string
 	}{
-		{"carry in steady state", carry, variate.Config{}, "needs a started run"},
+		{"queue after a carried one in steady state", after, variate.Config{}, "within the period"},
 		{"holding into a steady queue", held, variate.Config{}, "within the period"},
 		{"reset without unfinished", noUnfinished, variate.Config{}, "needs an unfinished node"},
 		{"unfinished without reset", stray, variate.Config{}, "only a queue that resets"},

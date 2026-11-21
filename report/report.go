@@ -1500,6 +1500,11 @@ func (rep *Report) writeQueueTable(w *bufio.Writer) {
 		q := rep.Sum.Queues[name]
 		fmt.Fprintf(w, "%-28s %12.6g %12.6g %12.6g %12.6g %12.4f\n", name, q.Joined.Mean, q.Served.Mean, q.Unfinished.Mean, q.Line, q.Utilisation)
 	}
+	for _, name := range sortedKeys(rep.Sum.Queues) {
+		if lb := rep.Sum.Queues[name].LookBack; !math.IsNaN(lb) {
+			fmt.Fprintf(w, "%s starts each timeline in its long-run state, drawn exactly, looking back %.4g periods on average\n", name, lb)
+		}
+	}
 }
 
 // writeLongRun prints a queue's long-run wait and stay: the exact means,
@@ -1555,6 +1560,9 @@ func (rep *Report) jsonQueues(j *jw) {
 		j.field("mean_line", q.Line)
 		j.stat("busy", q.Busy)
 		j.field("utilisation", q.Utilisation)
+		if !math.IsNaN(q.LookBack) {
+			j.field("look_back", q.LookBack)
+		}
 		j.longRun(q.LongRun)
 		j.closeC('}')
 	}

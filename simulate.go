@@ -27,6 +27,9 @@ func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64) {
 		wk.queues[c].reset()
 	}
 	wk.qseq = 0
+	if m.carried {
+		w.startQueues(wk, sl)
+	}
 	// bound: the block
 	for p := sl.a; p < sl.b && sl.err == nil; p++ {
 		w.drawPeriod(wk, p)
@@ -43,6 +46,9 @@ func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64) {
 		if w.stream {
 			w.flushPeriod(wk, sl)
 		}
+	}
+	if m.carried {
+		w.carryQueues(wk, sl)
 	}
 	if w.started {
 		if len(wk.queues) > 0 {

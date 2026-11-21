@@ -1,0 +1,26 @@
+# The maintenance backlog in the long run: work orders arrive at a
+# steady rate and wait for the crews, first come, first served, each
+# bringing a lognormal amount of work in crew-months. There is no start
+# date: the run is the backlog as it stands on any month once it has run
+# for years, each run of months starting with the line already in its
+# long-run state, drawn exactly, so no month is spent filling it. An
+# order costs a fee per month while it is open and a fixed amount when
+# it is closed.
+graphs:
+  - id: maintenance
+    sources:
+      - { id: orders, frequency: { constant: {{orders}} }, to: backlog }
+    nodes:
+      - id: backlog
+        queue:
+          servers: {{crews}}
+          speed: 1
+          work: { lognormal: { median: {{median}}, p90: {{p90}} } }
+          period_end: carry
+        functions:
+          - { name: open, category: exposure, basis: per_time, pert: [200, 400, 1000] }
+        outcomes:
+          - { to: closed }
+      - id: closed
+        functions:
+          - { name: close_out, category: closing, pert: [300, 500, 900] }

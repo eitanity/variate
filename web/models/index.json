@@ -320,6 +320,46 @@
   ]
  },
  {
+  "id": "longrun",
+  "title": "A backlog in the long run (a steady-state queue)",
+  "file": "longrun.yaml",
+  "about": "The backlog once it has run for years: no start date, each month's figures those of any month in the long run. Each run of months starts with the line already in its long-run state, drawn exactly, so no month is spent filling it, and the note under the queue table says how far back the draw looked. With one crew the queue table adds the exact long-run figures by Pollaczek–Khinchine: the simulated wait agrees with them within its errors. Push the orders up towards what the crews can clear and watch the wait and its error grow: a few long jobs holding every crew make the slowest waits long and the long-run figures slow to settle.",
+  "knobs": [
+   {
+    "key": "orders",
+    "label": "Orders per month",
+    "min": 0.1,
+    "max": 2,
+    "step": 0.1,
+    "value": 1.2
+   },
+   {
+    "key": "crews",
+    "label": "Crews",
+    "min": 1,
+    "max": 6,
+    "step": 1,
+    "value": 2
+   },
+   {
+    "key": "median",
+    "label": "Crew-months per order, median",
+    "min": 0.1,
+    "max": 1,
+    "step": 0.05,
+    "value": 0.5
+   },
+   {
+    "key": "p90",
+    "label": "Crew-months per order, 90th percentile",
+    "min": 1.5,
+    "max": 6,
+    "step": 0.5,
+    "value": 3
+   }
+  ]
+ },
+ {
   "id": "takeover",
   "title": "A backlog taken over with work under way (a given start)",
   "file": "takeover.yaml",

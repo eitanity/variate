@@ -25,6 +25,7 @@ const (
 	tagStart
 	tagGiven
 	tagServed
+	tagExact
 )
 
 // splitmix is SplitMix64's finaliser, a bijection that scatters its
