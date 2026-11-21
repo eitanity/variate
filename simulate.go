@@ -16,9 +16,9 @@ func (w *Workspace) runTask(wk *worker, sl *slot, seed uint64) {
 	m := w.m
 	sl.reset()
 	wk.k.seed = seed
-	wk.lane = splitmix(uint64(sl.line)) //nolint:gosec // a timeline's number
+	wk.lane = laneKey(sl.line, false)
 	if w.started {
-		wk.lane = splitmix(uint64(sl.task) + 1<<63) //nolint:gosec // a repeat's number
+		wk.lane = laneKey(sl.task, true)
 	}
 	if m.renewal {
 		w.startSources(wk, sl.a)

@@ -26,6 +26,8 @@ const (
 	tagGiven
 	tagServed
 	tagExact
+	tagLine
+	tagRepeat
 )
 
 // splitmix is SplitMix64's finaliser, a bijection that scatters its
@@ -39,6 +41,17 @@ func splitmix(x uint64) uint64 {
 
 // mix is the key of b within a.
 func mix(a, b uint64) uint64 { return splitmix(a ^ splitmix(b)) }
+
+// laneKey is the key of a timeline, or of a repeat in a started run.
+// It is a number keyed within a tag, not the number's scattering
+// alone, which mix(lane, p) would make symmetric in the lane and the
+// period: timeline l's period p would draw as timeline p's period l.
+func laneKey(n int64, started bool) uint64 {
+	if started {
+		return mix(tagRepeat, uint64(n)) //nolint:gosec // a repeat's number
+	}
+	return mix(tagLine, uint64(n)) //nolint:gosec // a timeline's number
+}
 
 // within is the key of b within a where b is a key already scattered,
 // such as a name's: one scattering less than mix.

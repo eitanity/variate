@@ -67,3 +67,27 @@ func TestTimesWithinPeriodAtAnyPeriodNumber(t *testing.T) {
 		}
 	}
 }
+
+// TestPeriodKeysDistinct: every timeline's periods, burn-in included,
+// are keyed apart from every other's, and a repeat's from a timeline's:
+// no key of a period recurs across 32 timelines or repeats and 1,024
+// periods.
+func TestPeriodKeysDistinct(t *testing.T) {
+	seen := map[uint64][3]int64{}
+	for _, started := range []bool{false, true} {
+		for l := range int64(32) {
+			lane := laneKey(l, started)
+			for p := int64(-64); p < 960; p++ {
+				k := mix(lane, uint64(p)) //nolint:gosec // a period's number
+				s := int64(0)
+				if started {
+					s = 1
+				}
+				if was, ok := seen[k]; ok {
+					t.Fatalf("lane %d (started %d) period %d keyed as lane %d (started %d) period %d", l, s, p, was[0], was[1], was[2])
+				}
+				seen[k] = [3]int64{l, s, p}
+			}
+		}
+	}
+}
